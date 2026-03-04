@@ -1,0 +1,5 @@
+{
+  "name": "Copy of La Liga Manager Simulator",
+  "description": "A React-based football season simulator where you manage a La Liga club, simulate matches based on team strength, track the league table, and receive AI-generated board feedback at the end of the season.",
+  "requestFramePermissions": []
+}
