@@ -47,10 +47,10 @@ export const loginAccount = async (email: string, password: string): Promise<str
   return res.token;
 };
 
-export const registerAccount = async (email: string, password: string): Promise<string> => {
+export const registerAccount = async (name: string, email: string, password: string): Promise<string> => {
   const res = await apiRequest<any>('/register', {
     method: 'POST',
-    body: JSON.stringify({ email, password })
+    body: JSON.stringify({ name, email, password })
   });
   localStorage.setItem('auth_token', res.token);
   return res.token;

@@ -6,22 +6,19 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
     public function register(Request $request): JsonResponse
     {
         $validated = $request->validate([
+            'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
             'password' => 'required|string|min:8'
         ]);
 
-        // Extract a default name from the email (e.g., "manager" from "manager@club.com")
-        $defaultName = explode('@', $validated['email'])[0];
-
         $user = User::create([
-            'name' => $defaultName, // Pass the generated name to the database
+            'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => $validated['password']
         ]);
@@ -43,10 +40,18 @@ class AuthController extends Controller
 
         $user = User::where('email', $request->email)->first();
 
-        if (!$user || !Hash::check($request->password, $user->password)) {
-            throw ValidationException::withMessages([
-                'email' => ['Invalid credentials provided.'],
-            ]);
+        // 1. Check if the email exists
+        if (!$user) {
+            return response()->json([
+                'message' => 'Email not registered. Would you like to create an account?'
+            ], 404);
+        }
+
+        // 2. Check if the password matches
+        if (!Hash::check($request->password, $user->password)) {
+            return response()->json([
+                'message' => 'Incorrect password. Please try again.'
+            ], 401);
         }
 
         $token = $user->createToken('auth_token')->plainTextToken;

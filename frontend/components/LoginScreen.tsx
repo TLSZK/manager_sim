@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Trophy, ArrowRight, Lock, Mail, UserPlus } from 'lucide-react';
+import { Trophy, ArrowRight, Lock, Mail, UserPlus, Eye, EyeOff, User as UserIcon } from 'lucide-react';
 import { loginAccount, registerAccount } from '../services/api';
 
 interface LoginScreenProps {
@@ -8,19 +8,29 @@ interface LoginScreenProps {
 
 const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   const [isRegistering, setIsRegistering] = useState(false);
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Client-side validation
+  const isValid = isRegistering
+    ? email.includes('@') && password.length >= 8 && name.trim().length > 0
+    : email.includes('@') && password.length > 0;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isValid) return;
+
     setIsLoading(true);
     setError(null);
 
     try {
       if (isRegistering) {
-        await registerAccount(email, password);
+        await registerAccount(name, email, password);
       } else {
         await loginAccount(email, password);
       }
@@ -30,6 +40,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const toggleMode = () => {
+    setIsRegistering(!isRegistering);
+    setError(null);
+    setPassword(''); // Clear password for security when switching
   };
 
   return (
@@ -46,14 +62,40 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
           </div>
           <h1 className="text-2xl font-bold text-white mb-2 tracking-tight">La Liga Manager</h1>
           <p className="text-slate-400 text-sm">
-            {isRegistering ? 'Create a new account' : 'Sign in to manage your club'}
+            {isRegistering ? 'Create your manager account' : 'Sign in to manage your club'}
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="p-8 space-y-5">
           {error && (
-            <div className="bg-red-900/30 border border-red-500/50 text-red-400 p-3 rounded-lg text-sm text-center">
-              {error}
+            <div className="bg-red-900/30 border border-red-500/50 text-red-400 p-4 rounded-lg text-sm text-center flex flex-col gap-2">
+              <span>{error}</span>
+              {error.includes('Email not registered') && !isRegistering && (
+                <button
+                  type="button"
+                  onClick={toggleMode}
+                  className="bg-red-500/20 hover:bg-red-500/30 text-white font-bold py-2 px-4 rounded transition-colors mt-1"
+                >
+                  Create Account Now
+                </button>
+              )}
+            </div>
+          )}
+
+          {isRegistering && (
+            <div className="space-y-1.5 animate-in fade-in slide-in-from-top-2">
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Full Name</label>
+              <div className="relative group">
+                <UserIcon className="absolute left-3 top-3.5 text-slate-500 group-focus-within:text-blue-500 transition-colors w-5 h-5" />
+                <input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 pl-10 pr-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  placeholder="e.g. Pep Guardiola"
+                />
+              </div>
             </div>
           )}
 
@@ -77,21 +119,32 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
             <div className="relative group">
               <Lock className="absolute left-3 top-3.5 text-slate-500 group-focus-within:text-blue-500 transition-colors w-5 h-5" />
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 required
                 minLength={8}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 pl-10 pr-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 pl-10 pr-12 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                 placeholder="••••••••"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-3.5 text-slate-500 hover:text-slate-300 transition-colors"
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
             </div>
+            {isRegistering && (
+              <p className="text-[10px] text-slate-500 ml-1 mt-1">Must be at least 8 characters</p>
+            )}
           </div>
 
           <button
             type="submit"
-            disabled={isLoading}
-            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-blue-900/20 active:scale-[0.98] flex items-center justify-center gap-2 mt-4"
+            disabled={isLoading || !isValid}
+            className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-blue-900/20 active:scale-[0.98] flex items-center justify-center gap-2 mt-4"
           >
             {isLoading ? (
               <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -104,7 +157,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
         <div className="p-4 bg-slate-950/50 border-t border-slate-800 text-center flex flex-col gap-2">
           <button
             type="button"
-            onClick={() => { setIsRegistering(!isRegistering); setError(null); }}
+            onClick={toggleMode}
             className="text-sm text-blue-400 hover:text-blue-300 transition-colors flex items-center justify-center gap-2"
           >
             {isRegistering ? 'Already have an account? Sign In' : <><UserPlus size={16} /> Need an account? Register</>}
