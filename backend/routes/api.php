@@ -12,8 +12,19 @@ Route::post('/login', [AuthController::class, 'login']);
 
 // Require authentication for all game data
 Route::middleware('auth:sanctum')->group(function () {
+    // Updated User routes
     Route::get('/user', function (Request $request) {
-        return $request->user();
+        return response()->json(['data' => $request->user()]);
+    });
+
+    Route::put('/user', function (Request $request) {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+        ]);
+
+        $request->user()->update($validated);
+
+        return response()->json(['data' => $request->user()]);
     });
 
     Route::get('/teams', [TeamController::class, 'index']);

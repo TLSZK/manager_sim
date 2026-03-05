@@ -25,7 +25,8 @@ async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promi
   });
 
   if (!response.ok) {
-    if (response.status === 401) {
+    // Prevent reload if the 401 comes from the login attempt
+    if (response.status === 401 && !endpoint.includes('/login')) {
       localStorage.removeItem('auth_token');
       window.location.reload(); // Force logout
     }
@@ -228,3 +229,18 @@ async function fetchProfilesFallback(): Promise<ManagerProfile[]> {
   if (!json) return [];
   try { return JSON.parse(json); } catch { return []; }
 }
+
+export const fetchCurrentUser = async (): Promise<{ name: string, email: string }> => {
+  try {
+    return await apiRequest<any>('/user');
+  } catch (error) {
+    return { name: 'Unknown User', email: '' };
+  }
+};
+
+export const updateAccountName = async (name: string): Promise<void> => {
+  await apiRequest<any>('/user', {
+    method: 'PUT',
+    body: JSON.stringify({ name })
+  });
+};
