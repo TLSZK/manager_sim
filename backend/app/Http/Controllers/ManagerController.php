@@ -62,7 +62,6 @@ class ManagerController extends Controller
     {
         $manager = Manager::findOrFail($id);
 
-        // Updated validation to match App.tsx payload
         $validated = $request->validate([
             'seasonYear' => 'required|string',
             'teamId' => 'required|string',
@@ -72,7 +71,8 @@ class ManagerController extends Controller
             'wonTrophy' => 'required|boolean',
         ]);
 
-        $history = $manager->history()->create($validated);
+        // FIX: Changed from history() to histories()
+        $history = $manager->histories()->create($validated);
 
         return response()->json([
             'data' => $history

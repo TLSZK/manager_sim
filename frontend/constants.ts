@@ -337,41 +337,121 @@ export const generateUCLLeaguePhase = (uclTeams: Team[]): Omit<Match, 'week' | '
   return shuffledMatches;
 };
 
-export const generateMasterSchedule = (ligaTeams: Team[], uclTeams: Team[]) => {
-  // 1. Generate specific schedules based on full team objects
-  const ligaSchedule = generateLigaSchedule(ligaTeams);
-  const uclSchedule = generateUCLLeaguePhase(uclTeams);
+export const generateMasterSchedule = (ligaTeams: Team[], uclTeams: Team[]): Match[] => {
+  const schedule: Match[] = [];
+  let matchIdCounter = 1;
 
-  const masterTimeline: Match[] = [];
+  // --- 0. PERFECT 55-WEEK CALENDAR ALLOCATION ---
+  // Hardcoded knockout weeks from App.tsx
+  const KNOCKOUT_WEEKS = [30, 32, 35, 37, 41, 43, 47, 49, 55];
+  // Dedicated Swiss League Phase weeks
+  const UCL_LP_WEEKS = [3, 6, 9, 12, 15, 18, 21, 24];
+  const ALL_UCL_WEEKS = [...UCL_LP_WEEKS, ...KNOCKOUT_WEEKS];
 
-  let ligaRoundPtr = 0;
-  let uclMatchPtr = 0;
-  const uclMatchesPerWeek = 16;
-
-  // Iterate through the predefined calendar slots
-  for (const slot of SIMULATION_SCHEDULE) {
-    if (slot.type === 'LIGA' && ligaRoundPtr < 38) {
-      const start = ligaRoundPtr * 10; // 10 matches per Liga round
-      const roundMatches = ligaSchedule.slice(start, start + 10).map(m => ({
-        ...m,
-        week: slot.week,
-        date: new Date(slot.date)
-      }));
-      masterTimeline.push(...roundMatches);
-      ligaRoundPtr++;
-    }
-    else if (slot.type === 'UCL' && uclMatchPtr < uclSchedule.length) {
-      const roundMatches = uclSchedule.slice(uclMatchPtr, uclMatchPtr + uclMatchesPerWeek).map(m => ({
-        ...m,
-        week: slot.week,
-        date: new Date(slot.date)
-      }));
-      masterTimeline.push(...roundMatches);
-      uclMatchPtr += uclMatchesPerWeek;
-    }
+  // Automatically assign the remaining 38 weeks to La Liga
+  const LIGA_WEEKS: number[] = [];
+  for (let i = 1; i <= 55; i++) {
+    if (!ALL_UCL_WEEKS.includes(i)) LIGA_WEEKS.push(i);
   }
 
-  return masterTimeline;
+  // --- 1. GENERATE LA LIGA SCHEDULE (38 Matches) ---
+  if (ligaTeams.length > 0) {
+    const teams = [...ligaTeams];
+    if (teams.length % 2 !== 0) teams.push({ id: 'TBD' } as Team);
+    const totalRounds = teams.length - 1;
+    const matchesPerRound = teams.length / 2;
+
+    for (let round = 0; round < totalRounds; round++) {
+      for (let match = 0; match < matchesPerRound; match++) {
+        let home = teams[match];
+        let away = teams[teams.length - 1 - match];
+
+        // Standard polygon balance to alternate Home/Away fairly
+        if (match === 0) {
+          if (round % 2 === 1) { const temp = home; home = away; away = temp; }
+        } else {
+          if (match % 2 === 1) { const temp = home; home = away; away = temp; }
+        }
+
+        if (home.id !== 'TBD' && away.id !== 'TBD') {
+          schedule.push({
+            id: `LIGA-${matchIdCounter++}`,
+            week: LIGA_WEEKS[round], // Map exactly to the first 19 open domestic weeks
+            date: new Date(),
+            homeTeamId: home.id,
+            awayTeamId: away.id,
+            homeScore: null, awayScore: null,
+            played: false, competition: 'La Liga', stage: 'Regular Season'
+          });
+        }
+      }
+      teams.splice(1, 0, teams.pop()!); // Rotate polygon
+    }
+
+    // Second Half of the Season (Reverse Fixtures)
+    const firstHalf = [...schedule];
+    firstHalf.forEach(m => {
+      const roundIndex = LIGA_WEEKS.indexOf(m.week);
+      schedule.push({
+        ...m,
+        id: `LIGA-${matchIdCounter++}`,
+        week: LIGA_WEEKS[roundIndex + totalRounds], // Map exactly to the final 19 open domestic weeks
+        homeTeamId: m.awayTeamId,
+        awayTeamId: m.homeTeamId
+      });
+    });
+  }
+
+  // --- 2. GENERATE UCL LEAGUE PHASE (Swiss Model - 8 Matches) ---
+  if (uclTeams.length > 0) {
+    let teams = [...uclTeams].sort(() => Math.random() - 0.5);
+
+    // Pad to a multiple of 4 to ensure flawless bipartite splitting
+    while (teams.length % 4 !== 0) {
+      teams.push({ id: `TBD-${teams.length}`, name: 'TBD', shortName: 'TBD', tier: 2, strength: 0 } as Team);
+    }
+
+    const N = teams.length;
+    const offsets = [1, 2, 3, 5];
+
+    offsets.forEach((k, index) => {
+      const weekA = UCL_LP_WEEKS[index * 2];
+      const weekB = UCL_LP_WEEKS[index * 2 + 1];
+
+      const visited = new Set<number>();
+      for (let start = 0; start < N; start++) {
+        if (visited.has(start)) continue;
+
+        let current = start;
+        let isWeekA = true;
+
+        while (!visited.has(current)) {
+          visited.add(current);
+          const next = (current + k) % N;
+          const homeTeam = teams[current];
+          const awayTeam = teams[next];
+
+          // Ignore padding matchups
+          if (!homeTeam.id.startsWith('TBD') && !awayTeam.id.startsWith('TBD')) {
+            schedule.push({
+              id: `UCL-LP-${matchIdCounter++}`,
+              week: isWeekA ? weekA : weekB,
+              date: new Date(),
+              homeTeamId: homeTeam.id,
+              awayTeamId: awayTeam.id,
+              homeScore: null, awayScore: null,
+              played: false, competition: 'Champions League', stage: 'League Phase'
+            });
+          }
+
+          isWeekA = !isWeekA;
+          current = next;
+        }
+      }
+    });
+  }
+
+  return schedule;
 };
 
 export const generateRoster = (teamId: string, strength: number): Player[] => {

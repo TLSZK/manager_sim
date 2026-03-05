@@ -13,10 +13,8 @@ import LoginScreen from './components/LoginScreen';
 import ProfileSelector from './components/ProfileSelector';
 import { Play, FastForward, Trophy, Calendar, Pause, CheckCircle, User, ChevronLeft, ChevronRight, Shirt, Briefcase, Search, Globe, CalendarDays, ArrowRight, ChevronDown, LogOut, Settings, Users } from 'lucide-react';
 import { getBoardFeedback } from './services/geminiService';
-import { fetchTeams, saveSeasonResult, updateProfileName, fetchSavedGame, saveGame } from './services/api';
-
-
-
+// FIX: Imported fetchCurrentUser to power the new unified dropdown
+import { fetchTeams, saveSeasonResult, updateProfileName, fetchSavedGame, saveGame, fetchCurrentUser } from './services/api';
 
 // Dummy TBD Team for placeholders
 const TBD_TEAM: Team = {
@@ -33,25 +31,13 @@ const TBD_TEAM: Team = {
 };
 
 const App: React.FC = () => {
-
-    // 1. Add this to your top-level state declarations in App.tsx:
-    const [isAuthenticated, setIsAuthenticated] = useState<boolean>(!!localStorage.getItem('auth_token'));
-
-    // 2. Update handleLogout:
-    const handleLogout = () => {
-        localStorage.removeItem('auth_token');
-        setIsAuthenticated(false);
-        setActiveProfile(null);
-        lastInitializedProfileId.current = null;
-        setShowAccountMenu(false);
-        setSimState('select_team');
-        setUserTeamId(null);
-        setTeams([]);
-        setSchedule([]);
-    };
     // Auth & Profile State
+    const [isAuthenticated, setIsAuthenticated] = useState<boolean>(!!localStorage.getItem('auth_token'));
     const [activeProfile, setActiveProfile] = useState<ManagerProfileType | null>(null);
     const [showAccountMenu, setShowAccountMenu] = useState(false);
+
+    // FIX: Added state for the fetched account info
+    const [userAccount, setUserAccount] = useState<{ name: string, email: string } | null>(null);
 
     // App State
     const [teams, setTeams] = useState<Team[]>([]);
@@ -65,7 +51,7 @@ const App: React.FC = () => {
 
     // Results Widget State
     const [resultsComp, setResultsComp] = useState<Competition>('La Liga');
-    const [resultsIndex, setResultsIndex] = useState<number>(-1); // -1 means "latest"
+    const [resultsIndex, setResultsIndex] = useState<number>(-1);
 
     // UI Modal State
     const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -88,6 +74,13 @@ const App: React.FC = () => {
         seasonIdRef.current = seasonId;
     }, [seasonId]);
 
+    // FIX: Load User Account details once authenticated
+    useEffect(() => {
+        if (isAuthenticated) {
+            fetchCurrentUser().then(data => setUserAccount(data));
+        }
+    }, [isAuthenticated]);
+
     // Determine if next match is UCL to auto-switch tab (Table only)
     useEffect(() => {
         if (userTeamId) {
@@ -109,8 +102,6 @@ const App: React.FC = () => {
         }
     }, [currentWeek, userTeamId, schedule, simState, lastSimulatedMatchId]);
 
-    // Inside App.tsx
-
     useEffect(() => {
         if (!activeProfile) return;
 
@@ -123,7 +114,6 @@ const App: React.FC = () => {
             const savedGame = await fetchSavedGame(activeProfile.id);
 
             if (savedGame && savedGame.userTeamId) {
-                console.log("Resuming saved game...");
                 setTeams(savedGame.teams);
                 setSchedule(savedGame.schedule);
                 setCurrentWeek(savedGame.currentWeek);
@@ -137,31 +127,24 @@ const App: React.FC = () => {
 
             // 3. Hydrate and Tag Teams correctly
             const hydratedTeams = fetchedTeams.map(t => {
-                const tier = t.tier || 1; // Default to 1 if missing
+                const tier = t.tier || 1;
                 return {
                     ...t,
-                    // Use DB roster if available, otherwise generate
                     roster: (t.roster && t.roster.length > 0) ? t.roster : generateRoster(t.id, t.strength),
                     formation: '4-3-3' as const,
                     tier: tier,
-                    // CRITICAL FIX: Only Tier 1 teams are in La Liga
                     isLaLiga: tier === 1,
                     stats: { ...INITIAL_STATS, form: [] },
                     uclStats: t.isUCL ? { ...INITIAL_UCL_STATS } : undefined
                 };
             });
 
-            // 4. Combine with TBD (no manual European merge needed anymore)
             const allTeams = [...hydratedTeams, TBD_TEAM];
             setTeams(allTeams);
 
-            // 5. Generate Schedule using Strict Filters & Full Objects
-            // Liga Schedule = Only Tier 1 Teams
             const ligaTeams = allTeams.filter(t => t.tier === 1 && t.id !== 'TBD');
-            // UCL Schedule = Any team flagged isUCL
             const uclTeams = allTeams.filter(t => t.isUCL && t.id !== 'TBD');
 
-            // PASS OBJECTS, NOT IDs
             const masterSchedule = generateMasterSchedule(ligaTeams, uclTeams);
 
             setSchedule(masterSchedule);
@@ -173,13 +156,21 @@ const App: React.FC = () => {
         initGame();
     }, [activeProfile?.id]);
 
-    const handleLogin = () => {
-        setIsAuthenticated(true);
+    const handleLogin = () => setIsAuthenticated(true);
+
+    const handleLogout = () => {
+        localStorage.removeItem('auth_token');
+        setIsAuthenticated(false);
+        setActiveProfile(null);
+        lastInitializedProfileId.current = null;
+        setShowAccountMenu(false);
+        setSimState('select_team');
+        setUserTeamId(null);
+        setTeams([]);
+        setSchedule([]);
     };
 
-    const handleSelectProfile = (profile: ManagerProfileType) => {
-        setActiveProfile(profile);
-    };
+    const handleSelectProfile = (profile: ManagerProfileType) => setActiveProfile(profile);
 
     const handleExitProfile = () => {
         setActiveProfile(null);
@@ -362,7 +353,6 @@ const App: React.FC = () => {
                                     updatedSchedule[l2Idx] = { ...updatedSchedule[l2Idx], homePenalties: hp, awayPenalties: ap };
                                 }
                             }
-                            // Use the potentially newly generated values
                             winnerId = hp! > ap! ? l2.homeTeamId : l2.awayTeamId;
                         }
                         winners.push(winnerId);
@@ -547,53 +537,38 @@ const App: React.FC = () => {
         const newId = crypto.randomUUID();
         setSeasonId(newId);
 
-        // 1. FETCH TEAMS (Clean Logic - Same as InitGame)
-        // We fetch ALL teams from DB (La Liga + Europe)
         const fetchedTeams = await fetchTeams();
 
-        // 2. HYDRATE (Reset Stats for New Season)
         const hydratedTeams = fetchedTeams.map(t => {
             const tier = t.tier || 1;
             return {
                 ...t,
-                // Regenerate rosters or keep existing ones? 
-                // Usually for a new season, we might want fresh rosters or keep progression.
-                // For now, we regenerate to match your original logic:
                 roster: generateRoster(t.id, t.strength),
                 formation: '4-3-3' as const,
                 tier: tier,
-                isLaLiga: tier === 1, // Only Tier 1 is La Liga
-                stats: { ...INITIAL_STATS, form: [] }, // Reset League Stats
-                uclStats: t.isUCL ? { ...INITIAL_UCL_STATS } : undefined // Reset UCL Stats
+                isLaLiga: tier === 1,
+                stats: { ...INITIAL_STATS, form: [] },
+                uclStats: t.isUCL ? { ...INITIAL_UCL_STATS } : undefined
             };
         });
 
         const allTeams = [...hydratedTeams, TBD_TEAM];
         setTeams(allTeams);
 
-        // 3. GENERATE FRESH SCHEDULE
         const ligaTeams = allTeams.filter(t => t.tier === 1 && t.id !== 'TBD');
         const uclTeams = allTeams.filter(t => t.isUCL && t.id !== 'TBD');
 
-        // PASS OBJECTS, NOT IDs
         const nextSchedule = generateMasterSchedule(ligaTeams, uclTeams);
         setSchedule(nextSchedule);
 
-        // 4. UPDATE YEAR
         const parts = currentSeasonYear.split('/');
         const y1 = parseInt(parts[0] || '2025', 10);
         const y2 = parseInt(parts[1] || '26', 10);
-        const nextY1 = Number(y1) + 1;
-        const nextY2 = Number(y2) + 1;
-        const newYearStr = `${nextY1}/${nextY2}`;
-        setCurrentSeasonYear(newYearStr);
+        setCurrentSeasonYear(`${y1 + 1}/${y2 + 1}`);
 
-        // 5. RESET STATE
-        const newWeek = 1;
-        setCurrentWeek(newWeek);
+        setCurrentWeek(1);
         setSeasonSummary(null);
 
-        // 6. HANDLE JOB STATUS
         let newUserTeamId = userTeamId;
         if (!stayWithTeam || !userTeamId) {
             newUserTeamId = null;
@@ -603,11 +578,9 @@ const App: React.FC = () => {
             setSimState('ready');
         }
 
-        // 7. CRITICAL: SAVE TO DATABASE IMMEDIATELY
-        // This overwrites the old "Week 55" save with the new "Week 1" save.
         if (activeProfile && newUserTeamId) {
             await saveGame(activeProfile.id, {
-                currentWeek: newWeek,
+                currentWeek: 1,
                 userTeamId: newUserTeamId,
                 schedule: nextSchedule,
                 teams: allTeams
@@ -617,7 +590,6 @@ const App: React.FC = () => {
 
     const resultGroups = useMemo(() => {
         const playedInComp = schedule.filter(m => m.competition === resultsComp && m.played);
-        // Fix: Explicitly cast 'a' and 'b' to numbers to satisfy TypeScript
         const uniqueWeeks = Array.from(new Set(playedInComp.map(m => m.week))).sort((a: number, b: number) => a - b);
         return uniqueWeeks.map(week => {
             const matches = playedInComp.filter(m => m.week === week);
@@ -629,10 +601,8 @@ const App: React.FC = () => {
 
     useEffect(() => { setResultsIndex(resultGroups.length > 0 ? resultGroups.length - 1 : 0); }, [resultGroups.length, resultsComp]);
 
-    // FIX: Define currentResultGroup safely at the end of the render phase
     const currentResultGroup = resultGroups[resultsIndex];
 
-    // FIX: Define derived variables needed for render
     const userMatch = useMemo(() => {
         if (!userTeamId) return undefined;
         return schedule.find(m => m.week === currentWeek && !m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId));
@@ -642,16 +612,11 @@ const App: React.FC = () => {
     const userAway = useMemo(() => userMatch ? teams.find(t => t.id === userMatch.awayTeamId) : undefined, [userMatch, teams]);
 
     const isUCLWeek = useMemo(() => {
-        // 1. If we are viewing a match recap, prioritize the competition of that specific match
         if (simState === 'match_recap' && lastSimulatedMatchId) {
             const lastMatch = schedule.find(m => m.id === lastSimulatedMatchId);
             if (lastMatch) return lastMatch.competition === 'Champions League';
         }
-
-        // 2. If there is a user match, use its competition
         if (userMatch) return userMatch.competition === 'Champions League';
-
-        // 3. Otherwise check if any match this week is UCL (e.g. bye week for user)
         return schedule.some(m => m.week === currentWeek && m.competition === 'Champions League');
     }, [userMatch, schedule, currentWeek, simState, lastSimulatedMatchId]);
 
@@ -662,37 +627,15 @@ const App: React.FC = () => {
     const lastSimHome = useMemo(() => lastSimMatch ? teams.find(t => t.id === lastSimMatch.homeTeamId) : undefined, [lastSimMatch, teams]);
     const lastSimAway = useMemo(() => lastSimMatch ? teams.find(t => t.id === lastSimMatch.awayTeamId) : undefined, [lastSimMatch, teams]);
 
-    // FIX: Restore conditional rendering logic for authentication and profile flow
-    if (!isAuthenticated) {
-        return <LoginScreen onLogin={handleLogin} />;
-    }
-
-    if (!activeProfile) {
-        return <ProfileSelector onSelectProfile={handleSelectProfile} onLogout={handleLogout} />;
-    }
-
-    if (!userTeamId) {
-        return <TeamSelector teams={teams.filter(t => t.id !== 'TBD')} onSelect={handleSelectTeam} />;
-    }
-
+    if (!isAuthenticated) return <LoginScreen onLogin={handleLogin} />;
+    if (!activeProfile) return <ProfileSelector onSelectProfile={handleSelectProfile} onLogout={handleLogout} />;
+    if (!userTeamId) return <TeamSelector teams={teams.filter(t => t.id !== 'TBD')} onSelect={handleSelectTeam} />;
     if (simState === 'squad_management') {
         const myTeam = teams.find(t => t.id === userTeamId);
-        if (myTeam) {
-            return <SquadManagement team={myTeam} onUpdateTeam={handleUpdateTeam} onBack={() => setSimState('ready')} />;
-        }
+        if (myTeam) return <SquadManagement team={myTeam} onUpdateTeam={handleUpdateTeam} onBack={() => setSimState('ready')} />;
     }
-
     if (simState === 'playing_match' && userMatch && userHome && userAway) {
-        return (
-            <MatchView
-                homeTeam={userHome}
-                awayTeam={userAway}
-                userTeamId={userTeamId}
-                onMatchComplete={handleMatchComplete}
-                competition={userMatch.competition}
-                stage={userMatch.stage}
-            />
-        );
+        return <MatchView homeTeam={userHome} awayTeam={userAway} userTeamId={userTeamId} onMatchComplete={handleMatchComplete} competition={userMatch.competition} stage={userMatch.stage} />;
     }
 
     return (
@@ -711,19 +654,64 @@ const App: React.FC = () => {
                         <div className="px-3 py-2 text-xs md:text-sm truncate hidden sm:block">{userMatch ? `Upcoming: ${(userHome?.id === userTeamId ? userAway : userHome)?.name} ${userHome?.id === userTeamId ? '(H)' : '(A)'} (${userMatch.competition === 'Champions League' ? 'UCL' : 'Liga'})` : (isSeasonFinished || isScheduleComplete) ? "End of Season" : "No Match"}</div>
                         <button onClick={() => setIsCalendarOpen(true)} className="bg-slate-800 hover:bg-slate-700 p-2 h-full border-l border-slate-700 transition-colors text-slate-400 hover:text-white"><CalendarDays size={18} /></button>
                     </div>
+
                     <button onClick={() => setSimState('squad_management')} className="flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors font-bold text-xs md:text-sm"><Shirt size={16} /><span className="hidden lg:inline">Squad</span></button>
-                    <button onClick={() => setIsProfileOpen(true)} className="flex items-center gap-2 px-3 py-2 bg-slate-700/50 hover:bg-slate-700 rounded-lg transition-colors border border-transparent hover:border-slate-500"><div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-[10px] font-bold">{activeProfile.name.substring(0, 2).toUpperCase()}</div><span className="text-xs md:text-sm hidden lg:inline">{activeProfile.name}</span></button>
-                    <div className="relative"><button onClick={() => setShowAccountMenu(!showAccountMenu)} className="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors text-slate-300 hover:text-white"><User size={18} /></button>{showAccountMenu && <div className="absolute right-0 mt-2 w-48 bg-slate-800 rounded-xl shadow-2xl border border-slate-700 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2"><div className="p-3 border-b border-slate-700"><p className="text-xs font-bold text-slate-400 uppercase">Account</p><p className="text-sm text-white truncate">manager@club.com</p></div><button className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-2 transition-colors"><Settings size={16} /> Settings</button><button onClick={() => { setShowAccountMenu(false); handleExitProfile(); }} className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-2 transition-colors"><Users size={16} /> Switch Profile</button><button onClick={handleLogout} className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-900/20 flex items-center gap-2 transition-colors border-t border-slate-700"><LogOut size={16} /> Sign Out</button></div>}</div>
+
+                    {/* FIX: Unified Account & Profile Dropdown */}
+                    <div className="relative z-50">
+                        <button
+                            onClick={() => setShowAccountMenu(!showAccountMenu)}
+                            className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-colors text-slate-300 hover:text-white shadow-sm"
+                        >
+                            <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-inner border border-blue-400/50">
+                                {activeProfile.name.substring(0, 2).toUpperCase()}
+                            </div>
+                            <div className="text-left hidden sm:block max-w-[120px]">
+                                <div className="text-sm font-bold text-white truncate">{activeProfile.name}</div>
+                                <div className="text-[10px] text-slate-400 truncate -mt-0.5">{userAccount?.name || 'Account'}</div>
+                            </div>
+                            <ChevronDown size={16} className={`text-slate-400 transition-transform ${showAccountMenu ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {showAccountMenu && (
+                            <div className="absolute right-0 mt-2 w-56 bg-slate-800 rounded-xl shadow-2xl border border-slate-700 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                                <div className="p-4 border-b border-slate-700 bg-slate-900/50">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Manager Profile</p>
+                                    <p className="text-sm text-white font-bold truncate mt-1">{activeProfile.name}</p>
+                                    <div className="h-px bg-slate-800 my-2"></div>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Linked Account</p>
+                                    <p className="text-xs text-slate-500 truncate mt-1">{userAccount?.email || 'Loading...'}</p>
+                                </div>
+                                <button
+                                    onClick={() => { setShowAccountMenu(false); setIsProfileOpen(true); }}
+                                    className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white flex items-center gap-2 transition-colors"
+                                >
+                                    <Trophy size={16} /> Career History
+                                </button>
+                                <button
+                                    onClick={() => { setShowAccountMenu(false); handleExitProfile(); }}
+                                    className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white flex items-center gap-2 transition-colors"
+                                >
+                                    <Users size={16} /> Switch Manager Profile
+                                </button>
+                                <button
+                                    onClick={handleLogout}
+                                    className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-900/20 flex items-center gap-2 transition-colors border-t border-slate-700"
+                                >
+                                    <LogOut size={16} /> Sign Out Completely
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </header>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
-                {/* Table Column - Order 2 on mobile, 1 on desktop */}
+            {/* Main Content Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8 relative z-10">
                 <div className="lg:col-span-2 flex flex-col order-2 lg:order-1">
                     <LeagueTable teams={teams} userTeamId={userTeamId || ''} activeTab={activeTableTab} onTabChange={setActiveTableTab} schedule={schedule} currentWeek={currentWeek} />
                 </div>
 
-                {/* Action Column - Order 1 on mobile, 2 on desktop */}
                 <div className="flex flex-col gap-6 order-1 lg:order-2">
                     <div className={`p-4 md:p-6 rounded-xl border shadow-lg ${isUCLWeek ? 'bg-blue-950 border-blue-900' : 'bg-slate-800 border-slate-700'}`}>
                         <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><Calendar size={18} className="text-blue-400" /> Action Center</h2>
