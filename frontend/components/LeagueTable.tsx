@@ -172,12 +172,12 @@ const LeagueTable: React.FC<LeagueTableProps> = ({ teams, userTeamId, activeTab,
         // 3. Sort by Goals For (Highest first)
         if (statsB.gf !== statsA.gf) return statsB.gf - statsA.gf;
 
-        // 4. NEW: Sort Alphabetically (A-Z) if everything else is tied
+        // 4. Sort Alphabetically (A-Z) if everything else is tied
         return a.name.localeCompare(b.name);
     });
 
     return (
-        <div className="bg-slate-800 rounded-xl border border-slate-700 shadow-xl flex flex-col w-full h-[600px] lg:h-[720px]">
+        <div className="bg-slate-800 rounded-xl border border-slate-700 shadow-xl flex flex-col w-full h-[600px] lg:h-[720px] overflow-hidden">
             <div className="bg-slate-900/50 flex border-b border-slate-700 shrink-0">
                 <button onClick={() => { onTabChange('La Liga'); setUclView('League'); }} className={`flex-1 py-4 font-bold flex items-center justify-center gap-2 transition-colors ${activeTab === 'La Liga' ? 'bg-slate-800 text-[#FF2B44] border-b-2 border-[#FF2B44]' : 'text-slate-400 hover:text-white'}`}>{LIGA_LOGO_URL ? <img src={LIGA_LOGO_URL} alt="La Liga" className="w-5 h-5 object-contain" /> : <Trophy size={16} />} La Liga</button>
                 <button onClick={() => onTabChange('Champions League')} className={`flex-1 py-4 font-bold flex items-center justify-center gap-2 transition-colors ${activeTab === 'Champions League' ? 'bg-slate-900/80 text-blue-400 border-b-2 border-blue-400' : 'text-slate-400 hover:text-white'}`}>{UCL_LOGO_URL ? <div className="bg-slate-200 rounded-full p-0.5 w-6 h-6 flex items-center justify-center shrink-0"><img src={UCL_LOGO_URL} alt="UCL" className="w-5 h-5 object-contain" /></div> : <Globe size={16} />} Champions League</button>
