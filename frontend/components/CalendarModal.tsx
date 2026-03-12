@@ -15,15 +15,9 @@ interface CalendarModalProps {
 }
 
 const CalendarModal: React.FC<CalendarModalProps> = ({ 
-  isOpen, 
-  onClose, 
-  schedule, 
-  userTeamId, 
-  teams,
-  currentWeek,
-  currentSeasonYear,
-  onSimulateToWeek
+  isOpen, onClose, schedule, userTeamId, teams, currentWeek, currentSeasonYear, onSimulateToWeek
 }) => {
+  // FIX: Extract the starting year dynamically based on the current season string
   const startYear = parseInt(currentSeasonYear.split('/')[0] || '2025', 10);
   const [displayDate, setDisplayDate] = useState(new Date(startYear, 7, 1)); 
 

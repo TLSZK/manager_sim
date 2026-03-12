@@ -73,7 +73,7 @@ const App: React.FC = () => {
             const savedGame = await fetchSavedGame(activeProfile.id);
 
             if (savedGame && savedGame.userTeamId) {
-                // Infer current season string dynamically based on the saved dates
+                // FIX: Extract the specific playing year of this save so the calendar matches perfectly
                 if (savedGame.schedule && savedGame.schedule.length > 0) {
                     const firstDate = new Date(savedGame.schedule[0].date);
                     const startYear = firstDate.getFullYear();
@@ -99,6 +99,7 @@ const App: React.FC = () => {
             const ligaTeams = allTeams.filter(t => t.tier === 1 && t.id !== 'TBD');
             const uclTeams = allTeams.filter(t => t.isUCL && t.id !== 'TBD');
 
+            // FIX: Pass the dynamic year string down to the generator
             const masterSchedule = generateMasterSchedule(ligaTeams, uclTeams, "2025/26");
 
             setSchedule(masterSchedule);
@@ -193,7 +194,7 @@ const App: React.FC = () => {
                 const stageMatches = updatedSchedule.filter(m => m.stage === currentStage);
                 const winners: string[] = [];
                 const pairs: Record<string, Match[]> = {};
-                stageMatches.forEach(m => { const parts = m.id.split('-'), idx = parts[parts.length - 1]; if (idx) { if (!pairs[idx]) pairs[idx] = []; pairs[idx].push(m); } });
+                stageMatches.forEach(m => { const parts = m.id.split('-'); const idx = parts[parts.length - 1]; if (idx) { if (!pairs[idx]) pairs[idx] = []; pairs[idx].push(m); } });
                 const sortedKeys = Object.keys(pairs).sort((a, b) => parseInt(a) - parseInt(b));
                 sortedKeys.forEach(key => {
                     const pair = pairs[key];

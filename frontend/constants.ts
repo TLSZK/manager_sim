@@ -111,6 +111,7 @@ export const generateMasterSchedule = (ligaTeams: Team[], uclTeams: Team[], seas
   const schedule: Match[] = [];
   let matchIdCounter = 1;
 
+  // FIX: Dynamic date parsing based on the active season string
   const startYear = parseInt(seasonYearStr.split('/')[0], 10);
 
   const getDateForWeek = (week: number) => {
@@ -163,7 +164,7 @@ export const generateMasterSchedule = (ligaTeams: Team[], uclTeams: Team[], seas
     });
   }
 
-  // UCL GENERATION - BALANCED 8 ROUNDS
+  // FIX: UCL GENERATION - BALANCED 8 ROUNDS USING CIRCLE ALGORITHM
   if (uclTeams.length > 0) {
     let teams = [...uclTeams].sort(() => Math.random() - 0.5);
     if (teams.length % 2 !== 0) teams.push({ id: `TBD-PAD`, name: 'TBD', shortName: 'TBD', tier: 2, strength: 0 } as Team);
