@@ -2,18 +2,18 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory; // Add this import
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
-// REMOVED HasUuids import
 
 class User extends Authenticatable
 {
-    // REMOVED HasUuids from the use statement
-    use HasApiTokens, Notifiable;
+    // Add HasFactory here
+    use HasApiTokens, HasFactory, Notifiable;
 
     protected $fillable = [
-        'name', // Added name
+        'name',
         'email',
         'password'
     ];

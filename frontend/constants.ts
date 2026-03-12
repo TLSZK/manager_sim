@@ -1,7 +1,7 @@
 import { Team, Player, Formation, Match } from './types';
 
 // Official Competition Logos 
-export const LIGA_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0f/LaLiga_logo_2023.svg/512px-LaLiga_logo_2023.svg.png";
+export const LIGA_LOGO_URL = "https://images.fotmob.com/image_resources/logo/leaguelogo/87.png";
 export const UCL_LOGO_URL = "https://images.fotmob.com/image_resources/logo/leaguelogo/42.png";
 
 // La Liga Teams (Tier 1)
