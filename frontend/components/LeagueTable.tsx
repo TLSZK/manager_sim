@@ -1,141 +1,7 @@
-
-import React, { useState, useEffect, useRef } from 'react';
-import { Team, Competition, Match } from '../types';
-import { Trophy, Globe, GitBranch, List } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Team, Match, Competition } from '../types';
+import { Trophy, Globe, List, GitBranch } from 'lucide-react';
 import { LIGA_LOGO_URL, UCL_LOGO_URL } from '../constants';
-
-interface KnockoutBracketProps {
-    schedule: Match[];
-    teams: Team[];
-    userTeamId: string;
-}
-
-// Fixed slot heights to ensure perfect alignment
-const SLOT_HEIGHTS: Record<string, number> = {
-    'Playoffs': 100,
-    'Round of 16': 100,
-    'Quarter-finals': 200,
-    'Semi-finals': 400,
-    'Final': 800
-};
-
-// SVG Connector Component for perfect curves and gaps
-const Connector: React.FC<{ type: 'straight' | 'fork', height: number }> = ({ type, height }) => {
-    const width = 32;
-    const strokeWidth = 2;
-    const color = "#64748b";
-    const radius = 12;
-    const midX = width / 2;
-
-    if (type === 'straight') {
-        return (
-            <svg width={width} height={height} className="absolute top-0 right-full pointer-events-none" style={{ overflow: 'visible' }}>
-                <path d={`M 0,${height / 2} L ${width},${height / 2}`} fill="none" stroke={color} strokeWidth={strokeWidth} />
-            </svg>
-        );
-    }
-
-    const y1 = height * 0.25, y2 = height * 0.75, yMid = height * 0.5;
-    return (
-        <svg width={width} height={height} className="absolute top-0 right-full pointer-events-none" style={{ overflow: 'visible' }}>
-            <path d={`M 0,${y1} L ${midX - radius},${y1} Q ${midX},${y1} ${midX},${y1 + radius} L ${midX},${yMid}`} fill="none" stroke={color} strokeWidth={strokeWidth} />
-            <path d={`M 0,${y2} L ${midX - radius},${y2} Q ${midX},${y2} ${midX},${y2 - radius} L ${midX},${yMid}`} fill="none" stroke={color} strokeWidth={strokeWidth} />
-            <path d={`M ${midX},${yMid} L ${width},${yMid}`} fill="none" stroke={color} strokeWidth={strokeWidth} />
-        </svg>
-    );
-};
-
-const KnockoutBracket: React.FC<KnockoutBracketProps> = ({ schedule, teams, userTeamId }) => {
-    const scrollRef = useRef<HTMLDivElement>(null);
-    const stages = ['Playoffs', 'Round of 16', 'Quarter-finals', 'Semi-finals', 'Final'];
-
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            let activeStage = 'Round of 16';
-            for (const stage of stages) {
-                const matches = schedule.filter(m => m.competition === 'Champions League' && m.stage === stage);
-                if (matches.length > 0 && matches.some(m => !m.played)) { activeStage = stage; break; }
-            }
-            const el = document.getElementById(`stage-${activeStage}`);
-            if (el && scrollRef.current) el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-        }, 100);
-        return () => clearTimeout(timer);
-    }, [schedule]);
-
-    const hasAnyData = schedule.some(m => m.competition === 'Champions League' && stages.includes(m.stage));
-    if (!hasAnyData) return <div className="flex-1 flex items-center justify-center h-full bg-slate-900/50"><div className="text-[6rem] md:text-[10rem] font-black text-slate-800/80 tracking-widest animate-pulse select-none">TBD</div></div>;
-
-    return (
-        <div ref={scrollRef} className="flex flex-row overflow-auto h-full p-8 bg-slate-900/50 items-stretch gap-8 select-none">
-            {stages.map((stage) => {
-                const matches = schedule.filter(m => m.competition === 'Champions League' && m.stage === stage);
-                const slotHeight = SLOT_HEIGHTS[stage] || 100;
-                const uniqueTies: { m1: Match, m2?: Match }[] = [];
-                const processed = new Set();
-
-                matches.forEach(m => {
-                    if (processed.has(m.id) || m.isLeg2) return;
-                    if (stage === 'Final') { uniqueTies.push({ m1: m }); processed.add(m.id); return; }
-                    const l2Id = m.id.replace('L1', 'L2'), m2 = matches.find(mm => mm.id === l2Id);
-                    uniqueTies.push({ m1: m, m2 }); processed.add(m.id); if (m2) processed.add(m2.id);
-                });
-
-                uniqueTies.sort((a, b) => parseInt(a.m1.id.split('-').pop() || '0') - parseInt(b.m1.id.split('-').pop() || '0'));
-
-                return (
-                    <div key={stage} id={`stage-${stage}`} className="flex flex-col shrink-0 relative w-80">
-                        <div className="h-10 flex items-center justify-center font-bold uppercase text-sm text-blue-400 tracking-widest sticky top-0 bg-slate-900/90 z-20 border-b border-blue-900/30 mb-4 backdrop-blur-sm shadow-sm">{stage}</div>
-                        <div className="flex flex-col">{uniqueTies.map(({ m1, m2 }) => {
-                            const home = teams.find(t => t.id === m1.homeTeamId), away = teams.find(t => t.id === m1.awayTeamId);
-                            const homeName = home?.id === 'TBD' ? (m1.placeholder || 'TBD') : home?.name || 'Unknown', awayName = away?.id === 'TBD' ? (m1.placeholder || 'TBD') : away?.name || 'Unknown';
-                            let aggHome = 0, aggAway = 0, isFinished = false, winnerId: string | null = null;
-                            if (stage === 'Final') {
-                                aggHome = m1.homeScore || 0;
-                                aggAway = m1.awayScore || 0;
-                                isFinished = m1.played;
-                                if (isFinished) winnerId = m1.homeScore! > m1.awayScore! ? m1.homeTeamId : (m1.homeScore! < m1.awayScore! ? m1.awayTeamId : (m1.homePenalties! > m1.awayPenalties! ? m1.homeTeamId : m1.awayTeamId));
-                            } else {
-                                const s1h = m1.homeScore || 0, s1a = m1.awayScore || 0;
-                                const s2h = m2?.homeScore || 0, s2a = m2?.awayScore || 0;
-                                aggHome = s1h + s2a;
-                                aggAway = s1a + s2h;
-                                isFinished = !!(m1.played && m2?.played);
-                                if (isFinished) {
-                                    if (aggHome > aggAway) winnerId = m1.homeTeamId;
-                                    else if (aggAway > aggHome) winnerId = m1.awayTeamId;
-                                    else if (m2?.homePenalties !== undefined) winnerId = m2.awayPenalties! > m2.homePenalties! ? m1.homeTeamId : m1.awayTeamId;
-                                }
-                            }
-
-                            const renderRow = (isTeamA: boolean) => {
-                                const team = isTeamA ? home : away, name = isTeamA ? homeName : awayName, isW = winnerId === team?.id;
-                                let s1: string | number = '-', s2: string | number = '-', agg: string | number = '-', pen: number | null = null;
-                                if (stage !== 'Final') {
-                                    s1 = m1.played ? (isTeamA ? m1.homeScore! : m1.awayScore!) : '-';
-                                    s2 = m2?.played ? (isTeamA ? m2.awayScore! : m2.homeScore!) : '-';
-                                    if (isFinished && m2?.homePenalties !== undefined) pen = isTeamA ? m2.awayPenalties! : m2.homePenalties!;
-                                } else if (m1.played && m1.homePenalties !== undefined) {
-                                    pen = isTeamA ? m1.homePenalties : m1.awayPenalties;
-                                }
-                                if (isFinished || (stage === 'Final' && m1.played)) agg = isTeamA ? aggHome : aggAway;
-
-                                return (
-                                    <div className={`flex justify-between items-center px-3 py-2 ${isW ? 'bg-gradient-to-r from-emerald-900/30 to-transparent' : (isFinished ? 'opacity-40' : '')}`}>
-                                        <div className="flex items-center gap-2 flex-1 overflow-hidden">{team?.logoUrl ? <img src={team.logoUrl} className="w-5 h-5 object-contain" /> : <div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white bg-slate-700">{name[0]}</div>}<span className={`text-xs font-bold truncate ${team?.id === userTeamId ? 'text-blue-300' : 'text-slate-200'}`}>{name}</span></div>
-                                        <div className="flex items-center justify-end gap-1 text-xs font-mono ml-2">{stage !== 'Final' && <><span className="text-slate-500 w-3">{s1}</span><span className="text-slate-500 w-3">{s2}</span></>}<span className={`font-bold w-5 text-center ${isW ? 'text-emerald-400' : 'text-slate-300'}`}>{agg}</span>{pen !== null && <span className="text-[10px] text-slate-400 w-5">({pen})</span>}</div>
-                                    </div>
-                                );
-                            };
-                            return (
-                                <div key={m1.id} style={{ height: slotHeight }} className="flex items-center relative">{stage !== 'Playoffs' && <Connector type={stage === 'Round of 16' ? 'straight' : 'fork'} height={slotHeight} />}<div className={`w-full bg-slate-800 border rounded-lg overflow-hidden shadow-lg z-10 transition-all ${(home?.id === userTeamId || away?.id === userTeamId) ? 'border-blue-500 ring-1 ring-blue-500/50' : 'border-slate-700'}`}><div className="border-b border-slate-700/50">{renderRow(true)}</div><div>{renderRow(false)}</div></div></div>
-                            );
-                        })}</div>
-                    </div>
-                )
-            })}
-        </div>
-    );
-};
 
 interface LeagueTableProps {
     teams: Team[];
@@ -146,33 +12,108 @@ interface LeagueTableProps {
     currentWeek: number;
 }
 
-const LeagueTable: React.FC<LeagueTableProps> = ({ teams, userTeamId, activeTab, onTabChange, schedule }) => {
+const KnockoutBracket = ({ schedule, teams, userTeamId }: { schedule: Match[], teams: Team[], userTeamId: string }) => {
+    const stages = ['Playoffs', 'Round of 16', 'Quarter-finals', 'Semi-finals', 'Final'];
+
+    return (
+        <div className="w-full h-full overflow-y-auto bg-slate-900 p-4 space-y-8">
+            {stages.map(stageName => {
+                const stageMatches = schedule.filter(m => m.stage === stageName);
+                if (stageMatches.length === 0) return null;
+
+                const pairs: Record<string, Match[]> = {};
+                stageMatches.forEach(m => {
+                    const parts = m.id.split('-');
+                    const matchIdx = parts[parts.length - 1];
+                    if (!pairs[matchIdx]) pairs[matchIdx] = [];
+                    pairs[matchIdx].push(m);
+                });
+
+                return (
+                    <div key={stageName} className="mb-8">
+                        <h3 className="text-lg font-bold text-blue-400 mb-4 uppercase tracking-wider border-b border-slate-700 pb-2">{stageName}</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            {Object.values(pairs).map((pair, idx) => {
+                                const l1 = pair.find(m => !m.isLeg2);
+                                const l2 = pair.find(m => m.isLeg2);
+                                if (!l1) return null;
+
+                                const homeTeam = teams.find(t => t.id === l1.homeTeamId);
+                                const awayTeam = teams.find(t => t.id === l1.awayTeamId);
+
+                                const isUserInvolved = homeTeam?.id === userTeamId || awayTeam?.id === userTeamId;
+
+                                return (
+                                    <div key={idx} className={`bg-slate-800 rounded-lg p-3 border ${isUserInvolved ? 'border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.2)]' : 'border-slate-700'}`}>
+                                        <div className="flex flex-col gap-2">
+                                            {/* Top Team */}
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    {homeTeam?.logoUrl ? <img src={homeTeam.logoUrl} className="w-5 h-5 object-contain" /> : <div className="w-5 h-5 bg-slate-700 rounded-full"></div>}
+                                                    <span className={`text-sm font-bold ${homeTeam?.id === userTeamId ? 'text-white' : 'text-slate-300'}`}>{homeTeam?.name || (l1.placeholder || 'TBD')}</span>
+                                                </div>
+                                                <div className="text-sm font-mono flex gap-1">
+                                                    {l1.played ? <span className="bg-slate-700 px-1 rounded">{l1.homeScore}</span> : <span className="text-slate-500">-</span>}
+                                                    {l2?.played ? <span className="bg-slate-700 px-1 rounded">{l2.awayScore}</span> : null}
+                                                </div>
+                                            </div>
+                                            {/* Bottom Team */}
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    {awayTeam?.logoUrl ? <img src={awayTeam.logoUrl} className="w-5 h-5 object-contain" /> : <div className="w-5 h-5 bg-slate-700 rounded-full"></div>}
+                                                    <span className={`text-sm font-bold ${awayTeam?.id === userTeamId ? 'text-white' : 'text-slate-300'}`}>{awayTeam?.name || (l2?.placeholder || 'TBD')}</span>
+                                                </div>
+                                                <div className="text-sm font-mono flex gap-1">
+                                                    {l1.played ? <span className="bg-slate-700 px-1 rounded">{l1.awayScore}</span> : <span className="text-slate-500">-</span>}
+                                                    {l2?.played ? <span className="bg-slate-700 px-1 rounded">{l2.homeScore}</span> : null}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {/* Aggregate or Penalty display */}
+                                        {l1.played && l2?.played && (
+                                            <div className="mt-2 text-center text-xs font-bold text-slate-400 bg-slate-900 rounded py-1">
+                                                Agg: {l2.homeScore! + l1.awayScore!} - {l2.awayScore! + l1.homeScore!}
+                                                {l2.homePenalties !== undefined && (
+                                                    <span className="text-yellow-500 ml-2">(Pens: {l2.awayPenalties} - {l2.homePenalties})</span>
+                                                )}
+                                            </div>
+                                        )}
+                                        {stageName === 'Final' && l1.played && !l2 && (
+                                            <div className="mt-2 text-center text-xs font-bold text-slate-400 bg-slate-900 rounded py-1">
+                                                {l1.homePenalties !== undefined && (
+                                                    <span className="text-yellow-500">(Pens: {l1.homePenalties} - {l1.awayPenalties})</span>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
+const LeagueTable: React.FC<LeagueTableProps> = ({ teams, userTeamId, activeTab, onTabChange, schedule, currentWeek }) => {
     const [uclView, setUclView] = useState<'League' | 'Knockout'>('League');
 
     useEffect(() => {
         if (activeTab === 'Champions League') {
-            if (schedule.some(m => m.competition === 'Champions League' && m.stage !== 'League Phase')) setUclView('Knockout');
+            if (schedule.some(m => m.competition === 'Champions League' && m.stage !== 'League Phase' && m.week <= currentWeek)) setUclView('Knockout');
             else setUclView('League');
         }
-    }, [schedule, activeTab]);
+    }, [schedule, activeTab, currentWeek]);
 
     const displayTeams = activeTab === 'La Liga' ? teams.filter(t => t.tier === 1) : teams.filter(t => t.uclStats !== undefined);
     const sortedTeams = [...displayTeams].sort((a, b) => {
         const statsA = activeTab === 'La Liga' ? a.stats : a.uclStats!;
         const statsB = activeTab === 'La Liga' ? b.stats : b.uclStats!;
-
         if (!statsA || !statsB) return 0;
-
-        // 1. Sort by Points (Highest first)
         if (statsB.points !== statsA.points) return statsB.points - statsA.points;
-
-        // 2. Sort by Goal Difference (Highest first)
         if (statsB.gd !== statsA.gd) return statsB.gd - statsA.gd;
-
-        // 3. Sort by Goals For (Highest first)
         if (statsB.gf !== statsA.gf) return statsB.gf - statsA.gf;
-
-        // 4. Sort Alphabetically (A-Z) if everything else is tied
         return a.name.localeCompare(b.name);
     });
 

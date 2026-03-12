@@ -25,10 +25,9 @@ async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promi
   });
 
   if (!response.ok) {
-    // Prevent reload if the 401 comes from the login attempt
     if (response.status === 401 && !endpoint.includes('/login')) {
       localStorage.removeItem('auth_token');
-      window.location.reload(); // Force logout
+      window.location.reload(); 
     }
     const errData = await response.json().catch(() => ({}));
     throw new Error(errData.message || `API Request failed: ${response.statusText}`);
@@ -98,7 +97,9 @@ export const fetchProfiles = async (): Promise<ManagerProfile[]> => {
     return profiles.map(p => ({
       id: p.id,
       name: p.name,
-      history: p.history || [],
+      // FIX: Laravel eager-loads the relationship as 'histories', not 'history'. 
+      // We must map 'p.histories' to the frontend's 'history' state.
+      history: p.histories || p.history || [], 
       createdAt: new Date(p.created_at || p.createdAt).getTime()
     }));
   } catch (error) {

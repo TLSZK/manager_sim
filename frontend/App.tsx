@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import confetti from 'canvas-confetti';
-import { generateMasterSchedule, generateRoster, EUROPEAN_TEAMS, INITIAL_STATS, INITIAL_UCL_STATS, SIMULATION_SCHEDULE, LIGA_LOGO_URL, UCL_LOGO_URL } from './constants';
-import { Team, Match, SimulationState, SeasonSummary, PastSeason, Competition, ManagerProfile as ManagerProfileType } from './types';
+import { generateMasterSchedule, generateRoster, INITIAL_STATS, INITIAL_UCL_STATS, SIMULATION_SCHEDULE, LIGA_LOGO_URL, UCL_LOGO_URL } from './constants';
+import { Team, Match, SimulationState, SeasonSummary, Competition, ManagerProfile as ManagerProfileType } from './types';
 import TeamSelector from './components/TeamSelector';
 import LeagueTable from './components/LeagueTable';
 import ManagerProfile from './components/ManagerProfile';
@@ -11,35 +11,18 @@ import CalendarModal from './components/CalendarModal';
 import SeasonRecapModal from './components/SeasonRecapModal';
 import LoginScreen from './components/LoginScreen';
 import ProfileSelector from './components/ProfileSelector';
-import { Play, FastForward, Trophy, Calendar, Pause, CheckCircle, User, ChevronLeft, ChevronRight, Shirt, Briefcase, Search, Globe, CalendarDays, ArrowRight, ChevronDown, LogOut, Settings, Users } from 'lucide-react';
+import { Play, FastForward, Trophy, Calendar, Pause, CheckCircle, ChevronLeft, ChevronRight, Shirt, Briefcase, Search, Globe, CalendarDays, ArrowRight, ChevronDown, LogOut, Users } from 'lucide-react';
 import { getBoardFeedback } from './services/geminiService';
-// FIX: Imported fetchCurrentUser to power the new unified dropdown
 import { fetchTeams, saveSeasonResult, updateProfileName, fetchSavedGame, saveGame, fetchCurrentUser } from './services/api';
 
-// Dummy TBD Team for placeholders
-const TBD_TEAM: Team = {
-    id: 'TBD',
-    name: 'TBD',
-    shortName: 'TBD',
-    tier: 0,
-    strength: 0,
-    primaryColor: '#334155', // Slate-700
-    secondaryColor: '#94a3b8',
-    roster: [],
-    formation: '4-3-3',
-    stats: { ...INITIAL_STATS, form: [] }
-};
+const TBD_TEAM: Team = { id: 'TBD', name: 'TBD', shortName: 'TBD', tier: 0, strength: 0, primaryColor: '#334155', secondaryColor: '#94a3b8', roster: [], formation: '4-3-3', stats: { ...INITIAL_STATS, form: [] } };
 
 const App: React.FC = () => {
-    // Auth & Profile State
     const [isAuthenticated, setIsAuthenticated] = useState<boolean>(!!localStorage.getItem('auth_token'));
     const [activeProfile, setActiveProfile] = useState<ManagerProfileType | null>(null);
     const [showAccountMenu, setShowAccountMenu] = useState(false);
-
-    // FIX: Added state for the fetched account info
     const [userAccount, setUserAccount] = useState<{ name: string, email: string } | null>(null);
 
-    // App State
     const [teams, setTeams] = useState<Team[]>([]);
     const [schedule, setSchedule] = useState<Match[]>([]);
     const [userTeamId, setUserTeamId] = useState<string | null>(null);
@@ -49,71 +32,54 @@ const App: React.FC = () => {
     const [isSimulatingFast, setIsSimulatingFast] = useState(false);
     const [activeTableTab, setActiveTableTab] = useState<Competition>('La Liga');
 
-    // Results Widget State
     const [resultsComp, setResultsComp] = useState<Competition>('La Liga');
     const [resultsIndex, setResultsIndex] = useState<number>(-1);
 
-    // UI Modal State
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
     const [isRecapOpen, setIsRecapOpen] = useState(false);
     const [currentSeasonYear, setCurrentSeasonYear] = useState<string>("2025/26");
 
-    // Simulation Target
     const [targetSimWeek, setTargetSimWeek] = useState<number | null>(null);
     const [lastSimulatedMatchId, setLastSimulatedMatchId] = useState<string | null>(null);
 
-    // Race Condition Prevention
     const [seasonId, setSeasonId] = useState<string>(() => crypto.randomUUID());
     const seasonIdRef = useRef(seasonId);
-
-    // Profile Initialization Tracker
     const lastInitializedProfileId = useRef<string | null>(null);
 
-    useEffect(() => {
-        seasonIdRef.current = seasonId;
-    }, [seasonId]);
+    useEffect(() => { seasonIdRef.current = seasonId; }, [seasonId]);
+    useEffect(() => { if (isAuthenticated) fetchCurrentUser().then(data => setUserAccount(data)); }, [isAuthenticated]);
 
-    // FIX: Load User Account details once authenticated
-    useEffect(() => {
-        if (isAuthenticated) {
-            fetchCurrentUser().then(data => setUserAccount(data));
-        }
-    }, [isAuthenticated]);
-
-    // Determine if next match is UCL to auto-switch tab (Table only)
     useEffect(() => {
         if (userTeamId) {
             let targetComp: Competition | null = null;
-
             if (simState === 'match_recap' && lastSimulatedMatchId) {
                 const lastMatch = schedule.find(m => m.id === lastSimulatedMatchId);
                 if (lastMatch) targetComp = lastMatch.competition;
-            }
-            else {
+            } else {
                 const nextMatch = schedule.find(m => m.week === currentWeek && !m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId));
                 if (nextMatch) targetComp = nextMatch.competition;
             }
-
-            if (targetComp) {
-                setActiveTableTab(targetComp);
-                setResultsComp(targetComp);
-            }
+            if (targetComp) { setActiveTableTab(targetComp); setResultsComp(targetComp); }
         }
     }, [currentWeek, userTeamId, schedule, simState, lastSimulatedMatchId]);
 
     useEffect(() => {
         if (!activeProfile) return;
-
-        // Prevent double-init
         if (activeProfile.id === lastInitializedProfileId.current) return;
         lastInitializedProfileId.current = activeProfile.id;
 
         const initGame = async () => {
-            // 1. TRY LOADING SAVED GAME FIRST
             const savedGame = await fetchSavedGame(activeProfile.id);
 
             if (savedGame && savedGame.userTeamId) {
+                // Infer current season string dynamically based on the saved dates
+                if (savedGame.schedule && savedGame.schedule.length > 0) {
+                    const firstDate = new Date(savedGame.schedule[0].date);
+                    const startYear = firstDate.getFullYear();
+                    setCurrentSeasonYear(`${startYear}/${(startYear + 1).toString().slice(2)}`);
+                }
+
                 setTeams(savedGame.teams);
                 setSchedule(savedGame.schedule);
                 setCurrentWeek(savedGame.currentWeek);
@@ -122,30 +88,18 @@ const App: React.FC = () => {
                 return;
             }
 
-            // 2. NEW GAME: Fetch ALL teams from DB
             const fetchedTeams = await fetchTeams();
-
-            // 3. Hydrate and Tag Teams correctly
             const hydratedTeams = fetchedTeams.map(t => {
                 const tier = t.tier || 1;
-                return {
-                    ...t,
-                    roster: (t.roster && t.roster.length > 0) ? t.roster : generateRoster(t.id, t.strength),
-                    formation: '4-3-3' as const,
-                    tier: tier,
-                    isLaLiga: tier === 1,
-                    stats: { ...INITIAL_STATS, form: [] },
-                    uclStats: t.isUCL ? { ...INITIAL_UCL_STATS } : undefined
-                };
+                return { ...t, roster: (t.roster && t.roster.length > 0) ? t.roster : generateRoster(t.id, t.strength), formation: '4-3-3' as const, tier: tier, isLaLiga: tier === 1, stats: { ...INITIAL_STATS, form: [] }, uclStats: t.isUCL ? { ...INITIAL_UCL_STATS } : undefined };
             });
 
             const allTeams = [...hydratedTeams, TBD_TEAM];
             setTeams(allTeams);
-
             const ligaTeams = allTeams.filter(t => t.tier === 1 && t.id !== 'TBD');
             const uclTeams = allTeams.filter(t => t.isUCL && t.id !== 'TBD');
 
-            const masterSchedule = generateMasterSchedule(ligaTeams, uclTeams);
+            const masterSchedule = generateMasterSchedule(ligaTeams, uclTeams, "2025/26");
 
             setSchedule(masterSchedule);
             setSimState('select_team');
@@ -157,134 +111,65 @@ const App: React.FC = () => {
     }, [activeProfile?.id]);
 
     const handleLogin = () => setIsAuthenticated(true);
-
-    const handleLogout = () => {
-        localStorage.removeItem('auth_token');
-        setIsAuthenticated(false);
-        setActiveProfile(null);
-        lastInitializedProfileId.current = null;
-        setShowAccountMenu(false);
-        setSimState('select_team');
-        setUserTeamId(null);
-        setTeams([]);
-        setSchedule([]);
-    };
-
+    const handleLogout = () => { localStorage.removeItem('auth_token'); setIsAuthenticated(false); setActiveProfile(null); lastInitializedProfileId.current = null; setShowAccountMenu(false); setSimState('select_team'); setUserTeamId(null); setTeams([]); setSchedule([]); };
     const handleSelectProfile = (profile: ManagerProfileType) => setActiveProfile(profile);
-
-    const handleExitProfile = () => {
-        setActiveProfile(null);
-        lastInitializedProfileId.current = null;
-        setTeams([]);
-        setSchedule([]);
-    };
-
-    const handleUpdateManagerName = async (name: string) => {
-        if (activeProfile) {
-            await updateProfileName(activeProfile.id, name);
-            setActiveProfile({ ...activeProfile, name });
-        }
-    };
-
-    const handleSelectTeam = (id: string) => {
-        setUserTeamId(id);
-        setSimState('ready');
-        setCurrentWeek(1);
-    };
+    const handleExitProfile = () => { setActiveProfile(null); lastInitializedProfileId.current = null; setTeams([]); setSchedule([]); };
+    const handleUpdateManagerName = async (name: string) => { if (activeProfile) { await updateProfileName(activeProfile.id, name); setActiveProfile({ ...activeProfile, name }); } };
+    const handleSelectTeam = (id: string) => { setUserTeamId(id); setSimState('ready'); setCurrentWeek(1); };
 
     const calculateMatchResult = (match: Match, home: Team, away: Team): Match => {
         if (home.id === 'TBD' || away.id === 'TBD') return match;
-
-        let homeStr = home.strength;
-        let awayStr = away.strength;
+        let homeStr = home.strength, awayStr = away.strength;
         if (match.stage !== 'Final') homeStr += 5;
         const diff = homeStr - awayStr;
-
-        let homeProb = 0.38 + (diff * 0.015);
-        let drawProb = 0.26 - (Math.abs(diff) * 0.005);
-
-        if (match.stage !== 'League Phase' && match.stage !== 'Regular Season' && match.stage !== 'Playoffs' && match.stage !== 'Final') {
-            drawProb *= 0.8;
-        }
-
-        homeProb = Math.max(0.1, Math.min(0.85, homeProb));
-        drawProb = Math.max(0.1, drawProb);
-
+        let homeProb = 0.38 + (diff * 0.015), drawProb = 0.26 - (Math.abs(diff) * 0.005);
+        if (match.stage !== 'League Phase' && match.stage !== 'Regular Season' && match.stage !== 'Playoffs' && match.stage !== 'Final') drawProb *= 0.8;
+        homeProb = Math.max(0.1, Math.min(0.85, homeProb)); drawProb = Math.max(0.1, drawProb);
         const rand = Math.random();
         let homeGoals = 0, awayGoals = 0;
-
-        if (rand < homeProb) {
-            homeGoals = Math.floor(Math.random() * 4) + 1;
-            awayGoals = Math.floor(Math.random() * homeGoals);
-        } else if (rand < homeProb + drawProb) {
-            homeGoals = Math.floor(Math.random() * 4);
-            awayGoals = homeGoals;
-        } else {
-            awayGoals = Math.floor(Math.random() * 4) + 1;
-            homeGoals = Math.floor(Math.random() * awayGoals);
-        }
-
+        if (rand < homeProb) { homeGoals = Math.floor(Math.random() * 4) + 1; awayGoals = Math.floor(Math.random() * homeGoals); } 
+        else if (rand < homeProb + drawProb) { homeGoals = Math.floor(Math.random() * 4); awayGoals = homeGoals; } 
+        else { awayGoals = Math.floor(Math.random() * 4) + 1; homeGoals = Math.floor(Math.random() * awayGoals); }
         return { ...match, homeScore: homeGoals, awayScore: awayGoals, played: true };
     };
 
     const handlePlayVisualMatch = () => setSimState('playing_match');
-
     const handleQuickSimWeek = () => {
         const matchesToPlay = schedule.filter(m => m.week === currentWeek && !m.played);
         const userMatch = matchesToPlay.find(m => m.homeTeamId === userTeamId || m.awayTeamId === userTeamId);
         let nextState: SimulationState | 'match_recap' | null = null;
-        if (userMatch) {
-            setLastSimulatedMatchId(userMatch.id);
-            nextState = 'match_recap';
-        }
+        if (userMatch) { setLastSimulatedMatchId(userMatch.id); nextState = 'match_recap'; }
         simulateWeekLogic(null, nextState);
     };
 
-    const handleSimulateToWeek = (targetWeek: number) => {
-        setTargetSimWeek(targetWeek);
-        setIsSimulatingFast(true);
-        setIsCalendarOpen(false);
-    };
-
+    const handleSimulateToWeek = (targetWeek: number) => { setTargetSimWeek(targetWeek); setIsSimulatingFast(true); setIsCalendarOpen(false); };
+    
     const getMatchDate = (week: number) => {
+        const startYear = parseInt(currentSeasonYear.split('/')[0], 10);
         const entry = SIMULATION_SCHEDULE.find(s => s.week === week);
-        return entry ? new Date(entry.date) : new Date();
+        if (!entry) return new Date();
+        const monthStr = entry.date.split('-')[1];
+        const isNextYear = parseInt(monthStr, 10) < 7;
+        const year = isNextYear ? startYear + 1 : startYear;
+        return new Date(`${year}-${monthStr}-${entry.date.split('-')[2]}T12:00:00Z`);
     };
 
-    const getPenaltyResult = () => {
-        const possibleScores = [[5, 4], [5, 3], [4, 3], [4, 2], [3, 1], [3, 2], [6, 5]];
-        const score = possibleScores[Math.floor(Math.random() * possibleScores.length)];
-        const homeWins = Math.random() > 0.5;
-        return homeWins ? { home: score[0], away: score[1] } : { home: score[1], away: score[0] };
-    };
+    const getPenaltyResult = () => { const possibleScores = [[5, 4], [5, 3], [4, 3], [4, 2], [3, 1], [3, 2], [6, 5]]; const score = possibleScores[Math.floor(Math.random() * possibleScores.length)]; const homeWins = Math.random() > 0.5; return homeWins ? { home: score[0], away: score[1] } : { home: score[1], away: score[0] }; };
 
     const resolveUCLKnockouts = (currentSchedule: Match[], teamsState: Team[]): Match[] => {
         let updatedSchedule = [...currentSchedule];
-        const isPhaseComplete = (stage: string) => {
-            const matches = updatedSchedule.filter(m => m.stage === stage);
-            return matches.length > 0 && matches.every(m => m.played);
-        };
+        const isPhaseComplete = (stage: string) => { const matches = updatedSchedule.filter(m => m.stage === stage); return matches.length > 0 && matches.every(m => m.played); };
         const hasNextStageGenerated = (stage: string) => updatedSchedule.some(m => m.stage === stage);
 
         if (isPhaseComplete('League Phase') && !hasNextStageGenerated('Playoffs')) {
-            const uclTeams = teamsState.filter(t => t.isUCL && t.id !== 'TBD').sort((a, b) => {
-                if (b.uclStats!.points !== a.uclStats!.points) return b.uclStats!.points - a.uclStats!.points;
-                if (b.uclStats!.gd !== a.uclStats!.gd) return b.uclStats!.gd - a.uclStats!.gd;
-                return b.uclStats!.gf - a.uclStats!.gf;
-            });
+            const uclTeams = teamsState.filter(t => t.isUCL && t.id !== 'TBD').sort((a, b) => { if (b.uclStats!.points !== a.uclStats!.points) return b.uclStats!.points - a.uclStats!.points; if (b.uclStats!.gd !== a.uclStats!.gd) return b.uclStats!.gd - a.uclStats!.gd; return b.uclStats!.gf - a.uclStats!.gf; });
             const topSeeds = uclTeams.slice(0, 8);
             const playoffsMatches: Match[] = [];
             for (let i = 0; i < 8; i++) {
                 const seedHigh = uclTeams[8 + i], seedLow = uclTeams[23 - i];
                 if (seedHigh && seedLow) {
-                    playoffsMatches.push({
-                        id: `UCL-PO-L1-${i}`, week: 30, homeTeamId: seedLow.id, awayTeamId: seedHigh.id, date: getMatchDate(30),
-                        homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Playoffs', isLeg2: false
-                    });
-                    playoffsMatches.push({
-                        id: `UCL-PO-L2-${i}`, week: 32, homeTeamId: seedHigh.id, awayTeamId: seedLow.id, date: getMatchDate(32),
-                        homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Playoffs', isLeg2: true
-                    });
+                    playoffsMatches.push({ id: `UCL-PO-L1-${i}`, week: 30, homeTeamId: seedLow.id, awayTeamId: seedHigh.id, date: getMatchDate(30), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Playoffs', isLeg2: false });
+                    playoffsMatches.push({ id: `UCL-PO-L2-${i}`, week: 32, homeTeamId: seedHigh.id, awayTeamId: seedLow.id, date: getMatchDate(32), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Playoffs', isLeg2: true });
                 }
             }
             const shuffledSeeds = [...topSeeds].sort(() => Math.random() - 0.5);
@@ -292,25 +177,13 @@ const App: React.FC = () => {
             shuffledSeeds.forEach((seed, idx) => {
                 const possibleOpponent1 = uclTeams[8 + idx], possibleOpponent2 = uclTeams[23 - idx];
                 const placeholderText = `Winner: ${possibleOpponent1?.shortName} / ${possibleOpponent2?.shortName}`;
-                r16Matches.push({
-                    id: `UCL-R16-L1-${idx}`, week: 35, homeTeamId: 'TBD', awayTeamId: seed.id, date: getMatchDate(35),
-                    homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Round of 16', isLeg2: false, placeholder: placeholderText
-                });
-                r16Matches.push({
-                    id: `UCL-R16-L2-${idx}`, week: 37, homeTeamId: seed.id, awayTeamId: 'TBD', date: getMatchDate(37),
-                    homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Round of 16', isLeg2: true, placeholder: placeholderText
-                });
+                r16Matches.push({ id: `UCL-R16-L1-${idx}`, week: 35, homeTeamId: 'TBD', awayTeamId: seed.id, date: getMatchDate(35), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Round of 16', isLeg2: false, placeholder: placeholderText });
+                r16Matches.push({ id: `UCL-R16-L2-${idx}`, week: 37, homeTeamId: seed.id, awayTeamId: 'TBD', date: getMatchDate(37), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Round of 16', isLeg2: true, placeholder: placeholderText });
             });
             const qfMatches: Match[] = [];
-            for (let i = 0; i < 4; i++) {
-                qfMatches.push({ id: `UCL-QF-L1-${i}`, week: 41, homeTeamId: 'TBD', awayTeamId: 'TBD', date: getMatchDate(41), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Quarter-finals', isLeg2: false });
-                qfMatches.push({ id: `UCL-QF-L2-${i}`, week: 43, homeTeamId: 'TBD', awayTeamId: 'TBD', date: getMatchDate(43), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Quarter-finals', isLeg2: true });
-            }
+            for (let i = 0; i < 4; i++) { qfMatches.push({ id: `UCL-QF-L1-${i}`, week: 41, homeTeamId: 'TBD', awayTeamId: 'TBD', date: getMatchDate(41), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Quarter-finals', isLeg2: false }); qfMatches.push({ id: `UCL-QF-L2-${i}`, week: 43, homeTeamId: 'TBD', awayTeamId: 'TBD', date: getMatchDate(43), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Quarter-finals', isLeg2: true }); }
             const sfMatches: Match[] = [];
-            for (let i = 0; i < 2; i++) {
-                sfMatches.push({ id: `UCL-SF-L1-${i}`, week: 47, homeTeamId: 'TBD', awayTeamId: 'TBD', date: getMatchDate(47), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Semi-finals', isLeg2: false });
-                sfMatches.push({ id: `UCL-SF-L2-${i}`, week: 49, homeTeamId: 'TBD', awayTeamId: 'TBD', date: getMatchDate(49), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Semi-finals', isLeg2: true });
-            }
+            for (let i = 0; i < 2; i++) { sfMatches.push({ id: `UCL-SF-L1-${i}`, week: 47, homeTeamId: 'TBD', awayTeamId: 'TBD', date: getMatchDate(47), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Semi-finals', isLeg2: false }); sfMatches.push({ id: `UCL-SF-L2-${i}`, week: 49, homeTeamId: 'TBD', awayTeamId: 'TBD', date: getMatchDate(49), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Semi-finals', isLeg2: true }); }
             const finalMatch: Match = { id: `UCL-FINAL`, week: 55, homeTeamId: 'TBD', awayTeamId: 'TBD', date: getMatchDate(55), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Final', isLeg2: false };
             updatedSchedule = [...updatedSchedule, ...playoffsMatches, ...r16Matches, ...qfMatches, ...sfMatches, finalMatch];
         }
@@ -320,20 +193,13 @@ const App: React.FC = () => {
                 const stageMatches = updatedSchedule.filter(m => m.stage === currentStage);
                 const winners: string[] = [];
                 const pairs: Record<string, Match[]> = {};
-                stageMatches.forEach(m => {
-                    const parts = m.id.split('-'), idx = parts[parts.length - 1];
-                    if (idx) { if (!pairs[idx]) pairs[idx] = []; pairs[idx].push(m); }
-                });
+                stageMatches.forEach(m => { const parts = m.id.split('-'), idx = parts[parts.length - 1]; if (idx) { if (!pairs[idx]) pairs[idx] = []; pairs[idx].push(m); } });
                 const sortedKeys = Object.keys(pairs).sort((a, b) => parseInt(a) - parseInt(b));
                 sortedKeys.forEach(key => {
                     const pair = pairs[key];
                     if (currentStage === 'Final') {
                         const m = pair[0];
-                        if (m.homeScore === m.awayScore && m.homePenalties === undefined) {
-                            const pens = getPenaltyResult();
-                            const mIdx = updatedSchedule.findIndex(match => match.id === m.id);
-                            if (mIdx !== -1) updatedSchedule[mIdx] = { ...updatedSchedule[mIdx], homePenalties: pens.home, awayPenalties: pens.away };
-                        }
+                        if (m.homeScore === m.awayScore && m.homePenalties === undefined) { const pens = getPenaltyResult(); const mIdx = updatedSchedule.findIndex(match => match.id === m.id); if (mIdx !== -1) updatedSchedule[mIdx] = { ...updatedSchedule[mIdx], homePenalties: pens.home, awayPenalties: pens.away }; }
                         return;
                     }
                     const l1 = pair.find(m => !m.isLeg2), l2 = pair.find(m => m.isLeg2);
@@ -341,18 +207,8 @@ const App: React.FC = () => {
                         const aggHome = l2.homeScore! + l1.awayScore!, aggAway = l2.awayScore! + l1.homeScore!;
                         let winnerId = aggHome > aggAway ? l2.homeTeamId : l2.awayTeamId;
                         if (aggHome === aggAway) {
-                            let hp = l2.homePenalties;
-                            let ap = l2.awayPenalties;
-
-                            if (hp === undefined || ap === undefined) {
-                                const pens = getPenaltyResult();
-                                hp = pens.home;
-                                ap = pens.away;
-                                const l2Idx = updatedSchedule.findIndex(match => match.id === l2!.id);
-                                if (l2Idx !== -1) {
-                                    updatedSchedule[l2Idx] = { ...updatedSchedule[l2Idx], homePenalties: hp, awayPenalties: ap };
-                                }
-                            }
+                            let hp = l2.homePenalties, ap = l2.awayPenalties;
+                            if (hp === undefined || ap === undefined) { const pens = getPenaltyResult(); hp = pens.home; ap = pens.away; const l2Idx = updatedSchedule.findIndex(match => match.id === l2!.id); if (l2Idx !== -1) { updatedSchedule[l2Idx] = { ...updatedSchedule[l2Idx], homePenalties: hp, awayPenalties: ap }; } }
                             winnerId = hp! > ap! ? l2.homeTeamId : l2.awayTeamId;
                         }
                         winners.push(winnerId);
@@ -367,11 +223,7 @@ const App: React.FC = () => {
             const winners = processStageWinners('Playoffs');
             if (winners && winners.length > 0) {
                 updatedSchedule = updatedSchedule.map(m => {
-                    if (m.stage === 'Round of 16') {
-                        const idx = parseInt(m.id.split('-').pop() || '');
-                        const winnerId = winners[idx];
-                        if (winnerId) return !m.isLeg2 ? { ...m, homeTeamId: winnerId, placeholder: undefined } : { ...m, awayTeamId: winnerId, placeholder: undefined };
-                    }
+                    if (m.stage === 'Round of 16') { const idx = parseInt(m.id.split('-').pop() || ''); const winnerId = winners[idx]; if (winnerId) return !m.isLeg2 ? { ...m, homeTeamId: winnerId, placeholder: undefined } : { ...m, awayTeamId: winnerId, placeholder: undefined }; }
                     return m;
                 });
             }
@@ -380,11 +232,7 @@ const App: React.FC = () => {
             const winners = processStageWinners('Round of 16');
             if (winners && winners.length === 8) {
                 updatedSchedule = updatedSchedule.map(m => {
-                    if (m.stage === 'Quarter-finals') {
-                        const idx = parseInt(m.id.split('-').pop() || '');
-                        const t1 = winners[idx * 2], t2 = winners[idx * 2 + 1];
-                        if (t1 && t2) return { ...m, homeTeamId: m.isLeg2 ? t2 : t1, awayTeamId: m.isLeg2 ? t1 : t2 };
-                    }
+                    if (m.stage === 'Quarter-finals') { const idx = parseInt(m.id.split('-').pop() || ''); const t1 = winners[idx * 2], t2 = winners[idx * 2 + 1]; if (t1 && t2) return { ...m, homeTeamId: m.isLeg2 ? t2 : t1, awayTeamId: m.isLeg2 ? t1 : t2 }; }
                     return m;
                 });
             }
@@ -393,20 +241,14 @@ const App: React.FC = () => {
             const winners = processStageWinners('Quarter-finals');
             if (winners && winners.length === 4) {
                 updatedSchedule = updatedSchedule.map(m => {
-                    if (m.stage === 'Semi-finals') {
-                        const idx = parseInt(m.id.split('-').pop() || '');
-                        const t1 = winners[idx * 2], t2 = winners[idx * 2 + 1];
-                        if (t1 && t2) return { ...m, homeTeamId: m.isLeg2 ? t2 : t1, awayTeamId: m.isLeg2 ? t1 : t2 };
-                    }
+                    if (m.stage === 'Semi-finals') { const idx = parseInt(m.id.split('-').pop() || ''); const t1 = winners[idx * 2], t2 = winners[idx * 2 + 1]; if (t1 && t2) return { ...m, homeTeamId: m.isLeg2 ? t2 : t1, awayTeamId: m.isLeg2 ? t1 : t2 }; }
                     return m;
                 });
             }
         }
         if (isPhaseComplete('Semi-finals') && updatedSchedule.some(m => m.stage === 'Final' && m.homeTeamId === 'TBD')) {
             const winners = processStageWinners('Semi-finals');
-            if (winners && winners.length === 2) {
-                updatedSchedule = updatedSchedule.map(m => m.stage === 'Final' ? { ...m, homeTeamId: winners[0], awayTeamId: winners[1] } : m);
-            }
+            if (winners && winners.length === 2) { updatedSchedule = updatedSchedule.map(m => m.stage === 'Final' ? { ...m, homeTeamId: winners[0], awayTeamId: winners[1] } : m); }
         }
         if (isPhaseComplete('Final')) processStageWinners('Final');
         return updatedSchedule;
@@ -461,19 +303,9 @@ const App: React.FC = () => {
         performAutoSave(nextTeams, nextSchedule, procWeek);
     }, [currentWeek, schedule, teams, userTeamId]);
 
-    const performAutoSave = async (
-        newTeams: Team[],
-        newSchedule: Match[],
-        newWeek: number
-    ) => {
+    const performAutoSave = async (newTeams: Team[], newSchedule: Match[], newWeek: number) => {
         if (!activeProfile || !userTeamId) return;
-
-        await saveGame(activeProfile.id, {
-            currentWeek: newWeek,
-            userTeamId: userTeamId,
-            schedule: newSchedule,
-            teams: newTeams
-        });
+        await saveGame(activeProfile.id, { currentWeek: newWeek, userTeamId: userTeamId, schedule: newSchedule, teams: newTeams });
     };
 
     const handleMatchComplete = (homeScore: number, awayScore: number) => {
@@ -488,7 +320,7 @@ const App: React.FC = () => {
         let timer: ReturnType<typeof setTimeout>;
         if (isSimulatingFast) {
             const maxWeek = schedule.reduce((max, m) => Math.max(max, m.week), 55);
-            if (targetSimWeek ? currentWeek <= targetSimWeek : currentWeek <= maxWeek) timer = setTimeout(() => simulateWeekLogic(null), 80);
+            if (targetSimWeek ? currentWeek < targetSimWeek : currentWeek <= maxWeek) timer = setTimeout(() => simulateWeekLogic(null), 80);
             else { setIsSimulatingFast(false); setTargetSimWeek(null); }
         }
         return () => clearTimeout(timer);
@@ -532,60 +364,28 @@ const App: React.FC = () => {
     const toggleFastSim = () => { setIsSimulatingFast(prev => !prev); setTargetSimWeek(null); };
 
     const handleSeasonTransition = async (stayWithTeam: boolean) => {
-        setIsSimulatingFast(false);
-        setIsRecapOpen(false);
-        const newId = crypto.randomUUID();
-        setSeasonId(newId);
-
+        setIsSimulatingFast(false); setIsRecapOpen(false); setSeasonId(crypto.randomUUID());
         const fetchedTeams = await fetchTeams();
-
-        const hydratedTeams = fetchedTeams.map(t => {
-            const tier = t.tier || 1;
-            return {
-                ...t,
-                roster: generateRoster(t.id, t.strength),
-                formation: '4-3-3' as const,
-                tier: tier,
-                isLaLiga: tier === 1,
-                stats: { ...INITIAL_STATS, form: [] },
-                uclStats: t.isUCL ? { ...INITIAL_UCL_STATS } : undefined
-            };
-        });
+        const hydratedTeams = fetchedTeams.map(t => { const tier = t.tier || 1; return { ...t, roster: generateRoster(t.id, t.strength), formation: '4-3-3' as const, tier: tier, isLaLiga: tier === 1, stats: { ...INITIAL_STATS, form: [] }, uclStats: t.isUCL ? { ...INITIAL_UCL_STATS } : undefined }; });
 
         const allTeams = [...hydratedTeams, TBD_TEAM];
         setTeams(allTeams);
-
         const ligaTeams = allTeams.filter(t => t.tier === 1 && t.id !== 'TBD');
         const uclTeams = allTeams.filter(t => t.isUCL && t.id !== 'TBD');
 
-        const nextSchedule = generateMasterSchedule(ligaTeams, uclTeams);
-        setSchedule(nextSchedule);
-
         const parts = currentSeasonYear.split('/');
-        const y1 = parseInt(parts[0] || '2025', 10);
-        const y2 = parseInt(parts[1] || '26', 10);
-        setCurrentSeasonYear(`${y1 + 1}/${y2 + 1}`);
+        const newSeasonYear = `${parseInt(parts[0] || '2025', 10) + 1}/${parseInt(parts[1] || '26', 10) + 1}`;
+        setCurrentSeasonYear(newSeasonYear);
 
-        setCurrentWeek(1);
-        setSeasonSummary(null);
+        const nextSchedule = generateMasterSchedule(ligaTeams, uclTeams, newSeasonYear);
+        setSchedule(nextSchedule);
+        setCurrentWeek(1); setSeasonSummary(null);
 
         let newUserTeamId = userTeamId;
-        if (!stayWithTeam || !userTeamId) {
-            newUserTeamId = null;
-            setUserTeamId(null);
-            setSimState('select_team');
-        } else {
-            setSimState('ready');
-        }
+        if (!stayWithTeam || !userTeamId) { newUserTeamId = null; setUserTeamId(null); setSimState('select_team'); } 
+        else { setSimState('ready'); }
 
-        if (activeProfile && newUserTeamId) {
-            await saveGame(activeProfile.id, {
-                currentWeek: 1,
-                userTeamId: newUserTeamId,
-                schedule: nextSchedule,
-                teams: allTeams
-            });
-        }
+        if (activeProfile && newUserTeamId) { await saveGame(activeProfile.id, { currentWeek: 1, userTeamId: newUserTeamId, schedule: nextSchedule, teams: allTeams }); }
     };
 
     const resultGroups = useMemo(() => {
@@ -602,27 +402,12 @@ const App: React.FC = () => {
     useEffect(() => { setResultsIndex(resultGroups.length > 0 ? resultGroups.length - 1 : 0); }, [resultGroups.length, resultsComp]);
 
     const currentResultGroup = resultGroups[resultsIndex];
-
-    const userMatch = useMemo(() => {
-        if (!userTeamId) return undefined;
-        return schedule.find(m => m.week === currentWeek && !m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId));
-    }, [schedule, currentWeek, userTeamId]);
-
+    const userMatch = useMemo(() => { if (!userTeamId) return undefined; return schedule.find(m => m.week === currentWeek && !m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId)); }, [schedule, currentWeek, userTeamId]);
     const userHome = useMemo(() => userMatch ? teams.find(t => t.id === userMatch.homeTeamId) : undefined, [userMatch, teams]);
     const userAway = useMemo(() => userMatch ? teams.find(t => t.id === userMatch.awayTeamId) : undefined, [userMatch, teams]);
-
-    const isUCLWeek = useMemo(() => {
-        if (simState === 'match_recap' && lastSimulatedMatchId) {
-            const lastMatch = schedule.find(m => m.id === lastSimulatedMatchId);
-            if (lastMatch) return lastMatch.competition === 'Champions League';
-        }
-        if (userMatch) return userMatch.competition === 'Champions League';
-        return schedule.some(m => m.week === currentWeek && m.competition === 'Champions League');
-    }, [userMatch, schedule, currentWeek, simState, lastSimulatedMatchId]);
-
+    const isUCLWeek = useMemo(() => { if (simState === 'match_recap' && lastSimulatedMatchId) { const lastMatch = schedule.find(m => m.id === lastSimulatedMatchId); if (lastMatch) return lastMatch.competition === 'Champions League'; } if (userMatch) return userMatch.competition === 'Champions League'; return schedule.some(m => m.week === currentWeek && m.competition === 'Champions League'); }, [userMatch, schedule, currentWeek, simState, lastSimulatedMatchId]);
     const isSeasonFinished = simState === 'season_over';
     const isScheduleComplete = currentWeek > 55;
-
     const lastSimMatch = useMemo(() => lastSimulatedMatchId ? schedule.find(m => m.id === lastSimulatedMatchId) : undefined, [lastSimulatedMatchId, schedule]);
     const lastSimHome = useMemo(() => lastSimMatch ? teams.find(t => t.id === lastSimMatch.homeTeamId) : undefined, [lastSimMatch, teams]);
     const lastSimAway = useMemo(() => lastSimMatch ? teams.find(t => t.id === lastSimMatch.awayTeamId) : undefined, [lastSimMatch, teams]);
@@ -630,19 +415,14 @@ const App: React.FC = () => {
     if (!isAuthenticated) return <LoginScreen onLogin={handleLogin} />;
     if (!activeProfile) return <ProfileSelector onSelectProfile={handleSelectProfile} onLogout={handleLogout} />;
     if (!userTeamId) return <TeamSelector teams={teams.filter(t => t.id !== 'TBD')} onSelect={handleSelectTeam} />;
-    if (simState === 'squad_management') {
-        const myTeam = teams.find(t => t.id === userTeamId);
-        if (myTeam) return <SquadManagement team={myTeam} onUpdateTeam={handleUpdateTeam} onBack={() => setSimState('ready')} />;
-    }
-    if (simState === 'playing_match' && userMatch && userHome && userAway) {
-        return <MatchView homeTeam={userHome} awayTeam={userAway} userTeamId={userTeamId} onMatchComplete={handleMatchComplete} competition={userMatch.competition} stage={userMatch.stage} />;
-    }
+    if (simState === 'squad_management') { const myTeam = teams.find(t => t.id === userTeamId); if (myTeam) return <SquadManagement team={myTeam} onUpdateTeam={handleUpdateTeam} onBack={() => setSimState('ready')} />; }
+    if (simState === 'playing_match' && userMatch && userHome && userAway) { return <MatchView homeTeam={userHome} awayTeam={userAway} userTeamId={userTeamId} onMatchComplete={handleMatchComplete} competition={userMatch.competition} stage={userMatch.stage} />; }
 
     return (
         <div className={`min-h-screen text-slate-100 p-3 md:p-8 transition-colors duration-500 ${isUCLWeek ? 'bg-slate-950' : 'bg-slate-900'}`}>
             <ManagerProfile isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} history={activeProfile.history} managerName={activeProfile.name} onUpdateName={handleUpdateManagerName} />
             {userTeamId && teams.find(t => t.id === userTeamId) && <SeasonRecapModal isOpen={isRecapOpen} onClose={() => setIsRecapOpen(false)} summary={seasonSummary} team={teams.find(t => t.id === userTeamId)!} />}
-            <CalendarModal isOpen={isCalendarOpen} onClose={() => setIsCalendarOpen(false)} schedule={schedule} teams={teams} userTeamId={userTeamId} currentWeek={currentWeek} onSimulateToWeek={handleSimulateToWeek} />
+            <CalendarModal isOpen={isCalendarOpen} onClose={() => setIsCalendarOpen(false)} schedule={schedule} teams={teams} userTeamId={userTeamId} currentWeek={currentWeek} onSimulateToWeek={handleSimulateToWeek} currentSeasonYear={currentSeasonYear} />
 
             <header className={`flex flex-col md:flex-row justify-between items-center mb-6 md:mb-8 p-4 gap-4 rounded-xl border shadow-md transition-colors ${isUCLWeek ? 'bg-blue-950/50 border-blue-900' : 'bg-slate-800 border-slate-700'}`}>
                 <div className="flex items-center gap-4 w-full md:w-auto">
@@ -657,56 +437,24 @@ const App: React.FC = () => {
 
                     <button onClick={() => setSimState('squad_management')} className="flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors font-bold text-xs md:text-sm"><Shirt size={16} /><span className="hidden lg:inline">Squad</span></button>
 
-                    {/* FIX: Unified Account & Profile Dropdown */}
                     <div className="relative z-50">
-                        <button
-                            onClick={() => setShowAccountMenu(!showAccountMenu)}
-                            className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-colors text-slate-300 hover:text-white shadow-sm"
-                        >
-                            <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-inner border border-blue-400/50">
-                                {activeProfile.name.substring(0, 2).toUpperCase()}
-                            </div>
-                            <div className="text-left hidden sm:block max-w-[120px]">
-                                <div className="text-sm font-bold text-white truncate">{activeProfile.name}</div>
-                                <div className="text-[10px] text-slate-400 truncate -mt-0.5">{userAccount?.name || 'Account'}</div>
-                            </div>
+                        <button onClick={() => setShowAccountMenu(!showAccountMenu)} className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-colors text-slate-300 hover:text-white shadow-sm">
+                            <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-inner border border-blue-400/50">{activeProfile.name.substring(0, 2).toUpperCase()}</div>
+                            <div className="text-left hidden sm:block max-w-[120px]"><div className="text-sm font-bold text-white truncate">{activeProfile.name}</div><div className="text-[10px] text-slate-400 truncate -mt-0.5">{userAccount?.name || 'Account'}</div></div>
                             <ChevronDown size={16} className={`text-slate-400 transition-transform ${showAccountMenu ? 'rotate-180' : ''}`} />
                         </button>
-
                         {showAccountMenu && (
                             <div className="absolute right-0 mt-2 w-56 bg-slate-800 rounded-xl shadow-2xl border border-slate-700 overflow-hidden animate-in fade-in slide-in-from-top-2">
-                                <div className="p-4 border-b border-slate-700 bg-slate-900/50">
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Manager Profile</p>
-                                    <p className="text-sm text-white font-bold truncate mt-1">{activeProfile.name}</p>
-                                    <div className="h-px bg-slate-800 my-2"></div>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Linked Account</p>
-                                    <p className="text-xs text-slate-500 truncate mt-1">{userAccount?.email || 'Loading...'}</p>
-                                </div>
-                                <button
-                                    onClick={() => { setShowAccountMenu(false); setIsProfileOpen(true); }}
-                                    className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white flex items-center gap-2 transition-colors"
-                                >
-                                    <Trophy size={16} /> Career History
-                                </button>
-                                <button
-                                    onClick={() => { setShowAccountMenu(false); handleExitProfile(); }}
-                                    className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white flex items-center gap-2 transition-colors"
-                                >
-                                    <Users size={16} /> Switch Manager Profile
-                                </button>
-                                <button
-                                    onClick={handleLogout}
-                                    className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-900/20 flex items-center gap-2 transition-colors border-t border-slate-700"
-                                >
-                                    <LogOut size={16} /> Sign Out Completely
-                                </button>
+                                <div className="p-4 border-b border-slate-700 bg-slate-900/50"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Manager Profile</p><p className="text-sm text-white font-bold truncate mt-1">{activeProfile.name}</p><div className="h-px bg-slate-800 my-2"></div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Linked Account</p><p className="text-xs text-slate-500 truncate mt-1">{userAccount?.email || 'Loading...'}</p></div>
+                                <button onClick={() => { setShowAccountMenu(false); setIsProfileOpen(true); }} className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white flex items-center gap-2 transition-colors"><Trophy size={16} /> Career History</button>
+                                <button onClick={() => { setShowAccountMenu(false); handleExitProfile(); }} className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white flex items-center gap-2 transition-colors"><Users size={16} /> Switch Manager Profile</button>
+                                <button onClick={handleLogout} className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-900/20 flex items-center gap-2 transition-colors border-t border-slate-700"><LogOut size={16} /> Sign Out Completely</button>
                             </div>
                         )}
                     </div>
                 </div>
             </header>
 
-            {/* Main Content Layout */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8 relative z-10">
                 <div className="lg:col-span-2 flex flex-col order-2 lg:order-1">
                     <LeagueTable teams={teams} userTeamId={userTeamId || ''} activeTab={activeTableTab} onTabChange={setActiveTableTab} schedule={schedule} currentWeek={currentWeek} />

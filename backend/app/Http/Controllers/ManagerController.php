@@ -10,9 +10,11 @@ class ManagerController extends Controller
     // GET /api/managers
     public function index(Request $request)
     {
-        // Only return managers belonging to the logged-in account
+        // FIX: Eager load the 'histories' relationship so achievements are saved and sent to the frontend
         return response()->json([
-            'data' => $request->user()->managers
+            'data' => $request->user()->managers()->with(['histories' => function($query) {
+                $query->orderBy('created_at', 'desc');
+            }])->get()
         ]);
     }
 
@@ -23,8 +25,10 @@ class ManagerController extends Controller
             'name' => 'required|string|max:255',
         ]);
 
-        // Attach the new manager directly to the authenticated user
         $manager = $request->user()->managers()->create($validated);
+
+        // Load empty histories for immediate consistency
+        $manager->load('histories');
 
         return response()->json([
             'data' => $manager
@@ -44,12 +48,11 @@ class ManagerController extends Controller
     public function update(Request $request, $id)
     {
         $manager = Manager::findOrFail($id);
-
         $validated = $request->validate([
             'name' => 'required|string|max:255',
         ]);
-
         $manager->update($validated);
+        $manager->load('histories');
 
         return response()->json([
             'data' => $manager
@@ -57,7 +60,6 @@ class ManagerController extends Controller
     }
 
     // POST /api/managers/{id}/history
-    // --- THIS IS THE FIX ---
     public function addHistory(Request $request, $id)
     {
         $manager = Manager::findOrFail($id);
@@ -71,7 +73,6 @@ class ManagerController extends Controller
             'wonTrophy' => 'required|boolean',
         ]);
 
-        // FIX: Changed from history() to histories()
         $history = $manager->histories()->create($validated);
 
         return response()->json([
