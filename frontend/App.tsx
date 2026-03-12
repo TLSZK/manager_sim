@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import confetti from 'canvas-confetti';
-import { generateMasterSchedule, generateRoster, INITIAL_STATS, INITIAL_UCL_STATS, SIMULATION_SCHEDULE, LIGA_LOGO_URL, UCL_LOGO_URL } from './constants';
+import { generateMasterSchedule, INITIAL_STATS, INITIAL_UCL_STATS, SIMULATION_SCHEDULE, LIGA_LOGO_URL, UCL_LOGO_URL } from './constants';
 import { Team, Match, SimulationState, SeasonSummary, Competition, ManagerProfile as ManagerProfileType } from './types';
 import TeamSelector from './components/TeamSelector';
 import LeagueTable from './components/LeagueTable';
@@ -73,40 +73,28 @@ const App: React.FC = () => {
             const savedGame = await fetchSavedGame(activeProfile.id);
 
             if (savedGame && savedGame.userTeamId) {
-                // FIX: Extract the specific playing year of this save so the calendar matches perfectly
                 if (savedGame.schedule && savedGame.schedule.length > 0) {
                     const firstDate = new Date(savedGame.schedule[0].date);
                     const startYear = firstDate.getFullYear();
                     setCurrentSeasonYear(`${startYear}/${(startYear + 1).toString().slice(2)}`);
                 }
-
-                setTeams(savedGame.teams);
-                setSchedule(savedGame.schedule);
-                setCurrentWeek(savedGame.currentWeek);
-                setUserTeamId(savedGame.userTeamId);
-                setSimState('ready');
+                setTeams(savedGame.teams); setSchedule(savedGame.schedule); setCurrentWeek(savedGame.currentWeek);
+                setUserTeamId(savedGame.userTeamId); setSimState('ready');
                 return;
             }
 
-            const fetchedTeams = await fetchTeams();
-            const hydratedTeams = fetchedTeams.map(t => {
-                const tier = t.tier || 1;
-                return { ...t, roster: (t.roster && t.roster.length > 0) ? t.roster : generateRoster(t.id, t.strength), formation: '4-3-3' as const, tier: tier, isLaLiga: tier === 1, stats: { ...INITIAL_STATS, form: [] }, uclStats: t.isUCL ? { ...INITIAL_UCL_STATS } : undefined };
-            });
+            try {
+                const fetchedTeams = await fetchTeams();
+                const allTeams = [...fetchedTeams.map(t => ({ ...t, isLaLiga: t.tier === 1 })), TBD_TEAM];
+                setTeams(allTeams);
 
-            const allTeams = [...hydratedTeams, TBD_TEAM];
-            setTeams(allTeams);
-            const ligaTeams = allTeams.filter(t => t.tier === 1 && t.id !== 'TBD');
-            const uclTeams = allTeams.filter(t => t.isUCL && t.id !== 'TBD');
+                const ligaTeams = allTeams.filter(t => t.tier === 1 && t.id !== 'TBD');
+                const uclTeams = allTeams.filter(t => t.isUCL && t.id !== 'TBD');
 
-            // FIX: Pass the dynamic year string down to the generator
-            const masterSchedule = generateMasterSchedule(ligaTeams, uclTeams, "2025/26");
-
-            setSchedule(masterSchedule);
-            setSimState('select_team');
-            setCurrentSeasonYear("2025/26");
-            setCurrentWeek(1);
-            setUserTeamId(null);
+                const masterSchedule = generateMasterSchedule(ligaTeams, uclTeams, "2025/26");
+                setSchedule(masterSchedule); setSimState('select_team'); setCurrentSeasonYear("2025/26");
+                setCurrentWeek(1); setUserTeamId(null);
+            } catch (err) { alert("Error connecting to database. Please check your connection."); }
         };
         initGame();
     }, [activeProfile?.id]);
@@ -124,12 +112,12 @@ const App: React.FC = () => {
         if (match.stage !== 'Final') homeStr += 5;
         const diff = homeStr - awayStr;
         let homeProb = 0.38 + (diff * 0.015), drawProb = 0.26 - (Math.abs(diff) * 0.005);
-        if (match.stage !== 'League Phase' && match.stage !== 'Regular Season' && match.stage !== 'Playoffs' && match.stage !== 'Final') drawProb *= 0.8;
+        if (!['League Phase', 'Regular Season', 'Playoffs', 'Final'].includes(match.stage || '')) drawProb *= 0.8;
         homeProb = Math.max(0.1, Math.min(0.85, homeProb)); drawProb = Math.max(0.1, drawProb);
         const rand = Math.random();
         let homeGoals = 0, awayGoals = 0;
-        if (rand < homeProb) { homeGoals = Math.floor(Math.random() * 4) + 1; awayGoals = Math.floor(Math.random() * homeGoals); } 
-        else if (rand < homeProb + drawProb) { homeGoals = Math.floor(Math.random() * 4); awayGoals = homeGoals; } 
+        if (rand < homeProb) { homeGoals = Math.floor(Math.random() * 4) + 1; awayGoals = Math.floor(Math.random() * homeGoals); }
+        else if (rand < homeProb + drawProb) { homeGoals = Math.floor(Math.random() * 4); awayGoals = homeGoals; }
         else { awayGoals = Math.floor(Math.random() * 4) + 1; homeGoals = Math.floor(Math.random() * awayGoals); }
         return { ...match, homeScore: homeGoals, awayScore: awayGoals, played: true };
     };
@@ -144,7 +132,7 @@ const App: React.FC = () => {
     };
 
     const handleSimulateToWeek = (targetWeek: number) => { setTargetSimWeek(targetWeek); setIsSimulatingFast(true); setIsCalendarOpen(false); };
-    
+
     const getMatchDate = (week: number) => {
         const startYear = parseInt(currentSeasonYear.split('/')[0], 10);
         const entry = SIMULATION_SCHEDULE.find(s => s.week === week);
@@ -165,7 +153,8 @@ const App: React.FC = () => {
         if (isPhaseComplete('League Phase') && !hasNextStageGenerated('Playoffs')) {
             const uclTeams = teamsState.filter(t => t.isUCL && t.id !== 'TBD').sort((a, b) => { if (b.uclStats!.points !== a.uclStats!.points) return b.uclStats!.points - a.uclStats!.points; if (b.uclStats!.gd !== a.uclStats!.gd) return b.uclStats!.gd - a.uclStats!.gd; return b.uclStats!.gf - a.uclStats!.gf; });
             const topSeeds = uclTeams.slice(0, 8);
-            const playoffsMatches: Match[] = [];
+            const playoffsMatches: Match[] = [], r16Matches: Match[] = [], qfMatches: Match[] = [], sfMatches: Match[] = [];
+
             for (let i = 0; i < 8; i++) {
                 const seedHigh = uclTeams[8 + i], seedLow = uclTeams[23 - i];
                 if (seedHigh && seedLow) {
@@ -173,83 +162,67 @@ const App: React.FC = () => {
                     playoffsMatches.push({ id: `UCL-PO-L2-${i}`, week: 32, homeTeamId: seedHigh.id, awayTeamId: seedLow.id, date: getMatchDate(32), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Playoffs', isLeg2: true });
                 }
             }
-            const shuffledSeeds = [...topSeeds].sort(() => Math.random() - 0.5);
-            const r16Matches: Match[] = [];
-            shuffledSeeds.forEach((seed, idx) => {
-                const possibleOpponent1 = uclTeams[8 + idx], possibleOpponent2 = uclTeams[23 - idx];
-                const placeholderText = `Winner: ${possibleOpponent1?.shortName} / ${possibleOpponent2?.shortName}`;
+            [...topSeeds].sort(() => Math.random() - 0.5).forEach((seed, idx) => {
+                const placeholderText = `Winner: ${uclTeams[8 + idx]?.shortName} / ${uclTeams[23 - idx]?.shortName}`;
                 r16Matches.push({ id: `UCL-R16-L1-${idx}`, week: 35, homeTeamId: 'TBD', awayTeamId: seed.id, date: getMatchDate(35), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Round of 16', isLeg2: false, placeholder: placeholderText });
                 r16Matches.push({ id: `UCL-R16-L2-${idx}`, week: 37, homeTeamId: seed.id, awayTeamId: 'TBD', date: getMatchDate(37), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Round of 16', isLeg2: true, placeholder: placeholderText });
             });
-            const qfMatches: Match[] = [];
             for (let i = 0; i < 4; i++) { qfMatches.push({ id: `UCL-QF-L1-${i}`, week: 41, homeTeamId: 'TBD', awayTeamId: 'TBD', date: getMatchDate(41), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Quarter-finals', isLeg2: false }); qfMatches.push({ id: `UCL-QF-L2-${i}`, week: 43, homeTeamId: 'TBD', awayTeamId: 'TBD', date: getMatchDate(43), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Quarter-finals', isLeg2: true }); }
-            const sfMatches: Match[] = [];
             for (let i = 0; i < 2; i++) { sfMatches.push({ id: `UCL-SF-L1-${i}`, week: 47, homeTeamId: 'TBD', awayTeamId: 'TBD', date: getMatchDate(47), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Semi-finals', isLeg2: false }); sfMatches.push({ id: `UCL-SF-L2-${i}`, week: 49, homeTeamId: 'TBD', awayTeamId: 'TBD', date: getMatchDate(49), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Semi-finals', isLeg2: true }); }
-            const finalMatch: Match = { id: `UCL-FINAL`, week: 55, homeTeamId: 'TBD', awayTeamId: 'TBD', date: getMatchDate(55), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Final', isLeg2: false };
-            updatedSchedule = [...updatedSchedule, ...playoffsMatches, ...r16Matches, ...qfMatches, ...sfMatches, finalMatch];
+
+            updatedSchedule.push(...playoffsMatches, ...r16Matches, ...qfMatches, ...sfMatches, { id: `UCL-FINAL`, week: 55, homeTeamId: 'TBD', awayTeamId: 'TBD', date: getMatchDate(55), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Final', isLeg2: false });
         }
 
         const processStageWinners = (currentStage: string) => {
-            if (isPhaseComplete(currentStage)) {
-                const stageMatches = updatedSchedule.filter(m => m.stage === currentStage);
-                const winners: string[] = [];
-                const pairs: Record<string, Match[]> = {};
-                stageMatches.forEach(m => { const parts = m.id.split('-'); const idx = parts[parts.length - 1]; if (idx) { if (!pairs[idx]) pairs[idx] = []; pairs[idx].push(m); } });
-                const sortedKeys = Object.keys(pairs).sort((a, b) => parseInt(a) - parseInt(b));
-                sortedKeys.forEach(key => {
-                    const pair = pairs[key];
-                    if (currentStage === 'Final') {
-                        const m = pair[0];
-                        if (m.homeScore === m.awayScore && m.homePenalties === undefined) { const pens = getPenaltyResult(); const mIdx = updatedSchedule.findIndex(match => match.id === m.id); if (mIdx !== -1) updatedSchedule[mIdx] = { ...updatedSchedule[mIdx], homePenalties: pens.home, awayPenalties: pens.away }; }
-                        return;
+            if (!isPhaseComplete(currentStage)) return null;
+            const stageMatches = updatedSchedule.filter(m => m.stage === currentStage);
+            const winners: string[] = [];
+            const pairs: Record<string, Match[]> = {};
+            stageMatches.forEach(m => { const idx = m.id.split('-').pop(); if (idx) { pairs[idx] = pairs[idx] || []; pairs[idx].push(m); } });
+
+            Object.keys(pairs).sort((a, b) => parseInt(a) - parseInt(b)).forEach(key => {
+                if (currentStage === 'Final') {
+                    const m = pairs[key][0];
+                    if (m.homeScore === m.awayScore && m.homePenalties === undefined) { const pens = getPenaltyResult(); const idx = updatedSchedule.findIndex(match => match.id === m.id); updatedSchedule[idx] = { ...updatedSchedule[idx], homePenalties: pens.home, awayPenalties: pens.away }; }
+                    return;
+                }
+                const l1 = pairs[key].find(m => !m.isLeg2), l2 = pairs[key].find(m => m.isLeg2);
+                if (l1 && l2 && l1.played && l2.played) {
+                    const aggHome = l2.homeScore! + l1.awayScore!, aggAway = l2.awayScore! + l1.homeScore!;
+                    let winnerId = aggHome > aggAway ? l2.homeTeamId : l2.awayTeamId;
+                    if (aggHome === aggAway) {
+                        let hp = l2.homePenalties, ap = l2.awayPenalties;
+                        if (hp === undefined || ap === undefined) { const pens = getPenaltyResult(); hp = pens.home; ap = pens.away; const idx = updatedSchedule.findIndex(match => match.id === l2.id); updatedSchedule[idx] = { ...updatedSchedule[idx], homePenalties: hp, awayPenalties: ap }; }
+                        winnerId = hp! > ap! ? l2.homeTeamId : l2.awayTeamId;
                     }
-                    const l1 = pair.find(m => !m.isLeg2), l2 = pair.find(m => m.isLeg2);
-                    if (l1 && l2 && l1.played && l2.played) {
-                        const aggHome = l2.homeScore! + l1.awayScore!, aggAway = l2.awayScore! + l1.homeScore!;
-                        let winnerId = aggHome > aggAway ? l2.homeTeamId : l2.awayTeamId;
-                        if (aggHome === aggAway) {
-                            let hp = l2.homePenalties, ap = l2.awayPenalties;
-                            if (hp === undefined || ap === undefined) { const pens = getPenaltyResult(); hp = pens.home; ap = pens.away; const l2Idx = updatedSchedule.findIndex(match => match.id === l2!.id); if (l2Idx !== -1) { updatedSchedule[l2Idx] = { ...updatedSchedule[l2Idx], homePenalties: hp, awayPenalties: ap }; } }
-                            winnerId = hp! > ap! ? l2.homeTeamId : l2.awayTeamId;
-                        }
-                        winners.push(winnerId);
-                    }
-                });
-                return winners;
-            }
-            return null;
+                    winners.push(winnerId);
+                }
+            });
+            return winners;
         };
 
-        if (isPhaseComplete('Playoffs') && updatedSchedule.some(m => m.stage === 'Round of 16' && (m.homeTeamId === 'TBD' || m.awayTeamId === 'TBD'))) {
-            const winners = processStageWinners('Playoffs');
-            if (winners && winners.length > 0) {
-                updatedSchedule = updatedSchedule.map(m => {
-                    if (m.stage === 'Round of 16') { const idx = parseInt(m.id.split('-').pop() || ''); const winnerId = winners[idx]; if (winnerId) return !m.isLeg2 ? { ...m, homeTeamId: winnerId, placeholder: undefined } : { ...m, awayTeamId: winnerId, placeholder: undefined }; }
-                    return m;
-                });
+        const mapWinners = (stageComp: string, targetStage: string, pairFactor: number) => {
+            if (isPhaseComplete(stageComp) && updatedSchedule.some(m => m.stage === targetStage && (m.homeTeamId === 'TBD' || m.awayTeamId === 'TBD'))) {
+                const winners = processStageWinners(stageComp);
+                if (winners) {
+                    updatedSchedule = updatedSchedule.map(m => {
+                        if (m.stage === targetStage) {
+                            const idx = parseInt(m.id.split('-').pop() || '');
+                            if (pairFactor === 0) { const winnerId = winners[idx]; if (winnerId) return !m.isLeg2 ? { ...m, homeTeamId: winnerId, placeholder: undefined } : { ...m, awayTeamId: winnerId, placeholder: undefined }; }
+                            else { const t1 = winners[idx * 2], t2 = winners[idx * 2 + 1]; if (t1 && t2) return { ...m, homeTeamId: m.isLeg2 ? t2 : t1, awayTeamId: m.isLeg2 ? t1 : t2 }; }
+                        }
+                        return m;
+                    });
+                }
             }
-        }
-        if (isPhaseComplete('Round of 16') && updatedSchedule.some(m => m.stage === 'Quarter-finals' && m.homeTeamId === 'TBD')) {
-            const winners = processStageWinners('Round of 16');
-            if (winners && winners.length === 8) {
-                updatedSchedule = updatedSchedule.map(m => {
-                    if (m.stage === 'Quarter-finals') { const idx = parseInt(m.id.split('-').pop() || ''); const t1 = winners[idx * 2], t2 = winners[idx * 2 + 1]; if (t1 && t2) return { ...m, homeTeamId: m.isLeg2 ? t2 : t1, awayTeamId: m.isLeg2 ? t1 : t2 }; }
-                    return m;
-                });
-            }
-        }
-        if (isPhaseComplete('Quarter-finals') && updatedSchedule.some(m => m.stage === 'Semi-finals' && m.homeTeamId === 'TBD')) {
-            const winners = processStageWinners('Quarter-finals');
-            if (winners && winners.length === 4) {
-                updatedSchedule = updatedSchedule.map(m => {
-                    if (m.stage === 'Semi-finals') { const idx = parseInt(m.id.split('-').pop() || ''); const t1 = winners[idx * 2], t2 = winners[idx * 2 + 1]; if (t1 && t2) return { ...m, homeTeamId: m.isLeg2 ? t2 : t1, awayTeamId: m.isLeg2 ? t1 : t2 }; }
-                    return m;
-                });
-            }
-        }
+        };
+
+        mapWinners('Playoffs', 'Round of 16', 0); mapWinners('Round of 16', 'Quarter-finals', 1);
+        mapWinners('Quarter-finals', 'Semi-finals', 1);
+
         if (isPhaseComplete('Semi-finals') && updatedSchedule.some(m => m.stage === 'Final' && m.homeTeamId === 'TBD')) {
             const winners = processStageWinners('Semi-finals');
-            if (winners && winners.length === 2) { updatedSchedule = updatedSchedule.map(m => m.stage === 'Final' ? { ...m, homeTeamId: winners[0], awayTeamId: winners[1] } : m); }
+            if (winners && winners.length === 2) updatedSchedule = updatedSchedule.map(m => m.stage === 'Final' ? { ...m, homeTeamId: winners[0], awayTeamId: winners[1] } : m);
         }
         if (isPhaseComplete('Final')) processStageWinners('Final');
         return updatedSchedule;
@@ -290,8 +263,7 @@ const App: React.FC = () => {
                     }
                     tempTeams[homeIdx] = home; tempTeams[awayIdx] = away;
                 });
-                nextTeams = tempTeams;
-                nextSchedule = resolveUCLKnockouts(nextSchedule, nextTeams);
+                nextTeams = tempTeams; nextSchedule = resolveUCLKnockouts(nextSchedule, nextTeams);
             }
             const nextW = procWeek + 1;
             if (nextW > 55) { procWeek = nextW; break; }
@@ -299,14 +271,12 @@ const App: React.FC = () => {
             if (matchesNext.length === 0 || matchesNext.some(m => m.homeTeamId === userTeamId || m.awayTeamId === userTeamId)) { procWeek = nextW; break; }
             procWeek = nextW;
         }
-        setTeams(nextTeams); setSchedule(nextSchedule); setCurrentWeek(procWeek);
-        setSimState(targetState || 'ready');
+        setTeams(nextTeams); setSchedule(nextSchedule); setCurrentWeek(procWeek); setSimState(targetState || 'ready');
         performAutoSave(nextTeams, nextSchedule, procWeek);
     }, [currentWeek, schedule, teams, userTeamId]);
 
     const performAutoSave = async (newTeams: Team[], newSchedule: Match[], newWeek: number) => {
-        if (!activeProfile || !userTeamId) return;
-        await saveGame(activeProfile.id, { currentWeek: newWeek, userTeamId: userTeamId, schedule: newSchedule, teams: newTeams });
+        if (activeProfile && userTeamId) saveGame(activeProfile.id, { currentWeek: newWeek, userTeamId: userTeamId, schedule: newSchedule, teams: newTeams });
     };
 
     const handleMatchComplete = (homeScore: number, awayScore: number) => {
@@ -343,11 +313,7 @@ const App: React.FC = () => {
                 const isWinner = (final.homeTeamId === userTeamId && homeWin) || (final.awayTeamId === userTeamId && !homeWin);
                 if (isWinner) { wonUCL = true; uclResultString = 'Winner'; }
                 else if (isParticipant) uclResultString = 'Runner-up';
-                else {
-                    const uclMatches = schedule.filter(m => m.competition === 'Champions League' && m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId));
-                    const lastMatch = uclMatches[uclMatches.length - 1];
-                    if (lastMatch) uclResultString = lastMatch.stage;
-                }
+                else { const uclMatches = schedule.filter(m => m.competition === 'Champions League' && m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId)); const lastMatch = uclMatches[uclMatches.length - 1]; if (lastMatch) uclResultString = lastMatch.stage || ''; }
             }
             if (userPos === 1 || wonUCL) confetti({ particleCount: 200, spread: 70, origin: { y: 0.6 } });
             const newRecord = await saveSeasonResult(activeProfile.id, { seasonYear: currentSeasonYear, teamId: userTeam.id, teamName: userTeam.name, position: userPos, points: userTeam.stats.points, wonTrophy: userPos === 1 || wonUCL });
@@ -355,10 +321,7 @@ const App: React.FC = () => {
             const activeSeasonId = seasonId;
             setSeasonSummary({ position: userPos, points: userTeam.stats.points, wonLeague: userPos === 1, uclResult: uclResultString, message: "Waiting for board evaluation..." });
             setIsRecapOpen(true);
-            getBoardFeedback(userTeam, userPos, sorted.length, uclResultString).then(feedback => {
-                if (seasonIdRef.current !== activeSeasonId) return;
-                setSeasonSummary(prev => prev ? { ...prev, message: feedback } : null);
-            });
+            getBoardFeedback(userTeam, userPos, sorted.length, uclResultString).then(feedback => { if (seasonIdRef.current === activeSeasonId) setSeasonSummary(prev => prev ? { ...prev, message: feedback } : null); });
         } catch (error) { alert("Failed to save season data."); setSimState('ready'); }
     };
 
@@ -367,10 +330,9 @@ const App: React.FC = () => {
     const handleSeasonTransition = async (stayWithTeam: boolean) => {
         setIsSimulatingFast(false); setIsRecapOpen(false); setSeasonId(crypto.randomUUID());
         const fetchedTeams = await fetchTeams();
-        const hydratedTeams = fetchedTeams.map(t => { const tier = t.tier || 1; return { ...t, roster: generateRoster(t.id, t.strength), formation: '4-3-3' as const, tier: tier, isLaLiga: tier === 1, stats: { ...INITIAL_STATS, form: [] }, uclStats: t.isUCL ? { ...INITIAL_UCL_STATS } : undefined }; });
-
-        const allTeams = [...hydratedTeams, TBD_TEAM];
+        const allTeams = [...fetchedTeams.map(t => ({ ...t, isLaLiga: t.tier === 1 })), TBD_TEAM];
         setTeams(allTeams);
+
         const ligaTeams = allTeams.filter(t => t.tier === 1 && t.id !== 'TBD');
         const uclTeams = allTeams.filter(t => t.isUCL && t.id !== 'TBD');
 
@@ -379,14 +341,11 @@ const App: React.FC = () => {
         setCurrentSeasonYear(newSeasonYear);
 
         const nextSchedule = generateMasterSchedule(ligaTeams, uclTeams, newSeasonYear);
-        setSchedule(nextSchedule);
-        setCurrentWeek(1); setSeasonSummary(null);
+        setSchedule(nextSchedule); setCurrentWeek(1); setSeasonSummary(null);
 
         let newUserTeamId = userTeamId;
-        if (!stayWithTeam || !userTeamId) { newUserTeamId = null; setUserTeamId(null); setSimState('select_team'); } 
-        else { setSimState('ready'); }
-
-        if (activeProfile && newUserTeamId) { await saveGame(activeProfile.id, { currentWeek: 1, userTeamId: newUserTeamId, schedule: nextSchedule, teams: allTeams }); }
+        if (!stayWithTeam || !userTeamId) { newUserTeamId = null; setUserTeamId(null); setSimState('select_team'); } else { setSimState('ready'); }
+        if (activeProfile && newUserTeamId) saveGame(activeProfile.id, { currentWeek: 1, userTeamId: newUserTeamId, schedule: nextSchedule, teams: allTeams });
     };
 
     const resultGroups = useMemo(() => {
