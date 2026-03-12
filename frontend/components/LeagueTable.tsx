@@ -99,12 +99,15 @@ const KnockoutBracket = ({ schedule, teams, userTeamId }: { schedule: Match[], t
 const LeagueTable: React.FC<LeagueTableProps> = ({ teams, userTeamId, activeTab, onTabChange, schedule, currentWeek }) => {
     const [uclView, setUclView] = useState<'League' | 'Knockout'>('League');
 
+    // Determine if any Knockout matches have been generated yet
+    const hasKnockoutMatches = schedule.some(m => m.competition === 'Champions League' && m.stage !== 'League Phase');
+
     useEffect(() => {
         if (activeTab === 'Champions League') {
-            if (schedule.some(m => m.competition === 'Champions League' && m.stage !== 'League Phase' && m.week <= currentWeek)) setUclView('Knockout');
+            if (hasKnockoutMatches) setUclView('Knockout');
             else setUclView('League');
         }
-    }, [schedule, activeTab, currentWeek]);
+    }, [activeTab, hasKnockoutMatches]);
 
     const displayTeams = activeTab === 'La Liga' ? teams.filter(t => t.tier === 1) : teams.filter(t => t.uclStats !== undefined);
     const sortedTeams = [...displayTeams].sort((a, b) => {
@@ -124,7 +127,8 @@ const LeagueTable: React.FC<LeagueTableProps> = ({ teams, userTeamId, activeTab,
                 <button onClick={() => onTabChange('Champions League')} className={`flex-1 py-4 font-bold flex items-center justify-center gap-2 transition-colors ${activeTab === 'Champions League' ? 'bg-slate-900/80 text-blue-400 border-b-2 border-blue-400' : 'text-slate-400 hover:text-white'}`}>{UCL_LOGO_URL ? <div className="bg-slate-200 rounded-full p-0.5 w-6 h-6 flex items-center justify-center shrink-0"><img src={UCL_LOGO_URL} alt="UCL" className="w-5 h-5 object-contain" /></div> : <Globe size={16} />} Champions League</button>
             </div>
 
-            {activeTab === 'Champions League' && (
+            {/* ONLY render the toggle tabs once the Knockout stage actually exists */}
+            {activeTab === 'Champions League' && hasKnockoutMatches && (
                 <div className="flex bg-slate-800 border-b border-slate-700 shrink-0">
                     <button onClick={() => setUclView('League')} className={`flex-1 py-2 text-xs font-bold uppercase flex items-center justify-center gap-2 ${uclView === 'League' ? 'bg-slate-700/50 text-white' : 'text-slate-500 hover:bg-slate-700/30'}`}><List size={14} /> Table</button>
                     <button onClick={() => setUclView('Knockout')} className={`flex-1 py-2 text-xs font-bold uppercase flex items-center justify-center gap-2 ${uclView === 'Knockout' ? 'bg-slate-700/50 text-white' : 'text-slate-500 hover:bg-slate-700/30'}`}><GitBranch size={14} /> Knockout</button>

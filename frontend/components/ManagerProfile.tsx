@@ -135,9 +135,7 @@ const ManagerProfile: React.FC<ManagerProfileProps> = ({ isOpen, onClose, histor
             )}
         </div>
 
-        <div className="p-4 border-t border-slate-700 bg-slate-900/30 text-center">
-           <p className="text-xs text-slate-500">Data stored locally (mocking Laravel DB response)</p>
-        </div>
+        <div className="p-4 border-t border-slate-700 bg-slate-900/30 text-center"></div>
 
       </div>
     </div>

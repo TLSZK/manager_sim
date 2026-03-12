@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ManagerProfile } from '../types';
 import { fetchProfiles, createProfile, deleteProfile, fetchCurrentUser, updateAccountName } from '../services/api';
-import { User, Plus, Trash2, Trophy, Calendar, LogOut, AlertTriangle, ChevronDown, Edit2, Check, X } from 'lucide-react';
+import { User, Plus, Trash2, Trophy, Calendar, LogOut, AlertTriangle, ChevronDown, Edit2, X } from 'lucide-react';
 import SetupModal from './SetupModal';
 
 interface ProfileSelectorProps {
@@ -15,12 +15,10 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onSelectProfile, onLo
   const [loading, setLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
 
-  // Dashboard State
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const [isEditingAccount, setIsEditingAccount] = useState(false);
   const [newAccountName, setNewAccountName] = useState('');
 
-  // Deletion State
   const [profileToDelete, setProfileToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -134,19 +132,20 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onSelectProfile, onLo
           <User className="text-blue-500 hidden md:block" /> Manager Profiles
         </h1>
 
-        {/* User Account Dashboard */}
+        {/* Account Profile Header Menu */}
         <div className="relative">
           <button
             onClick={() => setShowAccountMenu(!showAccountMenu)}
             className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-colors text-slate-300 hover:text-white shadow-sm"
           >
-            <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm shrink-0">
-              {userAccount?.name.substring(0, 1).toUpperCase() || <User size={16} />}
+            <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-inner border border-blue-400/50">
+              <User size={16} />
             </div>
             <div className="text-left hidden sm:block max-w-[120px]">
               <div className="text-sm font-bold text-white truncate">{userAccount?.name || 'Account'}</div>
+              <div className="text-[10px] text-slate-400 truncate -mt-0.5">User Account</div>
             </div>
-            <ChevronDown size={16} className="text-slate-400" />
+            <ChevronDown size={16} className={`text-slate-400 transition-transform ${showAccountMenu ? 'rotate-180' : ''}`} />
           </button>
 
           {showAccountMenu && (
@@ -166,7 +165,7 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onSelectProfile, onLo
                 onClick={onLogout}
                 className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-900/20 flex items-center gap-2 transition-colors border-t border-slate-700"
               >
-                <LogOut size={16} /> Sign Out
+                <LogOut size={16} /> Sign Out Completely
               </button>
             </div>
           )}
@@ -179,7 +178,6 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onSelectProfile, onLo
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-          {/* Create New Card */}
           <button
             onClick={() => setIsCreating(true)}
             className="group flex flex-col items-center justify-center p-8 bg-slate-800/50 border-2 border-dashed border-slate-700 rounded-2xl hover:border-blue-500 hover:bg-slate-800 transition-all min-h-[200px]"
@@ -190,7 +188,6 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onSelectProfile, onLo
             <span className="font-bold text-lg text-slate-300 group-hover:text-white">Create New Manager</span>
           </button>
 
-          {/* Profile Cards */}
           {profiles.map(profile => {
             const trophies = profile.history.filter(h => h.wonTrophy).length;
             const seasons = profile.history.length;

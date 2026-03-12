@@ -11,9 +11,9 @@ import CalendarModal from './components/CalendarModal';
 import SeasonRecapModal from './components/SeasonRecapModal';
 import LoginScreen from './components/LoginScreen';
 import ProfileSelector from './components/ProfileSelector';
-import { Play, FastForward, Trophy, Calendar, Pause, CheckCircle, ChevronLeft, ChevronRight, Shirt, Briefcase, Search, Globe, CalendarDays, ArrowRight, ChevronDown, LogOut, Users } from 'lucide-react';
+import { Play, FastForward, Trophy, Calendar, Pause, CheckCircle, ChevronLeft, ChevronRight, Shirt, Briefcase, Search, Globe, CalendarDays, ArrowRight, ChevronDown, Users, User } from 'lucide-react';
 import { getBoardFeedback } from './services/geminiService';
-import { fetchTeams, saveSeasonResult, updateProfileName, fetchSavedGame, saveGame, fetchCurrentUser } from './services/api';
+import { fetchTeams, saveSeasonResult, updateProfileName, fetchSavedGame, saveGame } from './services/api';
 
 const TBD_TEAM: Team = { id: 'TBD', name: 'TBD', shortName: 'TBD', tier: 0, strength: 0, primaryColor: '#334155', secondaryColor: '#94a3b8', roster: [], formation: '4-3-3', stats: { ...INITIAL_STATS, form: [] } };
 
@@ -21,7 +21,6 @@ const App: React.FC = () => {
     const [isAuthenticated, setIsAuthenticated] = useState<boolean>(!!localStorage.getItem('auth_token'));
     const [activeProfile, setActiveProfile] = useState<ManagerProfileType | null>(null);
     const [showAccountMenu, setShowAccountMenu] = useState(false);
-    const [userAccount, setUserAccount] = useState<{ name: string, email: string } | null>(null);
 
     const [teams, setTeams] = useState<Team[]>([]);
     const [schedule, setSchedule] = useState<Match[]>([]);
@@ -48,7 +47,6 @@ const App: React.FC = () => {
     const lastInitializedProfileId = useRef<string | null>(null);
 
     useEffect(() => { seasonIdRef.current = seasonId; }, [seasonId]);
-    useEffect(() => { if (isAuthenticated) fetchCurrentUser().then(data => setUserAccount(data)); }, [isAuthenticated]);
 
     useEffect(() => {
         if (userTeamId) {
@@ -100,9 +98,20 @@ const App: React.FC = () => {
     }, [activeProfile?.id]);
 
     const handleLogin = () => setIsAuthenticated(true);
+
+    // FIX: Awaited save execution before exiting back to manager selection
+    const handleExitProfile = async () => {
+        if (activeProfile && userTeamId) {
+            await saveGame(activeProfile.id, { currentWeek, userTeamId, schedule, teams });
+        }
+        setActiveProfile(null);
+        lastInitializedProfileId.current = null;
+        setTeams([]);
+        setSchedule([]);
+    };
+
     const handleLogout = () => { localStorage.removeItem('auth_token'); setIsAuthenticated(false); setActiveProfile(null); lastInitializedProfileId.current = null; setShowAccountMenu(false); setSimState('select_team'); setUserTeamId(null); setTeams([]); setSchedule([]); };
     const handleSelectProfile = (profile: ManagerProfileType) => setActiveProfile(profile);
-    const handleExitProfile = () => { setActiveProfile(null); lastInitializedProfileId.current = null; setTeams([]); setSchedule([]); };
     const handleUpdateManagerName = async (name: string) => { if (activeProfile) { await updateProfileName(activeProfile.id, name); setActiveProfile({ ...activeProfile, name }); } };
     const handleSelectTeam = (id: string) => { setUserTeamId(id); setSimState('ready'); setCurrentWeek(1); };
 
@@ -397,18 +406,26 @@ const App: React.FC = () => {
 
                     <button onClick={() => setSimState('squad_management')} className="flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors font-bold text-xs md:text-sm"><Shirt size={16} /><span className="hidden lg:inline">Squad</span></button>
 
+                    {/* MANAGER PROFILE DROPDOWN */}
                     <div className="relative z-50">
                         <button onClick={() => setShowAccountMenu(!showAccountMenu)} className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-colors text-slate-300 hover:text-white shadow-sm">
-                            <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-inner border border-blue-400/50">{activeProfile.name.substring(0, 2).toUpperCase()}</div>
-                            <div className="text-left hidden sm:block max-w-[120px]"><div className="text-sm font-bold text-white truncate">{activeProfile.name}</div><div className="text-[10px] text-slate-400 truncate -mt-0.5">{userAccount?.name || 'Account'}</div></div>
+                            <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-inner border border-blue-400/50">
+                                <User size={16} />
+                            </div>
+                            <div className="text-left hidden sm:block max-w-[120px]">
+                                <div className="text-sm font-bold text-white truncate">{activeProfile.name}</div>
+                                <div className="text-[10px] text-slate-400 truncate -mt-0.5">Manager Profile</div>
+                            </div>
                             <ChevronDown size={16} className={`text-slate-400 transition-transform ${showAccountMenu ? 'rotate-180' : ''}`} />
                         </button>
                         {showAccountMenu && (
                             <div className="absolute right-0 mt-2 w-56 bg-slate-800 rounded-xl shadow-2xl border border-slate-700 overflow-hidden animate-in fade-in slide-in-from-top-2">
-                                <div className="p-4 border-b border-slate-700 bg-slate-900/50"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Manager Profile</p><p className="text-sm text-white font-bold truncate mt-1">{activeProfile.name}</p><div className="h-px bg-slate-800 my-2"></div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Linked Account</p><p className="text-xs text-slate-500 truncate mt-1">{userAccount?.email || 'Loading...'}</p></div>
+                                <div className="p-4 border-b border-slate-700 bg-slate-900/50">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Manager</p>
+                                    <p className="text-sm text-white font-bold truncate mt-1">{activeProfile.name}</p>
+                                </div>
                                 <button onClick={() => { setShowAccountMenu(false); setIsProfileOpen(true); }} className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white flex items-center gap-2 transition-colors"><Trophy size={16} /> Career History</button>
-                                <button onClick={() => { setShowAccountMenu(false); handleExitProfile(); }} className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white flex items-center gap-2 transition-colors"><Users size={16} /> Switch Manager Profile</button>
-                                <button onClick={handleLogout} className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-900/20 flex items-center gap-2 transition-colors border-t border-slate-700"><LogOut size={16} /> Sign Out Completely</button>
+                                <button onClick={() => { setShowAccountMenu(false); handleExitProfile(); }} className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white flex items-center gap-2 transition-colors border-t border-slate-700"><Users size={16} /> Switch Manager</button>
                             </div>
                         )}
                     </div>
