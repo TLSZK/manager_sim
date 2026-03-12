@@ -11,13 +11,12 @@ return new class extends Migration
         // 2. MANAGERS
         Schema::create('managers', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            // Change foreignUuid to foreignId to match default Laravel user IDs
             $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
             $table->string('name');
             $table->timestamps();
         });
 
-        // 3. MANAGER HISTORIES
+        // 3. MANAGER HISTORIES (Updated with advanced stats)
         Schema::create('manager_histories', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->foreignUuid('manager_id')->constrained('managers')->onDelete('cascade');
@@ -27,7 +26,15 @@ return new class extends Migration
             $table->string('seasonYear');
             $table->integer('position');
             $table->integer('points');
-            $table->boolean('wonTrophy');
+
+            // Replaced 'wonTrophy' with the detailed career tracking stats
+            $table->boolean('wonLiga')->default(false);
+            $table->boolean('wonUcl')->default(false);
+            $table->integer('wins')->default(0);
+            $table->integer('draws')->default(0);
+            $table->integer('losses')->default(0);
+            $table->string('biggestWin')->default('N/A');
+            $table->string('biggestLoss')->default('N/A');
 
             $table->timestamps();
         });
@@ -64,7 +71,7 @@ return new class extends Migration
         // 6. SAVED GAMES
         Schema::create('saved_games', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->foreignUuid('manager_id')->constrained('managers')->onDelete('cascade'); // Fixed to foreignUuid
+            $table->foreignUuid('manager_id')->constrained('managers')->onDelete('cascade');
             $table->integer('currentWeek');
             $table->string('userTeamId')->nullable();
             $table->longText('schedule');
@@ -75,7 +82,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('accounts');
         Schema::dropIfExists('saved_games');
         Schema::dropIfExists('players');
         Schema::dropIfExists('teams');

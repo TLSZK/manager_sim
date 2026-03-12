@@ -12,7 +12,7 @@ class ManagerController extends Controller
     {
         // FIX: Eager load the 'histories' relationship so achievements are saved and sent to the frontend
         return response()->json([
-            'data' => $request->user()->managers()->with(['histories' => function($query) {
+            'data' => $request->user()->managers()->with(['histories' => function ($query) {
                 $query->orderBy('created_at', 'desc');
             }])->get()
         ]);
@@ -70,7 +70,13 @@ class ManagerController extends Controller
             'teamName' => 'required|string',
             'position' => 'required|integer',
             'points' => 'required|integer',
-            'wonTrophy' => 'required|boolean',
+            'wonLiga' => 'required|boolean',
+            'wonUcl' => 'required|boolean',
+            'wins' => 'required|integer',
+            'draws' => 'required|integer',
+            'losses' => 'required|integer',
+            'biggestWin' => 'required|string',
+            'biggestLoss' => 'required|string',
         ]);
 
         $history = $manager->histories()->create($validated);
