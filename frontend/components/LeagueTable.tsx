@@ -38,51 +38,72 @@ const KnockoutBracket = ({ schedule, teams, userTeamId }: { schedule: Match[], t
                                 const l2 = pair.find(m => m.isLeg2);
                                 if (!l1) return null;
 
-                                const homeTeam = teams.find(t => t.id === l1.homeTeamId);
-                                const awayTeam = teams.find(t => t.id === l1.awayTeamId);
+                                const teamA = teams.find(t => t.id === l1.homeTeamId);
+                                const teamB = teams.find(t => t.id === l1.awayTeamId);
 
-                                const isUserInvolved = homeTeam?.id === userTeamId || awayTeam?.id === userTeamId;
+                                const isUserInvolved = teamA?.id === userTeamId || teamB?.id === userTeamId;
+
+                                // Score mappings
+                                const aL1 = l1.played ? l1.homeScore : '-';
+                                const bL1 = l1.played ? l1.awayScore : '-';
+                                const aL2 = l2 ? (l2.played ? l2.awayScore : '-') : null;
+                                const bL2 = l2 ? (l2.played ? l2.homeScore : '-') : null;
+
+                                const aAgg = (l1.played && l2?.played) ? (l1.homeScore! + l2.awayScore!) : (l1.played && !l2 ? l1.homeScore : '-');
+                                const bAgg = (l1.played && l2?.played) ? (l1.awayScore! + l2.homeScore!) : (l1.played && !l2 ? l1.awayScore : '-');
+
+                                // Winner determination
+                                let winnerA = false, winnerB = false;
+                                if (l1.played && (!l2 || l2.played)) {
+                                    const finalA = aAgg !== '-' ? (aAgg as number) : 0;
+                                    const finalB = bAgg !== '-' ? (bAgg as number) : 0;
+
+                                    if (finalA > finalB) winnerA = true;
+                                    else if (finalB > finalA) winnerB = true;
+                                    else {
+                                        const penA = l2 ? l2.awayPenalties : l1.homePenalties;
+                                        const penB = l2 ? l2.homePenalties : l1.awayPenalties;
+                                        if (penA !== undefined && penB !== undefined) {
+                                            if (penA > penB) winnerA = true;
+                                            if (penB > penA) winnerB = true;
+                                        }
+                                    }
+                                }
 
                                 return (
-                                    <div key={idx} className={`bg-slate-800 rounded-lg p-3 border ${isUserInvolved ? 'border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.2)]' : 'border-slate-700'}`}>
-                                        <div className="flex flex-col gap-2">
-                                            {/* Top Team */}
+                                    <div key={idx} className={`bg-slate-800/80 rounded-xl p-3 border ${isUserInvolved ? 'border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.15)]' : 'border-slate-700/60'}`}>
+                                        <div className="flex flex-col space-y-2">
+                                            {/* Team A Row */}
                                             <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-2">
-                                                    {homeTeam?.logoUrl ? <img src={homeTeam.logoUrl} className="w-5 h-5 object-contain" /> : <div className="w-5 h-5 bg-slate-700 rounded-full"></div>}
-                                                    <span className={`text-sm font-bold ${homeTeam?.id === userTeamId ? 'text-white' : 'text-slate-300'}`}>{homeTeam?.name || (l1.placeholder || 'TBD')}</span>
+                                                <div className={`flex items-center gap-2.5 ${winnerA ? 'text-white font-bold' : (l1.played ? 'text-slate-400' : 'text-slate-300')}`}>
+                                                    {teamA?.logoUrl ? <img src={teamA.logoUrl} className="w-5 h-5 object-contain" /> : <div className="w-5 h-5 bg-slate-700 rounded-full"></div>}
+                                                    <span className="text-sm truncate max-w-[140px] sm:max-w-[160px]">{teamA?.name || l1.placeholder || 'TBD'}</span>
                                                 </div>
-                                                <div className="text-sm font-mono flex gap-1">
-                                                    {l1.played ? <span className="bg-slate-700 px-1 rounded">{l1.homeScore}</span> : <span className="text-slate-500">-</span>}
-                                                    {l2?.played ? <span className="bg-slate-700 px-1 rounded">{l2.awayScore}</span> : null}
+                                                <div className="flex items-center gap-3 font-mono text-sm">
+                                                    {l2 && <span className="w-4 text-center text-slate-500">{aL1}</span>}
+                                                    {l2 && <span className="w-4 text-center text-slate-500">{aL2}</span>}
+                                                    <span className={`w-6 text-center ${winnerA ? 'text-white font-bold' : (l1.played ? 'text-slate-400 font-medium' : 'text-slate-500')}`}>{aAgg}</span>
                                                 </div>
                                             </div>
-                                            {/* Bottom Team */}
+
+                                            {/* Team B Row */}
                                             <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-2">
-                                                    {awayTeam?.logoUrl ? <img src={awayTeam.logoUrl} className="w-5 h-5 object-contain" /> : <div className="w-5 h-5 bg-slate-700 rounded-full"></div>}
-                                                    <span className={`text-sm font-bold ${awayTeam?.id === userTeamId ? 'text-white' : 'text-slate-300'}`}>{awayTeam?.name || (l2?.placeholder || 'TBD')}</span>
+                                                <div className={`flex items-center gap-2.5 ${winnerB ? 'text-white font-bold' : (l1.played ? 'text-slate-400' : 'text-slate-300')}`}>
+                                                    {teamB?.logoUrl ? <img src={teamB.logoUrl} className="w-5 h-5 object-contain" /> : <div className="w-5 h-5 bg-slate-700 rounded-full"></div>}
+                                                    <span className="text-sm truncate max-w-[140px] sm:max-w-[160px]">{teamB?.name || l2?.placeholder || 'TBD'}</span>
                                                 </div>
-                                                <div className="text-sm font-mono flex gap-1">
-                                                    {l1.played ? <span className="bg-slate-700 px-1 rounded">{l1.awayScore}</span> : <span className="text-slate-500">-</span>}
-                                                    {l2?.played ? <span className="bg-slate-700 px-1 rounded">{l2.homeScore}</span> : null}
+                                                <div className="flex items-center gap-3 font-mono text-sm">
+                                                    {l2 && <span className="w-4 text-center text-slate-500">{bL1}</span>}
+                                                    {l2 && <span className="w-4 text-center text-slate-500">{bL2}</span>}
+                                                    <span className={`w-6 text-center ${winnerB ? 'text-white font-bold' : (l1.played ? 'text-slate-400 font-medium' : 'text-slate-500')}`}>{bAgg}</span>
                                                 </div>
                                             </div>
                                         </div>
-                                        {/* Aggregate or Penalty display */}
-                                        {l1.played && l2?.played && (
-                                            <div className="mt-2 text-center text-xs font-bold text-slate-400 bg-slate-900 rounded py-1">
-                                                Agg: {l2.homeScore! + l1.awayScore!} - {l2.awayScore! + l1.homeScore!}
-                                                {l2.homePenalties !== undefined && (
-                                                    <span className="text-yellow-500 ml-2">(Pens: {l2.awayPenalties} - {l2.homePenalties})</span>
-                                                )}
-                                            </div>
-                                        )}
-                                        {stageName === 'Final' && l1.played && !l2 && (
-                                            <div className="mt-2 text-center text-xs font-bold text-slate-400 bg-slate-900 rounded py-1">
-                                                {l1.homePenalties !== undefined && (
-                                                    <span className="text-yellow-500">(Pens: {l1.homePenalties} - {l1.awayPenalties})</span>
-                                                )}
+
+                                        {/* Penalties indicator */}
+                                        {((l2?.homePenalties !== undefined) || (l1.homePenalties !== undefined)) && (
+                                            <div className="mt-2 pt-2 border-t border-slate-700/50 text-[10px] text-slate-400 text-right uppercase tracking-wider font-bold">
+                                                Pens: {teamA?.shortName} {l2 ? l2.awayPenalties : l1.homePenalties} - {l2 ? l2.homePenalties : l1.awayPenalties} {teamB?.shortName}
                                             </div>
                                         )}
                                     </div>
@@ -99,7 +120,6 @@ const KnockoutBracket = ({ schedule, teams, userTeamId }: { schedule: Match[], t
 const LeagueTable: React.FC<LeagueTableProps> = ({ teams, userTeamId, activeTab, onTabChange, schedule, currentWeek }) => {
     const [uclView, setUclView] = useState<'League' | 'Knockout'>('League');
 
-    // Determine if any Knockout matches have been generated yet
     const hasKnockoutMatches = schedule.some(m => m.competition === 'Champions League' && m.stage !== 'League Phase');
 
     useEffect(() => {
@@ -127,7 +147,6 @@ const LeagueTable: React.FC<LeagueTableProps> = ({ teams, userTeamId, activeTab,
                 <button onClick={() => onTabChange('Champions League')} className={`flex-1 py-4 font-bold flex items-center justify-center gap-2 transition-colors ${activeTab === 'Champions League' ? 'bg-slate-900/80 text-blue-400 border-b-2 border-blue-400' : 'text-slate-400 hover:text-white'}`}>{UCL_LOGO_URL ? <div className="bg-slate-200 rounded-full p-0.5 w-6 h-6 flex items-center justify-center shrink-0"><img src={UCL_LOGO_URL} alt="UCL" className="w-5 h-5 object-contain" /></div> : <Globe size={16} />} Champions League</button>
             </div>
 
-            {/* ONLY render the toggle tabs once the Knockout stage actually exists */}
             {activeTab === 'Champions League' && hasKnockoutMatches && (
                 <div className="flex bg-slate-800 border-b border-slate-700 shrink-0">
                     <button onClick={() => setUclView('League')} className={`flex-1 py-2 text-xs font-bold uppercase flex items-center justify-center gap-2 ${uclView === 'League' ? 'bg-slate-700/50 text-white' : 'text-slate-500 hover:bg-slate-700/30'}`}><List size={14} /> Table</button>

@@ -88,12 +88,18 @@ export interface SeasonSummary {
 
 export interface PastSeason {
   id: string;
-  seasonYear: string; // e.g., "2024/25"
+  seasonYear: string;
   teamId: string;
   teamName: string;
   position: number;
   points: number;
-  wonTrophy: boolean;
+  wonLiga: boolean;
+  wonUcl: boolean;
+  wins: number;
+  draws: number;
+  losses: number;
+  biggestWin: string;
+  biggestLoss: string;
   timestamp: number;
 }
 

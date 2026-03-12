@@ -13,7 +13,7 @@ import LoginScreen from './components/LoginScreen';
 import ProfileSelector from './components/ProfileSelector';
 import { Play, FastForward, Trophy, Calendar, Pause, CheckCircle, ChevronLeft, ChevronRight, Shirt, Briefcase, Search, Globe, CalendarDays, ArrowRight, ChevronDown, Users, User } from 'lucide-react';
 import { getBoardFeedback } from './services/geminiService';
-import { fetchTeams, saveSeasonResult, updateProfileName, fetchSavedGame, saveGame } from './services/api';
+import { fetchTeams, saveSeasonResult, updateProfileName, fetchSavedGame, saveGame, fetchCurrentUser } from './services/api';
 
 const TBD_TEAM: Team = { id: 'TBD', name: 'TBD', shortName: 'TBD', tier: 0, strength: 0, primaryColor: '#334155', secondaryColor: '#94a3b8', roster: [], formation: '4-3-3', stats: { ...INITIAL_STATS, form: [] } };
 
@@ -21,6 +21,7 @@ const App: React.FC = () => {
     const [isAuthenticated, setIsAuthenticated] = useState<boolean>(!!localStorage.getItem('auth_token'));
     const [activeProfile, setActiveProfile] = useState<ManagerProfileType | null>(null);
     const [showAccountMenu, setShowAccountMenu] = useState(false);
+    const [userAccount, setUserAccount] = useState<{ name: string, email: string } | null>(null);
 
     const [teams, setTeams] = useState<Team[]>([]);
     const [schedule, setSchedule] = useState<Match[]>([]);
@@ -47,6 +48,7 @@ const App: React.FC = () => {
     const lastInitializedProfileId = useRef<string | null>(null);
 
     useEffect(() => { seasonIdRef.current = seasonId; }, [seasonId]);
+    useEffect(() => { if (isAuthenticated) fetchCurrentUser().then(data => setUserAccount(data)); }, [isAuthenticated]);
 
     useEffect(() => {
         if (userTeamId) {
@@ -99,7 +101,6 @@ const App: React.FC = () => {
 
     const handleLogin = () => setIsAuthenticated(true);
 
-    // FIX: Awaited save execution before exiting back to manager selection
     const handleExitProfile = async () => {
         if (activeProfile && userTeamId) {
             await saveGame(activeProfile.id, { currentWeek, userTeamId, schedule, teams });
@@ -313,6 +314,7 @@ const App: React.FC = () => {
             const userPos = sorted.findIndex(t => t.id === userTeamId) + 1, userTeam = teams.find(t => t.id === userTeamId);
             if (!userTeam) return;
             setSimState('season_over');
+
             let wonUCL = false, uclResultString = '';
             const final = schedule.find(m => m.stage === 'Final' && m.played);
             if (final) {
@@ -324,8 +326,45 @@ const App: React.FC = () => {
                 else if (isParticipant) uclResultString = 'Runner-up';
                 else { const uclMatches = schedule.filter(m => m.competition === 'Champions League' && m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId)); const lastMatch = uclMatches[uclMatches.length - 1]; if (lastMatch) uclResultString = lastMatch.stage || ''; }
             }
+
+            // --- DEEP STATS EXTRACTION ---
+            const userMatches = schedule.filter(m => m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId));
+            let wins = 0, draws = 0, losses = 0;
+            let biggestWinDiff = -1, biggestLossDiff = -1;
+            let biggestWinStr = "N/A", biggestLossStr = "N/A";
+
+            userMatches.forEach(m => {
+                const isHome = m.homeTeamId === userTeamId;
+                const scored = isHome ? m.homeScore! : m.awayScore!;
+                const conceded = isHome ? m.awayScore! : m.homeScore!;
+                const oppId = isHome ? m.awayTeamId : m.homeTeamId;
+                const oppTeam = teams.find(t => t.id === oppId);
+                const oppName = oppTeam ? oppTeam.name : oppId; // FORCE FULL NAME
+
+                if (scored > conceded) {
+                    wins++;
+                    const diff = scored - conceded;
+                    if (diff > biggestWinDiff || (diff === biggestWinDiff && scored > parseInt(biggestWinStr.split('-')[0] || '0'))) {
+                        biggestWinDiff = diff; biggestWinStr = `${scored}-${conceded} vs ${oppName}`;
+                    }
+                } else if (scored < conceded) {
+                    losses++;
+                    const diff = conceded - scored;
+                    if (diff > biggestLossDiff || (diff === biggestLossDiff && conceded > parseInt(biggestLossStr.split('-')[1] || '0'))) {
+                        biggestLossDiff = diff; biggestLossStr = `${scored}-${conceded} vs ${oppName}`;
+                    }
+                } else { draws++; }
+            });
+
             if (userPos === 1 || wonUCL) confetti({ particleCount: 200, spread: 70, origin: { y: 0.6 } });
-            const newRecord = await saveSeasonResult(activeProfile.id, { seasonYear: currentSeasonYear, teamId: userTeam.id, teamName: userTeam.name, position: userPos, points: userTeam.stats.points, wonTrophy: userPos === 1 || wonUCL });
+
+            const newRecord = await saveSeasonResult(activeProfile.id, {
+                seasonYear: currentSeasonYear, teamId: userTeam.id, teamName: userTeam.name,
+                position: userPos, points: userTeam.stats.points,
+                wonLiga: userPos === 1, wonUcl: wonUCL,
+                wins, draws, losses, biggestWin: biggestWinStr, biggestLoss: biggestLossStr
+            });
+
             setActiveProfile(prev => prev ? ({ ...prev, history: [newRecord, ...prev.history] }) : null);
             const activeSeasonId = seasonId;
             setSeasonSummary({ position: userPos, points: userTeam.stats.points, wonLeague: userPos === 1, uclResult: uclResultString, message: "Waiting for board evaluation..." });
@@ -389,7 +428,20 @@ const App: React.FC = () => {
 
     return (
         <div className={`min-h-screen text-slate-100 p-3 md:p-8 transition-colors duration-500 ${isUCLWeek ? 'bg-slate-950' : 'bg-slate-900'}`}>
-            <ManagerProfile isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} history={activeProfile.history} managerName={activeProfile.name} onUpdateName={handleUpdateManagerName} />
+
+            {/* MANAGER PROFILE - Passed Current Live Stats Arrays */}
+            <ManagerProfile
+                isOpen={isProfileOpen}
+                onClose={() => setIsProfileOpen(false)}
+                history={activeProfile.history}
+                managerName={activeProfile.name}
+                onUpdateName={handleUpdateManagerName}
+                currentTeamLogo={userTeamId && teams.find(t => t.id === userTeamId) ? teams.find(t => t.id === userTeamId)?.logoUrl : undefined}
+                currentSchedule={schedule}
+                teams={teams}
+                userTeamId={userTeamId}
+            />
+
             {userTeamId && teams.find(t => t.id === userTeamId) && <SeasonRecapModal isOpen={isRecapOpen} onClose={() => setIsRecapOpen(false)} summary={seasonSummary} team={teams.find(t => t.id === userTeamId)!} />}
             <CalendarModal isOpen={isCalendarOpen} onClose={() => setIsCalendarOpen(false)} schedule={schedule} teams={teams} userTeamId={userTeamId} currentWeek={currentWeek} onSimulateToWeek={handleSimulateToWeek} currentSeasonYear={currentSeasonYear} />
 
@@ -406,7 +458,6 @@ const App: React.FC = () => {
 
                     <button onClick={() => setSimState('squad_management')} className="flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors font-bold text-xs md:text-sm"><Shirt size={16} /><span className="hidden lg:inline">Squad</span></button>
 
-                    {/* MANAGER PROFILE DROPDOWN */}
                     <div className="relative z-50">
                         <button onClick={() => setShowAccountMenu(!showAccountMenu)} className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-colors text-slate-300 hover:text-white shadow-sm">
                             <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-inner border border-blue-400/50">

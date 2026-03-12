@@ -57,7 +57,22 @@ export const fetchProfiles = async (): Promise<ManagerProfile[]> => {
   const profiles = await apiRequest<any[]>('/managers');
   return profiles.map(p => ({
     id: p.id, name: p.name,
-    history: p.histories || p.history || [],
+    history: (p.histories || p.history || []).map((h: any) => ({
+      id: h.id,
+      seasonYear: h.seasonYear,
+      teamId: h.teamId,
+      teamName: h.teamName,
+      position: h.position,
+      points: h.points,
+      wonLiga: Boolean(h.wonLiga || h.wonTrophy), // Fallback for old saves
+      wonUcl: Boolean(h.wonUcl),
+      wins: h.wins || 0,
+      draws: h.draws || 0,
+      losses: h.losses || 0,
+      biggestWin: h.biggestWin || 'N/A',
+      biggestLoss: h.biggestLoss || 'N/A',
+      timestamp: new Date(h.created_at || Date.now()).getTime()
+    })),
     createdAt: new Date(p.created_at || p.createdAt).getTime()
   }));
 };

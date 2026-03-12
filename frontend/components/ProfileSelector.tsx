@@ -189,7 +189,7 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onSelectProfile, onLo
           </button>
 
           {profiles.map(profile => {
-            const trophies = profile.history.filter(h => h.wonTrophy).length;
+            const trophies = profile.history.reduce((acc, h) => acc + (h.wonLiga ? 1 : 0) + (h.wonUcl ? 1 : 0), 0);
             const seasons = profile.history.length;
 
             return (
