@@ -90,7 +90,12 @@ const App: React.FC = () => {
 
             try {
                 const fetchedTeams = await fetchTeams();
-                const allTeams = [...fetchedTeams.map(t => ({ ...t, isLaLiga: t.tier === 1 })), TBD_TEAM];
+                // Ensure rosters are sorted strictly by 'number' (1-11 are starters!)
+                const allTeams = [...fetchedTeams.map(t => ({ 
+                    ...t, 
+                    isLaLiga: t.tier === 1,
+                    roster: t.roster ? [...t.roster].sort((a, b) => a.number - b.number) : []
+                })), TBD_TEAM];
                 setTeams(allTeams);
 
                 const ligaTeams = allTeams.filter(t => t.tier === 1 && t.id !== 'TBD');
@@ -312,7 +317,6 @@ const App: React.FC = () => {
         else simulateWeekLogic(null);
     };
 
-    // IMMEDIATELY SAVE NEW LINEUPS TO DB:
     const handleUpdateTeam = (updatedTeam: Team) => {
         const nextTeams = teams.map(t => t.id === updatedTeam.id ? updatedTeam : t);
         setTeams(nextTeams);
@@ -397,11 +401,9 @@ const App: React.FC = () => {
         } catch (error) { alert("Failed to save season data."); setSimState('ready'); }
     };
 
-    // PERSIST TEAMS BETWEEN SEASONS INSTEAD OF OVERWRITING:
     const handleSeasonTransition = async (stayWithTeam: boolean) => {
         setIsSimulatingFast(false); setIsRecapOpen(false); setSeasonId(crypto.randomUUID());
         
-        // Reset only stats to preserve custom lineups
         const resetTeams = teams.map(t => ({
             ...t,
             stats: { ...INITIAL_STATS, form: [] },
@@ -589,7 +591,7 @@ const App: React.FC = () => {
                                                 return (
                                                     <div className="mt-5 w-full bg-slate-900/80 rounded-lg border border-slate-700 p-3 shadow-sm">
                                                         <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1 font-bold">Next Match</div>
-                                                        <div className="font-mono font-bold text-indigo-300 text-sm">{mm}.{dd} {dayName}</div>
+                                                        <div className="font-mono font-bold text-indigo-300 text-sm">{mm}.${dd} {dayName}</div>
                                                         <div className="flex items-center justify-center gap-2 mt-2">
                                                             {opp?.logoUrl ? <img src={opp.logoUrl} className="w-4 h-4 object-contain" /> : <div className="w-3 h-3 rounded-full" style={{backgroundColor: opp?.primaryColor || '#94a3b8'}}></div>}
                                                             <span className="text-white font-bold text-sm truncate max-w-[120px]">{opp?.name}</span>

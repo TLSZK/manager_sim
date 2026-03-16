@@ -6,10 +6,50 @@ export const UCL_LOGO_URL = "https://images.fotmob.com/image_resources/logo/leag
 export const INITIAL_STATS = { played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, gd: 0, points: 0, form: [] };
 export const INITIAL_UCL_STATS = { played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, gd: 0, points: 0, rank: 0 };
 
+// Coordinate System:
+// x=0 is Goalkeeper box, x=100 is Opponent Goal box
+// y=15 is TOP OF SCREEN (Left side of Pitch, e.g. LB, LW)
+// y=85 is BOTTOM OF SCREEN (Right side of Pitch, e.g. RB, RW)
 export const FORMATIONS: Record<Formation, { position: string, x: number, y: number }[]> = {
-  '4-3-3': [ { position: 'GK', x: 5, y: 50 }, { position: 'DEF', x: 20, y: 15 }, { position: 'DEF', x: 18, y: 38 }, { position: 'DEF', x: 18, y: 62 }, { position: 'DEF', x: 20, y: 85 }, { position: 'MID', x: 40, y: 25 }, { position: 'MID', x: 35, y: 50 }, { position: 'MID', x: 40, y: 75 }, { position: 'FWD', x: 70, y: 15 }, { position: 'FWD', x: 75, y: 50 }, { position: 'FWD', x: 70, y: 85 } ],
-  '4-4-2': [ { position: 'GK', x: 5, y: 50 }, { position: 'DEF', x: 20, y: 15 }, { position: 'DEF', x: 18, y: 38 }, { position: 'DEF', x: 18, y: 62 }, { position: 'DEF', x: 20, y: 85 }, { position: 'MID', x: 45, y: 15 }, { position: 'MID', x: 40, y: 38 }, { position: 'MID', x: 40, y: 62 }, { position: 'MID', x: 45, y: 85 }, { position: 'FWD', x: 70, y: 35 }, { position: 'FWD', x: 70, y: 65 } ],
-  '3-5-2': [ { position: 'GK', x: 5, y: 50 }, { position: 'DEF', x: 18, y: 25 }, { position: 'DEF', x: 15, y: 50 }, { position: 'DEF', x: 18, y: 75 }, { position: 'MID', x: 30, y: 10 }, { position: 'MID', x: 35, y: 35 }, { position: 'MID', x: 35, y: 65 }, { position: 'MID', x: 30, y: 90 }, { position: 'MID', x: 45, y: 50 }, { position: 'FWD', x: 70, y: 35 }, { position: 'FWD', x: 70, y: 65 } ]
+  '4-3-3': [ 
+    { position: 'GK', x: 5, y: 50 }, 
+    { position: 'RB', x: 20, y: 85 }, 
+    { position: 'CB', x: 18, y: 62 }, 
+    { position: 'CB', x: 18, y: 38 }, 
+    { position: 'LB', x: 20, y: 15 }, 
+    { position: 'CDM', x: 35, y: 50 }, 
+    { position: 'CM', x: 45, y: 85 }, 
+    { position: 'CM', x: 45, y: 15 }, 
+    { position: 'RW', x: 75, y: 85 }, 
+    { position: 'LW', x: 75, y: 15 }, 
+    { position: 'ST', x: 80, y: 50 } 
+  ],
+  '4-4-2': [ 
+    { position: 'GK', x: 5, y: 50 }, 
+    { position: 'RB', x: 20, y: 85 }, 
+    { position: 'CB', x: 18, y: 62 }, 
+    { position: 'CB', x: 18, y: 38 }, 
+    { position: 'LB', x: 20, y: 15 }, 
+    { position: 'RM', x: 45, y: 85 }, 
+    { position: 'CM', x: 40, y: 62 }, 
+    { position: 'CM', x: 40, y: 38 }, 
+    { position: 'LM', x: 45, y: 15 }, 
+    { position: 'ST', x: 75, y: 65 }, 
+    { position: 'ST', x: 75, y: 35 } 
+  ],
+  '3-5-2': [ 
+    { position: 'GK', x: 5, y: 50 }, 
+    { position: 'CB', x: 18, y: 75 }, 
+    { position: 'CB', x: 15, y: 50 }, 
+    { position: 'CB', x: 18, y: 25 }, 
+    { position: 'RM', x: 40, y: 85 }, 
+    { position: 'CDM', x: 35, y: 50 }, 
+    { position: 'CM', x: 45, y: 65 }, 
+    { position: 'CM', x: 45, y: 35 }, 
+    { position: 'LM', x: 40, y: 15 }, 
+    { position: 'ST', x: 75, y: 65 }, 
+    { position: 'ST', x: 75, y: 35 } 
+  ]
 };
 
 export const getSimulationDays = (seasonYearStr: string) => {
@@ -34,10 +74,7 @@ export const getCompetitionWeeks = (seasonYearStr: string) => {
   const startYear = parseInt(seasonYearStr.split('/')[0], 10);
   const days = getSimulationDays(seasonYearStr);
   
-  // Base Liga days on Saturdays
   const weekends = days.filter(d => d.dayOfWeek === 6).map(d => d.week);
-  
-  // Champions League starts mid-September realistically, Base on Wednesdays
   const uclStartDate = new Date(`${startYear}-09-15T12:00:00Z`);
   const midweeks = days.filter(d => d.dayOfWeek === 3 && new Date(`${d.date}T12:00:00Z`) >= uclStartDate).map(d => d.week);
   
@@ -56,7 +93,6 @@ export const generateMasterSchedule = (ligaTeams: Team[], uclTeams: Team[], seas
   
   const { ligaBase, uclBase, days } = getCompetitionWeeks(seasonYearStr);
 
-  // LIGA GENERATION
   if (ligaTeams.length > 0) {
     const teams = [...ligaTeams].sort(() => Math.random() - 0.5);
     if (teams.length % 2 !== 0) teams.push({ id: 'TBD' } as Team);
@@ -71,7 +107,6 @@ export const generateMasterSchedule = (ligaTeams: Team[], uclTeams: Team[], seas
 
         if (home.id !== 'TBD' && away.id !== 'TBD') {
           const baseWeek = ligaBase[round];
-          // Restrict to Sat/Sun to ensure adequate rest from mid-week UCL matches
           const offsets = [0, 1]; 
           const offset = offsets[Math.floor(Math.random() * offsets.length)];
           const actualWeek = Math.max(1, Math.min(days.length, baseWeek + offset));
@@ -99,7 +134,6 @@ export const generateMasterSchedule = (ligaTeams: Team[], uclTeams: Team[], seas
     });
   }
 
-  // UCL GENERATION
   if (uclTeams.length > 0) {
     let teams = [...uclTeams].sort(() => Math.random() - 0.5);
     if (teams.length % 2 !== 0) teams.push({ id: `TBD-PAD`, name: 'TBD', shortName: 'TBD', tier: 2, strength: 0 } as Team);
@@ -116,7 +150,7 @@ export const generateMasterSchedule = (ligaTeams: Team[], uclTeams: Team[], seas
 
         if (!home.id.startsWith('TBD') && !away.id.startsWith('TBD')) {
           const baseWeek = UCL_LP_WEEKS[round];
-          const offsets = [-1, 0]; // Strictly Tue, Wed
+          const offsets = [-1, 0];
           const offset = offsets[Math.floor(Math.random() * offsets.length)];
           const actualWeek = Math.max(1, Math.min(days.length, baseWeek + offset));
           const actualDateStr = days.find(d => d.week === actualWeek)?.date || days[0].date;
