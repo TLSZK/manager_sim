@@ -591,7 +591,7 @@ const App: React.FC = () => {
                                                 return (
                                                     <div className="mt-5 w-full bg-slate-900/80 rounded-lg border border-slate-700 p-3 shadow-sm">
                                                         <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1 font-bold">Next Match</div>
-                                                        <div className="font-mono font-bold text-indigo-300 text-sm">{mm}.${dd} {dayName}</div>
+                                                        <div className="font-mono font-bold text-indigo-300 text-sm">{mm}.{dd} {dayName}</div>
                                                         <div className="flex items-center justify-center gap-2 mt-2">
                                                             {opp?.logoUrl ? <img src={opp.logoUrl} className="w-4 h-4 object-contain" /> : <div className="w-3 h-3 rounded-full" style={{backgroundColor: opp?.primaryColor || '#94a3b8'}}></div>}
                                                             <span className="text-white font-bold text-sm truncate max-w-[120px]">{opp?.name}</span>
