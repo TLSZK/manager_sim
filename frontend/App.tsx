@@ -9,9 +9,10 @@ import MatchView from './components/MatchView';
 import SquadManagement from './components/SquadManagement';
 import CalendarModal from './components/CalendarModal';
 import SeasonRecapModal from './components/SeasonRecapModal';
+import ContractModal from './components/ContractModal';
 import LoginScreen from './components/LoginScreen';
 import ProfileSelector from './components/ProfileSelector';
-import { Play, FastForward, Trophy, Calendar, Pause, CheckCircle, ChevronLeft, ChevronRight, Shirt, Briefcase, Search, Globe, CalendarDays, ArrowRight, ChevronDown, Users, User } from 'lucide-react';
+import { Play, FastForward, Trophy, Calendar, CheckCircle, ChevronLeft, ChevronRight, Shirt, Briefcase, Search, Globe, CalendarDays, ArrowRight, ChevronDown, Users, User, Info } from 'lucide-react';
 import { getBoardFeedback } from './services/geminiService';
 import { fetchTeams, saveSeasonResult, updateProfileName, fetchSavedGame, saveGame, fetchCurrentUser } from './services/api';
 
@@ -29,7 +30,6 @@ const App: React.FC = () => {
     const [currentWeek, setCurrentWeek] = useState<number>(1);
     const [simState, setSimState] = useState<SimulationState | 'match_recap'>('select_team');
     const [seasonSummary, setSeasonSummary] = useState<SeasonSummary | null>(null);
-    const [isSimulatingFast, setIsSimulatingFast] = useState(false);
     const [activeTableTab, setActiveTableTab] = useState<Competition>('La Liga');
 
     const [resultsComp, setResultsComp] = useState<Competition>('La Liga');
@@ -38,9 +38,14 @@ const App: React.FC = () => {
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
     const [isRecapOpen, setIsRecapOpen] = useState(false);
-    const [currentSeasonYear, setCurrentSeasonYear] = useState<string>("2025/26");
+    const [isContractModalOpen, setIsContractModalOpen] = useState(false);
+    
+    const [isSkipSeasonConfirmOpen, setIsSkipSeasonConfirmOpen] = useState(false);
+    const [isSimSummaryOpen, setIsSimSummaryOpen] = useState(false);
+    const [simSummaryMatches, setSimSummaryMatches] = useState<Match[]>([]);
+    const [simSummaryFilter, setSimSummaryFilter] = useState<'all' | 'mine'>('mine');
 
-    const [targetSimWeek, setTargetSimWeek] = useState<number | null>(null);
+    const [currentSeasonYear, setCurrentSeasonYear] = useState<string>("2025/26");
     const [lastSimulatedMatchId, setLastSimulatedMatchId] = useState<string | null>(null);
 
     const [seasonId, setSeasonId] = useState<string>(() => crypto.randomUUID());
@@ -90,7 +95,6 @@ const App: React.FC = () => {
 
             try {
                 const fetchedTeams = await fetchTeams();
-                // Ensure rosters are sorted strictly by 'number' (1-11 are starters!)
                 const allTeams = [...fetchedTeams.map(t => ({ 
                     ...t, 
                     isLaLiga: t.tier === 1,
@@ -126,7 +130,7 @@ const App: React.FC = () => {
     const handleUpdateManagerName = async (name: string) => { if (activeProfile) { await updateProfileName(activeProfile.id, name); setActiveProfile({ ...activeProfile, name }); } };
     const handleSelectTeam = (id: string) => { setUserTeamId(id); setSimState('ready'); setCurrentWeek(1); };
 
-    const calculateMatchResult = (match: Match, home: Team, away: Team): Match => {
+    const calculateMatchResult = useCallback((match: Match, home: Team, away: Team): Match => {
         if (home.id === 'TBD' || away.id === 'TBD') return match;
         let homeStr = home.strength, awayStr = away.strength;
         if (match.stage !== 'Final') homeStr += 5;
@@ -140,31 +144,11 @@ const App: React.FC = () => {
         else if (rand < homeProb + drawProb) { homeGoals = Math.floor(Math.random() * 4); awayGoals = homeGoals; }
         else { awayGoals = Math.floor(Math.random() * 4) + 1; homeGoals = Math.floor(Math.random() * awayGoals); }
         return { ...match, homeScore: homeGoals, awayScore: awayGoals, played: true };
-    };
+    }, []);
 
-    const handlePlayVisualMatch = () => setSimState('playing_match');
-    const handleQuickSimWeek = () => {
-        const matchesToPlay = schedule.filter(m => m.week === currentWeek && !m.played);
-        const userMatch = matchesToPlay.find(m => m.homeTeamId === userTeamId || m.awayTeamId === userTeamId);
-        let nextState: SimulationState | 'match_recap' | null = null;
-        if (userMatch) { setLastSimulatedMatchId(userMatch.id); nextState = 'match_recap'; }
-        simulateWeekLogic(null, nextState);
-    };
+    const getPenaltyResult = useCallback(() => { const possibleScores = [[5, 4], [5, 3], [4, 3], [4, 2], [3, 1], [3, 2], [6, 5]]; const score = possibleScores[Math.floor(Math.random() * possibleScores.length)]; const homeWins = Math.random() > 0.5; return homeWins ? { home: score[0], away: score[1] } : { home: score[1], away: score[0] }; }, []);
 
-    const handleSimulateToWeek = (targetWeek: number) => { setTargetSimWeek(targetWeek); setIsSimulatingFast(true); setIsCalendarOpen(false); };
-
-    const handleSimToNextMatch = () => {
-        const nextMatch = schedule.find(m => m.week > currentWeek && !m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId));
-        if (nextMatch) {
-            handleSimulateToWeek(nextMatch.week);
-        } else {
-            handleSimulateToWeek(maxWeek + 1);
-        }
-    };
-
-    const getPenaltyResult = () => { const possibleScores = [[5, 4], [5, 3], [4, 3], [4, 2], [3, 1], [3, 2], [6, 5]]; const score = possibleScores[Math.floor(Math.random() * possibleScores.length)]; const homeWins = Math.random() > 0.5; return homeWins ? { home: score[0], away: score[1] } : { home: score[1], away: score[0] }; };
-
-    const resolveUCLKnockouts = (currentSchedule: Match[], teamsState: Team[]): Match[] => {
+    const resolveUCLKnockouts = useCallback((currentSchedule: Match[], teamsState: Team[]): Match[] => {
         let updatedSchedule = [...currentSchedule];
         const isPhaseComplete = (stage: string) => { const matches = updatedSchedule.filter(m => m.stage === stage); return matches.length > 0 && matches.every(m => m.played); };
         const hasNextStageGenerated = (stage: string) => updatedSchedule.some(m => m.stage === stage);
@@ -261,60 +245,141 @@ const App: React.FC = () => {
         }
         if (isPhaseComplete('Final')) processStageWinners('Final');
         return updatedSchedule;
-    };
-
-    const simulateWeekLogic = useCallback((userResult: { matchId: string, homeScore: number, awayScore: number } | null, targetState: SimulationState | 'match_recap' | null = null) => {
-        if (currentWeek > maxWeek) return;
-        
-        let nextTeams = [...teams], nextSchedule = [...schedule];
-        const matchesToPlay = nextSchedule.filter(m => m.week === currentWeek && !m.played);
-        
-        if (matchesToPlay.length > 0) {
-            const simulatedResults = matchesToPlay.map(match => {
-                if (userResult && match.id === userResult.matchId) return { ...match, homeScore: userResult.homeScore, awayScore: userResult.awayScore, played: true };
-                const home = nextTeams.find(t => t.id === match.homeTeamId), away = nextTeams.find(t => t.id === match.awayTeamId);
-                return (!home || !away || home.id === 'TBD' || away.id === 'TBD') ? match : calculateMatchResult(match, home, away);
-            });
-            nextSchedule = nextSchedule.map(m => simulatedResults.find(r => r.id === m.id) || m);
-            const tempTeams = [...nextTeams];
-            simulatedResults.forEach(match => {
-                if (!match.played) return;
-                const homeIdx = tempTeams.findIndex(t => t.id === match.homeTeamId), awayIdx = tempTeams.findIndex(t => t.id === match.awayTeamId);
-                if (homeIdx === -1 || awayIdx === -1) return;
-                const home = { ...tempTeams[homeIdx] }, away = { ...tempTeams[awayIdx] };
-                const updateStatObj = (stats: any, hS: number, aS: number) => {
-                    stats.played += 1; stats.gf += hS; stats.ga += aS; stats.gd = stats.gf - stats.ga;
-                    if (hS > aS) { stats.won++; stats.points += 3; } else if (hS < aS) { stats.lost++; } else { stats.drawn++; stats.points += 1; }
-                };
-                if (match.competition === 'La Liga') {
-                    home.stats = { ...home.stats, form: [...home.stats.form] }; away.stats = { ...away.stats, form: [...away.stats.form] };
-                    updateStatObj(home.stats, match.homeScore!, match.awayScore!);
-                    const hRes = match.homeScore! > match.awayScore! ? 'W' : match.homeScore! === match.awayScore! ? 'D' : 'L';
-                    const aRes = match.homeScore! < match.awayScore! ? 'W' : match.homeScore! === match.awayScore! ? 'D' : 'L';
-                    home.stats.form = [hRes as any, ...home.stats.form].slice(0, 5); away.stats.form = [aRes as any, ...away.stats.form].slice(0, 5);
-                    updateStatObj(away.stats, match.awayScore!, match.homeScore!);
-                } else if (match.competition === 'Champions League' && match.stage === 'League Phase') {
-                    if (home.uclStats) { home.uclStats = { ...home.uclStats }; updateStatObj(home.uclStats, match.homeScore!, match.awayScore!); }
-                    if (away.uclStats) { away.uclStats = { ...away.uclStats }; updateStatObj(away.uclStats, match.awayScore!, match.homeScore!); }
-                }
-                tempTeams[homeIdx] = home; tempTeams[awayIdx] = away;
-            });
-            nextTeams = tempTeams; nextSchedule = resolveUCLKnockouts(nextSchedule, nextTeams);
-        }
-        
-        const nextW = currentWeek + 1;
-        setTeams(nextTeams); setSchedule(nextSchedule); setCurrentWeek(nextW); setSimState(targetState || 'ready');
-        performAutoSave(nextTeams, nextSchedule, nextW);
-    }, [currentWeek, schedule, teams, userTeamId, currentSeasonYear, maxWeek]);
+    }, [currentSeasonYear, getPenaltyResult]);
 
     const performAutoSave = async (newTeams: Team[], newSchedule: Match[], newWeek: number) => {
         if (activeProfile && userTeamId) saveGame(activeProfile.id, { currentWeek: newWeek, userTeamId: userTeamId, schedule: newSchedule, teams: newTeams });
     };
 
+    const runSimulation = useCallback((targetWeek: number, userResult: { matchId: string, homeScore: number, awayScore: number } | null = null, stopAtUserMatch: boolean = true, showSummary: boolean = false) => {
+        if (currentWeek > maxWeek) return;
+        
+        let tempTeams = [...teams];
+        let tempSchedule = [...schedule];
+        let tempWeek = currentWeek;
+        
+        let finalState: SimulationState | 'match_recap' | null = null;
+        let finalLastSimMatchId = lastSimulatedMatchId;
+        
+        let newlyPlayedMatches: Match[] = [];
+
+        while (tempWeek < targetWeek && tempWeek <= maxWeek) {
+            const matchesToPlay = tempSchedule.filter(m => m.week === tempWeek && !m.played);
+            const userMatchThisWeek = matchesToPlay.find(m => m.homeTeamId === userTeamId || m.awayTeamId === userTeamId);
+            
+            if (stopAtUserMatch && userMatchThisWeek && (!userResult || userResult.matchId !== userMatchThisWeek.id)) {
+                break;
+            }
+
+            if (matchesToPlay.length > 0) {
+                const simulatedResults = matchesToPlay.map(match => {
+                    if (userResult && match.id === userResult.matchId) {
+                        return { ...match, homeScore: userResult.homeScore, awayScore: userResult.awayScore, played: true };
+                    }
+                    const home = tempTeams.find(t => t.id === match.homeTeamId);
+                    const away = tempTeams.find(t => t.id === match.awayTeamId);
+                    return (!home || !away || home.id === 'TBD' || away.id === 'TBD') ? match : calculateMatchResult(match, home, away);
+                });
+
+                simulatedResults.forEach(m => {
+                    const oldMatch = tempSchedule.find(old => old.id === m.id);
+                    if (m.played && oldMatch && !oldMatch.played) {
+                        newlyPlayedMatches.push(m);
+                    }
+                });
+
+                tempSchedule = tempSchedule.map(m => simulatedResults.find(r => r.id === m.id) || m);
+                
+                const nextTempTeams = [...tempTeams];
+                simulatedResults.forEach(match => {
+                    if (!match.played) return;
+                    const homeIdx = nextTempTeams.findIndex(t => t.id === match.homeTeamId);
+                    const awayIdx = nextTempTeams.findIndex(t => t.id === match.awayTeamId);
+                    if (homeIdx === -1 || awayIdx === -1) return;
+                    
+                    const home = { ...nextTempTeams[homeIdx] };
+                    const away = { ...nextTempTeams[awayIdx] };
+                    
+                    const updateStatObj = (stats: any, hS: number, aS: number) => {
+                        stats.played += 1; stats.gf += hS; stats.ga += aS; stats.gd = stats.gf - stats.ga;
+                        if (hS > aS) { stats.won++; stats.points += 3; } else if (hS < aS) { stats.lost++; } else { stats.drawn++; stats.points += 1; }
+                    };
+
+                    if (match.competition === 'La Liga') {
+                        home.stats = { ...home.stats, form: [...home.stats.form] }; 
+                        away.stats = { ...away.stats, form: [...away.stats.form] };
+                        updateStatObj(home.stats, match.homeScore!, match.awayScore!);
+                        const hRes = match.homeScore! > match.awayScore! ? 'W' : match.homeScore! === match.awayScore! ? 'D' : 'L';
+                        const aRes = match.homeScore! < match.awayScore! ? 'W' : match.homeScore! === match.awayScore! ? 'D' : 'L';
+                        home.stats.form = [hRes as any, ...home.stats.form].slice(0, 5); 
+                        away.stats.form = [aRes as any, ...away.stats.form].slice(0, 5);
+                        updateStatObj(away.stats, match.awayScore!, match.homeScore!);
+                    } else if (match.competition === 'Champions League' && match.stage === 'League Phase') {
+                        if (home.uclStats) { home.uclStats = { ...home.uclStats }; updateStatObj(home.uclStats, match.homeScore!, match.awayScore!); }
+                        if (away.uclStats) { away.uclStats = { ...away.uclStats }; updateStatObj(away.uclStats, match.awayScore!, match.homeScore!); }
+                    }
+                    nextTempTeams[homeIdx] = home; 
+                    nextTempTeams[awayIdx] = away;
+                });
+
+                tempTeams = nextTempTeams;
+                tempSchedule = resolveUCLKnockouts(tempSchedule, tempTeams);
+            }
+
+            if (userMatchThisWeek) {
+                finalLastSimMatchId = userMatchThisWeek.id;
+                finalState = 'match_recap';
+            }
+
+            userResult = null; 
+            tempWeek++;
+        }
+
+        setTeams(tempTeams);
+        setSchedule(tempSchedule);
+        setCurrentWeek(tempWeek);
+        
+        if (finalLastSimMatchId) setLastSimulatedMatchId(finalLastSimMatchId);
+        if (finalState) setSimState(finalState);
+        else setSimState('ready');
+
+        performAutoSave(tempTeams, tempSchedule, tempWeek);
+
+        if (showSummary && newlyPlayedMatches.length > 0) {
+            setSimSummaryMatches(newlyPlayedMatches);
+            setIsSimSummaryOpen(true);
+        }
+
+    }, [teams, schedule, currentWeek, userTeamId, maxWeek, resolveUCLKnockouts, lastSimulatedMatchId, calculateMatchResult]);
+
+
+    const handlePlayVisualMatch = () => setSimState('playing_match');
+    
+    const handleQuickSimWeek = () => {
+        runSimulation(currentWeek + 1, null, false, false);
+    };
+
+    const handleSimulateToWeek = (targetWeek: number) => { 
+        setIsCalendarOpen(false); 
+        runSimulation(targetWeek, null, false, true); 
+    };
+
+    const handleSimToNextMatch = () => {
+        const nextMatch = schedule.find(m => m.week > currentWeek && !m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId));
+        if (nextMatch) {
+            runSimulation(nextMatch.week, null, true, true);
+        } else {
+            runSimulation(maxWeek + 1, null, true, true);
+        }
+    };
+
     const handleMatchComplete = (homeScore: number, awayScore: number) => {
         const userMatch = schedule.find(m => m.week === currentWeek && !m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId));
-        if (userMatch) { setLastSimulatedMatchId(userMatch.id); simulateWeekLogic({ matchId: userMatch.id, homeScore, awayScore }, 'match_recap'); }
-        else simulateWeekLogic(null);
+        if (userMatch) { 
+            runSimulation(currentWeek + 1, { matchId: userMatch.id, homeScore, awayScore }, false, false); 
+        } else {
+            runSimulation(currentWeek + 1, null, false, false);
+        }
     };
 
     const handleUpdateTeam = (updatedTeam: Team) => {
@@ -325,18 +390,7 @@ const App: React.FC = () => {
         }
     };
 
-    const toggleFastSim = () => { setIsSimulatingFast(prev => !prev); setTargetSimWeek(null); };
-
-    useEffect(() => {
-        let timer: ReturnType<typeof setTimeout>;
-        if (isSimulatingFast) {
-            if (targetSimWeek ? currentWeek < targetSimWeek : currentWeek <= maxWeek) timer = setTimeout(() => simulateWeekLogic(null), 30);
-            else { setIsSimulatingFast(false); setTargetSimWeek(null); }
-        }
-        return () => clearTimeout(timer);
-    }, [isSimulatingFast, currentWeek, simulateWeekLogic, targetSimWeek, maxWeek]);
-
-    const handleConcludeSeason = async () => {
+    const handleConcludeSeason = useCallback(async () => {
         if (!userTeamId || !activeProfile) return;
         try {
             const sorted = teams.filter(t => t.isLaLiga && t.id !== 'TBD').sort((a, b) => b.stats.points - a.stats.points || b.stats.gd - a.stats.gd);
@@ -399,10 +453,18 @@ const App: React.FC = () => {
             setIsRecapOpen(true);
             getBoardFeedback(userTeam, userPos, sorted.length, uclResultString).then(feedback => { if (seasonIdRef.current === activeSeasonId) setSeasonSummary(prev => prev ? { ...prev, message: feedback } : null); });
         } catch (error) { alert("Failed to save season data."); setSimState('ready'); }
-    };
+    }, [userTeamId, activeProfile, teams, schedule, currentSeasonYear, seasonId]);
+
+    useEffect(() => {
+        if (currentWeek > maxWeek && simState !== 'season_over' && simState !== 'match_recap' && !isSimSummaryOpen) {
+            handleConcludeSeason();
+        }
+    }, [currentWeek, maxWeek, simState, handleConcludeSeason, isSimSummaryOpen]);
 
     const handleSeasonTransition = async (stayWithTeam: boolean) => {
-        setIsSimulatingFast(false); setIsRecapOpen(false); setSeasonId(crypto.randomUUID());
+        setIsRecapOpen(false); 
+        setIsContractModalOpen(false);
+        setSeasonId(crypto.randomUUID());
         
         const resetTeams = teams.map(t => ({
             ...t,
@@ -453,7 +515,7 @@ const App: React.FC = () => {
         const d = new Date(`${currentDayObj.date}T12:00:00Z`);
         const mm = String(d.getMonth() + 1).padStart(2, '0');
         const dd = String(d.getDate()).padStart(2, '0');
-        const dayName = d.toLocaleDateString('en-US', { weekday: 'long' });
+        const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
         return `${mm}.${dd} ${dayName}`;
     }, [currentDayObj]);
 
@@ -479,7 +541,108 @@ const App: React.FC = () => {
     if (simState === 'playing_match' && userMatch && userHome && userAway) { return <MatchView homeTeam={userHome} awayTeam={userAway} userTeamId={userTeamId} onMatchComplete={handleMatchComplete} competition={userMatch.competition} stage={userMatch.stage} />; }
 
     return (
-        <div className={`min-h-screen text-slate-100 p-3 md:p-8 transition-colors duration-500 ${isUCLWeek ? 'bg-slate-950' : 'bg-slate-900'}`}>
+        <div className={`min-h-screen w-full overflow-x-hidden text-slate-100 p-2 sm:p-3 md:p-8 transition-colors duration-500 ${isUCLWeek ? 'bg-slate-950' : 'bg-slate-900'}`}>
+
+            {/* Sim Summary Modal */}
+            {isSimSummaryOpen && (
+                <div className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+                        <div className="p-3 sm:p-4 border-b border-slate-700 bg-slate-800 flex justify-between items-center flex-wrap gap-3">
+                            <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
+                                <CalendarDays className="text-blue-400" />
+                                <span className="hidden sm:inline">Simulation Complete</span>
+                                <span className="sm:hidden">Sim Complete</span>
+                            </h2>
+                            <div className="flex items-center gap-1 sm:gap-2 bg-slate-900 p-1 rounded-lg border border-slate-700 shrink-0">
+                                <button 
+                                    onClick={() => setSimSummaryFilter('mine')}
+                                    className={`px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs font-bold rounded-md transition-colors ${simSummaryFilter === 'mine' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
+                                >
+                                    My Team Only
+                                </button>
+                                <button 
+                                    onClick={() => setSimSummaryFilter('all')}
+                                    className={`px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs font-bold rounded-md transition-colors ${simSummaryFilter === 'all' ? 'bg-slate-700 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
+                                >
+                                    All Matches
+                                </button>
+                            </div>
+                        </div>
+                        <div className="p-2 sm:p-4 overflow-y-auto flex-1 bg-slate-900/50 space-y-2">
+                            {(() => {
+                                let sortedMatches = [...simSummaryMatches].sort((a, b) => a.week - b.week);
+                                
+                                if (simSummaryFilter === 'mine') {
+                                    sortedMatches = sortedMatches.filter(m => m.homeTeamId === userTeamId || m.awayTeamId === userTeamId);
+                                }
+
+                                if (sortedMatches.length === 0) {
+                                    return (
+                                        <div className="py-12 flex flex-col items-center justify-center text-slate-500">
+                                            <Info size={40} className="mb-2 opacity-50" />
+                                            <p className="text-sm">No matches to display.</p>
+                                        </div>
+                                    );
+                                }
+
+                                return sortedMatches.map(m => {
+                                    const h = teams.find(t => t.id === m.homeTeamId);
+                                    const a = teams.find(t => t.id === m.awayTeamId);
+                                    const d = typeof m.date === 'string' ? new Date(m.date) : m.date;
+                                    const dateStr = `${d.getMonth() + 1}/${d.getDate()}`;
+                                    const isUserMatch = h?.id === userTeamId || a?.id === userTeamId;
+                                    
+                                    return (
+                                        <div key={m.id} className={`flex items-center justify-between p-2 sm:p-3 rounded-lg border ${isUserMatch ? 'bg-blue-900/30 border-blue-500/50' : 'bg-slate-800 border-slate-700'}`}>
+                                            <div className="text-[10px] sm:text-xs text-slate-400 w-8 sm:w-10 font-mono shrink-0">{dateStr}</div>
+                                            <div className="flex-1 flex justify-end items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-bold text-slate-200 min-w-0">
+                                                <span className={`truncate ${h?.id === userTeamId ? 'text-white' : ''}`}>{h?.name}</span>
+                                                {h?.logoUrl ? <img src={h.logoUrl} className="w-4 h-4 sm:w-5 sm:h-5 object-contain shrink-0" /> : <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full shrink-0" style={{backgroundColor: h?.primaryColor || '#94a3b8'}}></div>}
+                                            </div>
+                                            <div className="px-1.5 sm:px-3 py-1 bg-slate-900 text-white font-mono font-bold rounded mx-1.5 sm:mx-3 border border-slate-700 text-xs sm:text-sm shrink-0 min-w-[45px] sm:min-w-[60px] text-center">
+                                                {m.homeScore} - {m.awayScore}
+                                            </div>
+                                            <div className="flex-1 flex justify-start items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-bold text-slate-200 min-w-0">
+                                                {a?.logoUrl ? <img src={a.logoUrl} className="w-4 h-4 sm:w-5 sm:h-5 object-contain shrink-0" /> : <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full shrink-0" style={{backgroundColor: a?.primaryColor || '#94a3b8'}}></div>}
+                                                <span className={`truncate ${a?.id === userTeamId ? 'text-white' : ''}`}>{a?.name}</span>
+                                            </div>
+                                        </div>
+                                    )
+                                });
+                            })()}
+                        </div>
+                        <div className="p-3 sm:p-4 border-t border-slate-700 bg-slate-800 flex justify-end">
+                            <button onClick={() => setIsSimSummaryOpen(false)} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 sm:py-2.5 px-6 sm:px-8 rounded-lg shadow-lg transition-colors active:scale-95 text-sm sm:text-base">
+                                Continue
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Skip to Season End Confirmation Modal */}
+            {isSkipSeasonConfirmOpen && (
+                <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md p-6 text-center">
+                        <FastForward size={48} className="mx-auto text-yellow-500 mb-4" />
+                        <h2 className="text-xl sm:text-2xl font-bold text-white mb-2">Skip to Season End?</h2>
+                        <p className="text-slate-400 mb-8 text-xs sm:text-sm leading-relaxed">
+                            Are you sure you want to simulate all remaining matches? This will instantly calculate all results until the end of the season. This action cannot be undone.
+                        </p>
+                        <div className="flex gap-3 sm:gap-4 w-full">
+                            <button onClick={() => setIsSkipSeasonConfirmOpen(false)} className="flex-1 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white font-bold py-2.5 sm:py-3 rounded-xl transition-colors active:scale-95 text-sm sm:text-base">
+                                Cancel
+                            </button>
+                            <button onClick={() => {
+                                setIsSkipSeasonConfirmOpen(false);
+                                runSimulation(maxWeek + 1, null, false, true);
+                            }} className="flex-1 bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-2.5 sm:py-3 rounded-xl shadow-lg transition-colors active:scale-95 text-sm sm:text-base">
+                                Simulate Season
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <ManagerProfile
                 isOpen={isProfileOpen}
@@ -493,32 +656,50 @@ const App: React.FC = () => {
                 userTeamId={userTeamId}
             />
 
-            {userTeamId && teams.find(t => t.id === userTeamId) && <SeasonRecapModal isOpen={isRecapOpen} onClose={() => setIsRecapOpen(false)} summary={seasonSummary} team={teams.find(t => t.id === userTeamId)!} />}
+            {userTeamId && teams.find(t => t.id === userTeamId) && (
+                <SeasonRecapModal 
+                    isOpen={isRecapOpen} 
+                    onClose={() => {
+                        setIsRecapOpen(false);
+                        setIsContractModalOpen(true);
+                    }} 
+                    summary={seasonSummary} 
+                    team={teams.find(t => t.id === userTeamId)!} 
+                />
+            )}
+            
+            <ContractModal
+                isOpen={isContractModalOpen}
+                team={teams.find(t => t.id === userTeamId) || null}
+                onRenew={() => handleSeasonTransition(true)}
+                onResign={() => handleSeasonTransition(false)}
+            />
+
             <CalendarModal isOpen={isCalendarOpen} onClose={() => setIsCalendarOpen(false)} schedule={schedule} teams={teams} userTeamId={userTeamId} currentWeek={currentWeek} onSimulateToWeek={handleSimulateToWeek} currentSeasonYear={currentSeasonYear} />
 
-            <header className={`flex flex-col md:flex-row justify-between items-center mb-6 md:mb-8 p-4 gap-4 rounded-xl border shadow-md transition-colors ${isUCLWeek ? 'bg-blue-950/50 border-blue-900' : 'bg-slate-800 border-slate-700'}`}>
-                <div className="flex items-center gap-4 w-full md:w-auto">
-                    <div className="flex items-center justify-center w-12 h-12 shrink-0">{isUCLWeek ? (UCL_LOGO_URL ? <div className="bg-white rounded-lg p-1 w-10 h-10 flex items-center justify-center shadow-sm"><img src={UCL_LOGO_URL} alt="UCL" className="w-full h-full object-contain" /></div> : <Globe size={24} className="text-blue-400" />) : (LIGA_LOGO_URL ? <img src={LIGA_LOGO_URL} alt="La Liga" className="w-10 h-10 object-contain" /> : <Trophy size={24} className="text-[#FF2B44]" />)}</div>
-                    <div className="flex-1"><h1 className="text-lg md:text-xl font-bold">{isUCLWeek ? 'Champions League Action' : 'La Liga Action'}</h1><p className={`text-xs ${isUCLWeek ? 'text-blue-300' : 'text-slate-400'}`}>Season {currentSeasonYear}</p></div>
+            <header className={`flex flex-col md:flex-row justify-between items-center mb-4 md:mb-8 p-3 sm:p-4 gap-3 sm:gap-4 rounded-xl border shadow-md transition-colors ${isUCLWeek ? 'bg-blue-950/50 border-blue-900' : 'bg-slate-800 border-slate-700'}`}>
+                <div className="flex items-center gap-3 w-full md:w-auto min-w-0">
+                    <div className="flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 shrink-0">{isUCLWeek ? (UCL_LOGO_URL ? <div className="bg-white rounded-lg p-1 w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center shadow-sm"><img src={UCL_LOGO_URL} alt="UCL" className="w-full h-full object-contain" /></div> : <Globe size={24} className="text-blue-400" />) : (LIGA_LOGO_URL ? <img src={LIGA_LOGO_URL} alt="La Liga" className="w-8 h-8 sm:w-10 sm:h-10 object-contain" /> : <Trophy size={24} className="text-[#FF2B44]" />)}</div>
+                    <div className="flex-1 min-w-0"><h1 className="text-base sm:text-lg md:text-xl font-bold truncate">{isUCLWeek ? 'Champions League Action' : 'La Liga Action'}</h1><p className={`text-[10px] sm:text-xs truncate ${isUCLWeek ? 'text-blue-300' : 'text-slate-400'}`}>Season {currentSeasonYear}</p></div>
                 </div>
-                <div className="flex items-center gap-2 md:gap-4 w-full md:w-auto justify-end">
-                    <div className="flex items-center bg-slate-900 rounded-lg border border-slate-700 font-mono font-bold text-white shadow-inner overflow-hidden max-w-[200px] md:max-w-none">
-                        <div className="px-3 py-2 text-xs md:text-sm truncate hidden sm:block">{userMatch ? `Upcoming: ${(userHome?.id === userTeamId ? userAway : userHome)?.name} ${userHome?.id === userTeamId ? '(H)' : '(A)'} (${userMatch.competition === 'Champions League' ? 'UCL' : 'Liga'})` : (isSeasonFinished || isScheduleComplete) ? "End of Season" : "No Match Today"}</div>
-                        <button onClick={() => setIsCalendarOpen(true)} className="bg-slate-800 hover:bg-slate-700 p-2 h-full border-l border-slate-700 transition-colors text-slate-400 hover:text-white"><CalendarDays size={18} /></button>
+                <div className="flex items-center gap-2 w-full md:w-auto justify-between sm:justify-end">
+                    <div className="flex flex-1 sm:flex-none items-center bg-slate-900 rounded-lg border border-slate-700 font-mono font-bold text-white shadow-inner overflow-hidden min-w-0">
+                        <div className="px-2 sm:px-3 py-1.5 sm:py-2 text-[10px] sm:text-xs md:text-sm truncate hidden sm:block flex-1">{userMatch ? `Upcoming: ${(userHome?.id === userTeamId ? userAway : userHome)?.name} ${userHome?.id === userTeamId ? '(H)' : '(A)'} (${userMatch.competition === 'Champions League' ? 'UCL' : 'Liga'})` : (isSeasonFinished || isScheduleComplete) ? "End of Season" : "No Match Today"}</div>
+                        <button onClick={() => setIsCalendarOpen(true)} className="bg-slate-800 hover:bg-slate-700 p-2 sm:p-2 h-full w-full sm:w-auto flex items-center justify-center sm:border-l border-slate-700 transition-colors text-slate-400 hover:text-white shrink-0"><CalendarDays size={16} className="sm:w-[18px] sm:h-[18px]" /></button>
                     </div>
 
-                    <button onClick={() => setSimState('squad_management')} className="flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors font-bold text-xs md:text-sm"><Shirt size={16} /><span className="hidden lg:inline">Squad</span></button>
+                    <button onClick={() => setSimState('squad_management')} className="flex items-center justify-center gap-2 px-3 sm:px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors font-bold text-[10px] sm:text-xs md:text-sm shrink-0"><Shirt size={16} /><span className="hidden lg:inline">Squad</span></button>
 
-                    <div className="relative z-50">
-                        <button onClick={() => setShowAccountMenu(!showAccountMenu)} className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-colors text-slate-300 hover:text-white shadow-sm">
-                            <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-inner border border-blue-400/50">
-                                <User size={16} />
+                    <div className="relative z-50 shrink-0">
+                        <button onClick={() => setShowAccountMenu(!showAccountMenu)} className="flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-colors text-slate-300 hover:text-white shadow-sm">
+                            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-inner border border-blue-400/50">
+                                <User size={14} className="sm:w-[16px] sm:h-[16px]" />
                             </div>
-                            <div className="text-left hidden sm:block max-w-[120px]">
-                                <div className="text-sm font-bold text-white truncate">{activeProfile.name}</div>
+                            <div className="text-left hidden sm:block max-w-[120px] min-w-0">
+                                <div className="text-xs sm:text-sm font-bold text-white truncate">{activeProfile.name}</div>
                                 <div className="text-[10px] text-slate-400 truncate -mt-0.5">Manager Profile</div>
                             </div>
-                            <ChevronDown size={16} className={`text-slate-400 transition-transform ${showAccountMenu ? 'rotate-180' : ''}`} />
+                            <ChevronDown size={14} className={`hidden sm:block text-slate-400 transition-transform ${showAccountMenu ? 'rotate-180' : ''}`} />
                         </button>
                         {showAccountMenu && (
                             <div className="absolute right-0 mt-2 w-56 bg-slate-800 rounded-xl shadow-2xl border border-slate-700 overflow-hidden animate-in fade-in slide-in-from-top-2">
@@ -534,51 +715,57 @@ const App: React.FC = () => {
                 </div>
             </header>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8 relative z-10">
-                <div className="lg:col-span-2 flex flex-col order-2 lg:order-1">
-                    <LeagueTable teams={teams} userTeamId={userTeamId || ''} activeTab={activeTableTab} onTabChange={setActiveTableTab} schedule={schedule} currentWeek={currentWeek} />
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 md:gap-8 relative z-10 w-full min-w-0">
+                <div className="lg:col-span-2 flex flex-col order-2 lg:order-1 min-w-0 w-full">
+                    <div className="w-full overflow-x-auto">
+                        <LeagueTable teams={teams} userTeamId={userTeamId || ''} activeTab={activeTableTab} onTabChange={setActiveTableTab} schedule={schedule} currentWeek={currentWeek} />
+                    </div>
                 </div>
 
-                <div className="flex flex-col gap-6 order-1 lg:order-2">
-                    <div className={`p-4 md:p-6 rounded-xl border shadow-lg flex flex-col justify-between ${isUCLWeek ? 'bg-blue-950 border-blue-900' : 'bg-slate-800 border-slate-700'}`}>
+                <div className="flex flex-col gap-4 sm:gap-6 order-1 lg:order-2 w-full min-w-0">
+                    <div className={`p-3 sm:p-4 md:p-6 rounded-xl border shadow-lg flex flex-col justify-between ${isUCLWeek ? 'bg-blue-950 border-blue-900' : 'bg-slate-800 border-slate-700'}`}>
                         <div>
                             <div className="flex justify-between items-start mb-4">
-                                <h2 className="text-lg font-bold flex items-center gap-2"><Calendar size={18} className="text-blue-400" /> Action Center</h2>
+                                <h2 className="text-base sm:text-lg font-bold flex items-center gap-2"><Calendar size={18} className="text-blue-400" /> Action Center</h2>
                                 {simState !== 'season_over' && (
-                                    <div className="text-xs md:text-sm font-mono font-bold text-slate-300 bg-slate-900/80 px-2 md:px-3 py-1.5 rounded-lg border border-slate-700 shadow-inner">
+                                    <div className="text-[10px] sm:text-xs md:text-sm font-mono font-bold text-slate-300 bg-slate-900/80 px-2 md:px-3 py-1 sm:py-1.5 rounded-lg border border-slate-700 shadow-inner">
                                         {formattedCurrentDate}
                                     </div>
                                 )}
                             </div>
                             
                             {simState === 'season_over' ? (
-                                <div className="grid grid-cols-1 gap-3 mb-6"><h3 className="text-slate-400 text-sm font-bold uppercase mb-1">Contract Options</h3><button onClick={() => handleSeasonTransition(true)} className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 px-4 rounded-xl shadow-lg transition-all"><Briefcase size={20} /> Renew Contract</button><button onClick={() => handleSeasonTransition(false)} className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold py-4 px-4 rounded-xl border border-slate-600 transition-all"><Search size={20} /> Resign</button></div>
+                                <div className="flex flex-col items-center justify-center p-4 sm:p-6 text-center">
+                                    <Trophy size={48} className="text-yellow-500 mb-4" />
+                                    <h3 className="text-white font-bold text-lg sm:text-xl mb-2">Season Completed</h3>
+                                    <p className="text-slate-400 text-xs sm:text-sm">Please finalize your contract options in the pop-up.</p>
+                                </div>
                             ) : simState === 'match_recap' && lastSimMatch && lastSimHome && lastSimAway ? (
-                                <div className="flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-300 mb-6"><div className="mb-2 p-4 bg-slate-900 rounded-lg border border-slate-700 shadow-xl"><div className="text-center text-xs mb-2 uppercase tracking-wide font-bold text-green-400">Match Finished</div><div className="flex items-center justify-between"><div className="text-center w-1/3 flex flex-col items-center">{lastSimHome.logoUrl ? <img src={lastSimHome.logoUrl} className="w-12 h-12 mb-2 object-contain" /> : <div className="w-12 h-12 rounded-full mb-2" style={{ backgroundColor: lastSimHome.primaryColor }}></div>}<div className="font-bold text-sm md:text-lg leading-tight truncate w-full">{lastSimHome.shortName}</div></div><div className="text-2xl md:text-3xl font-mono font-bold text-white bg-slate-800 px-3 py-1 rounded border border-slate-700">{lastSimMatch.homeScore} - {lastSimMatch.awayScore}</div><div className="text-center w-1/3 flex flex-col items-center">{lastSimAway.logoUrl ? <img src={lastSimAway.logoUrl} className="w-12 h-12 mb-2 object-contain" /> : <div className="w-12 h-12 rounded-full mb-2" style={{ backgroundColor: lastSimAway.primaryColor }}></div>}<div className="font-bold text-sm md:text-lg leading-tight truncate w-full">{lastSimAway.shortName}</div></div></div></div><button onClick={() => setSimState('ready')} className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 px-4 rounded-xl transition-all shadow-lg active:scale-95">Continue <ArrowRight size={18} /></button></div>
+                                <div className="flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-300 mb-6"><div className="mb-2 p-3 sm:p-4 bg-slate-900 rounded-lg border border-slate-700 shadow-xl"><div className="text-center text-[10px] sm:text-xs mb-2 uppercase tracking-wide font-bold text-green-400">Match Finished</div><div className="flex items-center justify-between"><div className="text-center w-[40%] sm:w-1/3 flex flex-col items-center">{lastSimHome.logoUrl ? <img src={lastSimHome.logoUrl} className="w-10 h-10 sm:w-12 sm:h-12 mb-2 object-contain" /> : <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full mb-2" style={{ backgroundColor: lastSimHome.primaryColor }}></div>}<div className="font-bold text-xs sm:text-sm md:text-lg leading-tight truncate w-full">{lastSimHome.shortName}</div></div><div className="text-xl sm:text-2xl md:text-3xl font-mono font-bold text-white bg-slate-800 px-2 sm:px-3 py-1 rounded border border-slate-700 mx-1">{lastSimMatch.homeScore} - {lastSimMatch.awayScore}</div><div className="text-center w-[40%] sm:w-1/3 flex flex-col items-center">{lastSimAway.logoUrl ? <img src={lastSimAway.logoUrl} className="w-10 h-10 sm:w-12 sm:h-12 mb-2 object-contain" /> : <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full mb-2" style={{ backgroundColor: lastSimAway.primaryColor }}></div>}<div className="font-bold text-xs sm:text-sm md:text-lg leading-tight truncate w-full">{lastSimAway.shortName}</div></div></div></div><button onClick={() => setSimState('ready')} className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 sm:py-4 px-4 rounded-xl transition-all shadow-lg active:scale-95 text-sm sm:text-base">Continue <ArrowRight size={18} /></button></div>
                             ) : (
-                                <div className="mb-6 p-4 bg-slate-900 rounded-lg border border-slate-700">
+                                <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-slate-900 rounded-lg border border-slate-700">
                                     {userMatch ? (
                                         <>
-                                            <div className={`text-center text-xs mb-2 uppercase tracking-wide font-bold ${isUCLWeek ? 'text-blue-400' : 'text-slate-500'}`}>{userMatch.competition}</div>
+                                            <div className={`text-center text-[10px] sm:text-xs mb-2 uppercase tracking-wide font-bold ${isUCLWeek ? 'text-blue-400' : 'text-slate-500'}`}>{userMatch.competition}</div>
                                             <div className="flex items-center justify-between">
-                                                <div className="text-center w-1/3 flex flex-col items-center">{userHome?.logoUrl ? <img src={userHome.logoUrl} className="w-10 h-10 mb-2 object-contain" /> : null}<div className="font-bold text-sm md:text-lg leading-tight truncate w-full">{userHome?.name}</div><div className="text-xs text-slate-400">Home</div></div>
-                                                <div className="text-lg md:text-xl font-bold text-slate-600">VS</div>
-                                                <div className="text-center w-1/3 flex flex-col items-center">{userAway?.logoUrl ? <img src={userAway.logoUrl} className="w-10 h-10 mb-2 object-contain" /> : null}<div className="font-bold text-sm md:text-lg leading-tight truncate w-full">{userAway?.name}</div><div className="text-xs text-slate-400">Away</div></div>
+                                                <div className="text-center w-[40%] sm:w-1/3 flex flex-col items-center">{userHome?.logoUrl ? <img src={userHome.logoUrl} className="w-8 h-8 sm:w-10 sm:h-10 mb-2 object-contain" /> : null}<div className="font-bold text-xs sm:text-sm md:text-lg leading-tight truncate w-full">{userHome?.name}</div><div className="text-[10px] sm:text-xs text-slate-400">Home</div></div>
+                                                <div className="text-base sm:text-lg md:text-xl font-bold text-slate-600 px-1">VS</div>
+                                                <div className="text-center w-[40%] sm:w-1/3 flex flex-col items-center">{userAway?.logoUrl ? <img src={userAway.logoUrl} className="w-8 h-8 sm:w-10 sm:h-10 mb-2 object-contain" /> : null}<div className="font-bold text-xs sm:text-sm md:text-lg leading-tight truncate w-full">{userAway?.name}</div><div className="text-[10px] sm:text-xs text-slate-400">Away</div></div>
                                             </div>
                                         </>
                                     ) : isScheduleComplete ? (
                                         <div className="flex flex-col items-center text-center">
                                             <CheckCircle className="w-8 h-8 text-emerald-400 mb-2" />
-                                            <div className="font-bold text-emerald-100">Schedule Complete</div>
-                                            <div className="text-xs text-emerald-200/70 mt-1">Ready to finalize season</div>
+                                            <div className="font-bold text-emerald-100 text-sm sm:text-base">Schedule Complete</div>
+                                            <div className="text-[10px] sm:text-xs text-emerald-200/70 mt-1">Season finalization pending</div>
                                         </div>
                                     ) : (
                                         <div className="flex flex-col items-center text-center p-2">
-                                            <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center mb-3 border border-slate-700 shadow-inner">
-                                                <Calendar size={24} className="text-slate-400" />
+                                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-800 flex items-center justify-center mb-3 border border-slate-700 shadow-inner">
+                                                <Calendar size={20} className="sm:w-[24px] sm:h-[24px] text-slate-400" />
                                             </div>
-                                            <div className="font-bold text-slate-300 text-lg">Training & Rest</div>
-                                            <div className="text-xs text-slate-500 uppercase tracking-wider mt-1">No match today</div>
+                                            <div className="font-bold text-slate-300 text-base sm:text-lg">Training & Rest</div>
+                                            <div className="text-[10px] sm:text-xs text-slate-500 uppercase tracking-wider mt-1">No match today</div>
                                             
                                             {nextUserMatch && (() => {
                                                 const oppId = nextUserMatch.homeTeamId === userTeamId ? nextUserMatch.awayTeamId : nextUserMatch.homeTeamId;
@@ -589,13 +776,13 @@ const App: React.FC = () => {
                                                 const dayName = d.toLocaleDateString('en-US', { weekday: 'long' });
                                                 
                                                 return (
-                                                    <div className="mt-5 w-full bg-slate-900/80 rounded-lg border border-slate-700 p-3 shadow-sm">
-                                                        <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1 font-bold">Next Match</div>
-                                                        <div className="font-mono font-bold text-indigo-300 text-sm">{mm}.{dd} {dayName}</div>
-                                                        <div className="flex items-center justify-center gap-2 mt-2">
-                                                            {opp?.logoUrl ? <img src={opp.logoUrl} className="w-4 h-4 object-contain" /> : <div className="w-3 h-3 rounded-full" style={{backgroundColor: opp?.primaryColor || '#94a3b8'}}></div>}
-                                                            <span className="text-white font-bold text-sm truncate max-w-[120px]">{opp?.name}</span>
-                                                            <span className="text-xs text-slate-400 font-mono">({nextUserMatch.homeTeamId === userTeamId ? 'H' : 'A'})</span>
+                                                    <div className="mt-4 sm:mt-5 w-full bg-slate-900/80 rounded-lg border border-slate-700 p-2 sm:p-3 shadow-sm min-w-0">
+                                                        <div className="text-[9px] sm:text-[10px] text-slate-400 uppercase tracking-wider mb-1 font-bold">Next Match</div>
+                                                        <div className="font-mono font-bold text-indigo-300 text-xs sm:text-sm">{mm}.{dd} {dayName}</div>
+                                                        <div className="flex items-center justify-center gap-1.5 sm:gap-2 mt-2 min-w-0">
+                                                            {opp?.logoUrl ? <img src={opp.logoUrl} className="w-3 h-3 sm:w-4 sm:h-4 object-contain shrink-0" /> : <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shrink-0" style={{backgroundColor: opp?.primaryColor || '#94a3b8'}}></div>}
+                                                            <span className="text-white font-bold text-xs sm:text-sm truncate">{opp?.name}</span>
+                                                            <span className="text-[10px] sm:text-xs text-slate-400 font-mono shrink-0">({nextUserMatch.homeTeamId === userTeamId ? 'H' : 'A'})</span>
                                                         </div>
                                                     </div>
                                                 );
@@ -606,38 +793,30 @@ const App: React.FC = () => {
                             )}
                         </div>
 
-                        {simState !== 'season_over' && simState !== 'match_recap' && (
-                            <div className="grid grid-cols-2 gap-3 mt-auto">
-                                {isScheduleComplete ? (
-                                    <button onClick={handleConcludeSeason} className="col-span-2 flex items-center justify-center gap-2 bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-4 px-4 rounded-lg shadow-lg animate-pulse">
-                                        <Trophy size={20} /> Conclude Season
+                        {simState !== 'season_over' && simState !== 'match_recap' && !isScheduleComplete && (
+                            <div className="grid grid-cols-2 gap-2 sm:gap-3 mt-auto">
+                                {userMatch ? (
+                                    <button onClick={handlePlayVisualMatch} className="flex items-center justify-center gap-1 sm:gap-2 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 sm:py-3 px-2 sm:px-4 rounded-lg shadow-lg text-xs sm:text-sm md:text-base">
+                                        <Play size={14} className="sm:w-[18px] sm:h-[18px]" fill="currentColor" /> Play
                                     </button>
                                 ) : (
-                                    <>
-                                        {userMatch ? (
-                                            <button onClick={handlePlayVisualMatch} disabled={isSimulatingFast} className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white font-bold py-3 px-4 rounded-lg shadow-lg text-sm md:text-base">
-                                                <Play size={18} fill="currentColor" /> Play
-                                            </button>
-                                        ) : (
-                                            <button onClick={handleSimToNextMatch} disabled={isSimulatingFast} className="flex items-center justify-center gap-2 bg-indigo-700 hover:bg-indigo-600 disabled:bg-slate-800 text-white font-bold py-3 px-4 rounded-lg border border-indigo-600 text-sm md:text-base">
-                                                <CalendarDays size={18} /> Sim to Match
-                                            </button>
-                                        )}
-                                        <button onClick={handleQuickSimWeek} disabled={isSimulatingFast} className="flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 text-white font-bold py-3 px-4 rounded-lg border border-slate-600 text-sm md:text-base">
-                                            <FastForward size={18} /> {userMatch ? 'Sim Match' : 'Sim Day'}
-                                        </button>
-                                        <button onClick={toggleFastSim} className={`col-span-2 flex items-center justify-center gap-2 font-bold py-3 px-4 rounded-lg text-sm md:text-base ${isSimulatingFast ? 'bg-red-500 hover:bg-red-400 text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-600'}`}>
-                                            {isSimulatingFast ? <><Pause size={18} fill="currentColor" /> Stop Sim</> : <><FastForward size={18} /> Sim Season</>}
-                                        </button>
-                                    </>
+                                    <button onClick={handleSimToNextMatch} className="flex items-center justify-center gap-1 sm:gap-2 bg-indigo-700 hover:bg-indigo-600 text-white font-bold py-2.5 sm:py-3 px-2 sm:px-4 rounded-lg border border-indigo-600 text-xs sm:text-sm md:text-base">
+                                        <CalendarDays size={14} className="sm:w-[18px] sm:h-[18px]" /> Sim to Match
+                                    </button>
                                 )}
+                                <button onClick={handleQuickSimWeek} className="flex items-center justify-center gap-1 sm:gap-2 bg-slate-700 hover:bg-slate-600 text-white font-bold py-2.5 sm:py-3 px-2 sm:px-4 rounded-lg border border-slate-600 text-xs sm:text-sm md:text-base">
+                                    <FastForward size={14} className="sm:w-[18px] sm:h-[18px]" /> {userMatch ? 'Sim Match' : 'Sim Day'}
+                                </button>
+                                <button onClick={() => setIsSkipSeasonConfirmOpen(true)} className="col-span-2 flex items-center justify-center gap-1 sm:gap-2 font-bold py-2.5 sm:py-3 px-2 sm:px-4 rounded-lg text-xs sm:text-sm md:text-base bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-600">
+                                    <FastForward size={14} className="sm:w-[18px] sm:h-[18px]" /> Skip to Season End
+                                </button>
                             </div>
                         )}
                     </div>
                     
-                    <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden flex-1 min-h-[300px] flex flex-col">
-                        <div className="p-4 bg-slate-900/50 border-b border-slate-700 space-y-3"><div className="relative"><select value={resultsComp} onChange={(e) => setResultsComp(e.target.value as Competition)} className="w-full bg-slate-800 border border-slate-600 text-white text-sm font-bold rounded-lg p-2.5 outline-none pl-10 appearance-none"><option value="La Liga">La Liga</option><option value="Champions League">Champions League</option></select><div className="absolute left-3 top-3 pointer-events-none flex items-center justify-center w-5 h-5">{resultsComp === 'La Liga' && LIGA_LOGO_URL ? <img src={LIGA_LOGO_URL} className="w-4 h-4 object-contain" /> : null}{resultsComp === 'Champions League' && UCL_LOGO_URL ? <div className="bg-slate-200 rounded-full p-0.5 w-4 h-4 flex items-center justify-center"><img src={UCL_LOGO_URL} className="w-3 h-3 object-contain" /></div> : null}</div><ChevronDown className="absolute right-3 top-3 text-slate-400" size={16} /></div><div className="flex items-center justify-between bg-slate-700/30 rounded-lg p-1"><button onClick={() => setResultsIndex((prev: number) => Math.max(0, prev - 1))} className="p-1.5 hover:bg-slate-700 rounded disabled:opacity-30" disabled={resultsIndex <= 0}><ChevronLeft size={16} /></button><h3 className="font-bold text-xs uppercase">{currentResultGroup?.label || 'No Matches'}</h3><button onClick={() => setResultsIndex((prev: number) => Math.min(resultGroups.length - 1, prev + 1))} className="p-1.5 hover:bg-slate-700 rounded disabled:opacity-30" disabled={resultsIndex >= resultGroups.length - 1}><ChevronRight size={16} /></button></div></div>
-                        <div className="flex-1 overflow-y-auto max-h-[400px] divide-y divide-slate-700/50">{currentResultGroup?.matches.length ? currentResultGroup.matches.map(match => { const h = teams.find(t => t.id === match.homeTeamId), a = teams.find(t => t.id === match.awayTeamId); if (!h || !a) return null; return (<div key={match.id} className={`p-3 flex justify-between items-center text-sm ${(h.id === userTeamId || a.id === userTeamId) ? (match.competition === 'Champions League' ? 'bg-blue-900/20 border-l-2 border-blue-500' : 'bg-indigo-900/20 border-l-2 border-indigo-500') : 'bg-slate-800/10'}`}><div className="flex-1 text-right font-medium text-slate-300 flex items-center justify-end gap-2 min-w-0"><span className={`truncate ${h.id === userTeamId ? 'text-white font-bold' : ''}`}>{h.name}</span>{h.logoUrl ? <img src={h.logoUrl} className="w-5 h-5 object-contain shrink-0" /> : <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: h.primaryColor }}></div>}</div><div className="px-3 font-bold text-white bg-slate-800/50 py-1 rounded mx-2 min-w-[45px] text-center text-xs">{match.homeScore} - {match.awayScore}</div><div className="flex-1 text-left font-medium text-slate-300 flex items-center gap-2 min-w-0">{a.logoUrl ? <img src={a.logoUrl} className="w-5 h-5 object-contain shrink-0" /> : <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: a.primaryColor }}></div>}<span className={`truncate ${a.id === userTeamId ? 'text-white font-bold' : ''}`}>{a.name}</span></div></div>); }) : <div className="p-8 text-center text-slate-500 italic">No matches...</div>}</div>
+                    <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden flex-1 min-h-[300px] flex flex-col w-full min-w-0">
+                        <div className="p-3 sm:p-4 bg-slate-900/50 border-b border-slate-700 space-y-2 sm:space-y-3"><div className="relative"><select value={resultsComp} onChange={(e) => setResultsComp(e.target.value as Competition)} className="w-full bg-slate-800 border border-slate-600 text-white text-xs sm:text-sm font-bold rounded-lg p-2 sm:p-2.5 outline-none pl-8 sm:pl-10 appearance-none"><option value="La Liga">La Liga</option><option value="Champions League">Champions League</option></select><div className="absolute left-2.5 sm:left-3 top-2.5 sm:top-3 pointer-events-none flex items-center justify-center w-4 h-4 sm:w-5 sm:h-5">{resultsComp === 'La Liga' && LIGA_LOGO_URL ? <img src={LIGA_LOGO_URL} className="w-3.5 h-3.5 sm:w-4 sm:h-4 object-contain" /> : null}{resultsComp === 'Champions League' && UCL_LOGO_URL ? <div className="bg-slate-200 rounded-full p-0.5 w-3.5 h-3.5 sm:w-4 sm:h-4 flex items-center justify-center"><img src={UCL_LOGO_URL} className="w-2.5 h-2.5 sm:w-3 sm:h-3 object-contain" /></div> : null}</div><ChevronDown className="absolute right-2.5 sm:right-3 top-2.5 sm:top-3 text-slate-400 sm:w-[16px] sm:h-[16px]" size={14} /></div><div className="flex items-center justify-between bg-slate-700/30 rounded-lg p-1"><button onClick={() => setResultsIndex((prev: number) => Math.max(0, prev - 1))} className="p-1 sm:p-1.5 hover:bg-slate-700 rounded disabled:opacity-30" disabled={resultsIndex <= 0}><ChevronLeft size={14} className="sm:w-[16px] sm:h-[16px]" /></button><h3 className="font-bold text-[10px] sm:text-xs uppercase truncate px-2">{currentResultGroup?.label || 'No Matches'}</h3><button onClick={() => setResultsIndex((prev: number) => Math.min(resultGroups.length - 1, prev + 1))} className="p-1 sm:p-1.5 hover:bg-slate-700 rounded disabled:opacity-30" disabled={resultsIndex >= resultGroups.length - 1}><ChevronRight size={14} className="sm:w-[16px] sm:h-[16px]" /></button></div></div>
+                        <div className="flex-1 overflow-y-auto max-h-[400px] divide-y divide-slate-700/50 min-w-0">{currentResultGroup?.matches.length ? currentResultGroup.matches.map(match => { const h = teams.find(t => t.id === match.homeTeamId), a = teams.find(t => t.id === match.awayTeamId); if (!h || !a) return null; return (<div key={match.id} className={`p-2 sm:p-3 flex justify-between items-center text-[10px] sm:text-sm min-w-0 ${(h.id === userTeamId || a.id === userTeamId) ? (match.competition === 'Champions League' ? 'bg-blue-900/20 border-l-2 border-blue-500' : 'bg-indigo-900/20 border-l-2 border-indigo-500') : 'bg-slate-800/10'}`}><div className="flex-1 text-right font-medium text-slate-300 flex items-center justify-end gap-1.5 sm:gap-2 min-w-0"><span className={`truncate ${h.id === userTeamId ? 'text-white font-bold' : ''}`}>{h.name}</span>{h.logoUrl ? <img src={h.logoUrl} className="w-4 h-4 sm:w-5 sm:h-5 object-contain shrink-0" /> : <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full shrink-0" style={{ backgroundColor: h.primaryColor }}></div>}</div><div className="px-1.5 sm:px-3 font-bold text-white bg-slate-800/50 py-1 rounded mx-1.5 sm:mx-2 min-w-[40px] sm:min-w-[45px] text-center text-[10px] sm:text-xs shrink-0">{match.homeScore} - {match.awayScore}</div><div className="flex-1 text-left font-medium text-slate-300 flex items-center gap-1.5 sm:gap-2 min-w-0">{a.logoUrl ? <img src={a.logoUrl} className="w-4 h-4 sm:w-5 sm:h-5 object-contain shrink-0" /> : <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full shrink-0" style={{ backgroundColor: a.primaryColor }}></div>}<span className={`truncate ${a.id === userTeamId ? 'text-white font-bold' : ''}`}>{a.name}</span></div></div>); }) : <div className="p-6 sm:p-8 text-center text-[10px] sm:text-sm text-slate-500 italic">No matches...</div>}</div>
                     </div>
                 </div>
             </div>
