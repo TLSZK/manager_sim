@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Team, Player } from '../types';
 import { FORMATIONS } from '../constants';
 import { FastForward, Play, Pause, RotateCcw, PieChart } from 'lucide-react';
@@ -13,61 +13,150 @@ interface MatchViewProps {
 }
 
 export interface MatchStats {
-    home: { shots: number, possession: number };
-    away: { shots: number, possession: number };
+    home: { shots: number; possession: number };
+    away: { shots: number; possession: number };
 }
 
 const HALF_DURATION_REAL_SEC = 18;
-const MAX_SPEED = 45.0, MAX_FORCE = 150.0;
-const FRICTION = 0.92, BALL_FRICTION = 0.98;
-const PASS_SPEED = 65.0, SHOOT_SPEED = 95.0;
+const MAX_SPEED = 45.0;
+const MAX_FORCE = 150.0;
+const FRICTION = 0.92;
+const BALL_FRICTION = 0.98;
+const PASS_SPEED = 65.0;
+const SHOOT_SPEED = 95.0;
 
 class Vector {
     constructor(public x: number, public y: number) {}
-    add(v: Vector) { this.x += v.x; this.y += v.y; return this; }
-    sub(v: Vector) { this.x -= v.x; this.y -= v.y; return this; }
-    mult(n: number) { this.x *= n; this.y *= n; return this; }
-    div(n: number) { this.x /= n; this.y /= n; return this; }
-    mag() { return Math.sqrt(this.x * this.x + this.y * this.y); }
-    normalize() { const m = this.mag(); if (m !== 0) this.div(m); return this; }
-    limit(max: number) { if (this.mag() > max) { this.normalize(); this.mult(max); } return this; }
-    static dist(v1: Vector, v2: Vector) { return Math.sqrt((v1.x - v2.x) ** 2 + (v1.y - v2.y) ** 2); }
-    clone() { return new Vector(this.x, this.y); }
+
+    add(v: Vector) {
+        this.x += v.x;
+        this.y += v.y;
+        return this;
+    }
+
+    sub(v: Vector) {
+        this.x -= v.x;
+        this.y -= v.y;
+        return this;
+    }
+
+    mult(n: number) {
+        this.x *= n;
+        this.y *= n;
+        return this;
+    }
+
+    div(n: number) {
+        this.x /= n;
+        this.y /= n;
+        return this;
+    }
+
+    mag() {
+        return Math.sqrt(this.x * this.x + this.y * this.y);
+    }
+
+    normalize() {
+        const m = this.mag();
+        if (m !== 0) this.div(m);
+        return this;
+    }
+
+    limit(max: number) {
+        if (this.mag() > max) {
+            this.normalize();
+            this.mult(max);
+        }
+        return this;
+    }
+
+    static dist(v1: Vector, v2: Vector) {
+        return Math.sqrt((v1.x - v2.x) ** 2 + (v1.y - v2.y) ** 2);
+    }
+
+    clone() {
+        return new Vector(this.x, this.y);
+    }
 }
 
 class GameEntity {
-    pos: Vector; vel: Vector; acc: Vector;
-    constructor(x: number, y: number) { this.pos = new Vector(x, y); this.vel = new Vector(0, 0); this.acc = new Vector(0, 0); }
-    applyForce(force: Vector) { this.acc.add(force); }
-    updatePhysics(dt: number) { this.vel.add(this.acc.clone().mult(dt)); this.pos.add(this.vel.clone().mult(dt)); this.acc.mult(0); }
+    pos: Vector;
+    vel: Vector;
+    acc: Vector;
+
+    constructor(x: number, y: number) {
+        this.pos = new Vector(x, y);
+        this.vel = new Vector(0, 0);
+        this.acc = new Vector(0, 0);
+    }
+
+    applyForce(force: Vector) {
+        this.acc.add(force);
+    }
+
+    updatePhysics(dt: number) {
+        this.vel.add(this.acc.clone().mult(dt));
+        this.pos.add(this.vel.clone().mult(dt));
+        this.acc.mult(0);
+    }
 }
 
 class Agent extends GameEntity {
-    id: string; teamId: string; role: string; number: number; rating: number; basePos: Vector; isHome: boolean;
+    id: string;
+    teamId: string;
+    role: string;
+    number: number;
+    rating: number;
+    basePos: Vector;
+    isHome: boolean;
+
     constructor(p: Player, teamId: string, role: string, isHome: boolean, bx: number, by: number) {
-        super(bx, by); this.id = p.id; this.number = p.number; this.rating = p.rating;
-        this.teamId = teamId; this.role = role; this.isHome = isHome; this.basePos = new Vector(bx, by);
+        super(bx, by);
+        this.id = p.id;
+        this.number = p.number;
+        this.rating = p.rating;
+        this.teamId = teamId;
+        this.role = role;
+        this.isHome = isHome;
+        this.basePos = new Vector(bx, by);
     }
+
     arrive(target: Vector, speedMult = 1.0): Vector {
         const desired = new Vector(target.x - this.pos.x, target.y - this.pos.y);
-        const d = desired.mag(); desired.normalize();
+        const d = desired.mag();
+        desired.normalize();
         desired.mult(d < 15 ? MAX_SPEED * speedMult * (d / 15) : MAX_SPEED * speedMult);
         return desired.sub(this.vel).limit(MAX_FORCE * speedMult);
     }
 }
 
 class GameEngine {
-    minute = 0; period = 1; homeScore = 0; awayScore = 0; events: string[] = [];
-    ball: GameEntity; ballOwner: Agent | null = null; players: Agent[] = [];
+    minute = 0;
+    period = 1;
+    homeScore = 0;
+    awayScore = 0;
+    events: string[] = [];
+    ball: GameEntity;
+    ballOwner: Agent | null = null;
+    players: Agent[] = [];
     state: 'PLAYING' | 'HALFTIME' | 'STOPPED' = 'PLAYING';
-    private cooldown = 0; private stateTimer = 0; private lastToucher: Agent | null = null;
+    
+    private cooldown = 0;
+    private stateTimer = 0;
+    private lastToucher: Agent | null = null;
     
     homeStats = { shots: 0, possessionFrames: 0 };
     awayStats = { shots: 0, possessionFrames: 0 };
 
-    constructor(public homeTeam: Team, public awayTeam: Team, private onUpdate: (h: number, a: number, m: number, e: string[], stats: MatchStats) => void, private onHalftime: () => void) {
+    constructor(
+        public homeTeam: Team,
+        public awayTeam: Team,
+        private onUpdate: (h: number, a: number, m: number, e: string[], stats: MatchStats) => void,
+        private onHalftime: () => void
+    ) {
         this.ball = new GameEntity(50, 50);
-        this.initPlayers(); this.setupKickoff(true);
+        this.initPlayers();
+        this.setupKickoff(true);
     }
 
     private triggerUpdate() {
@@ -90,27 +179,48 @@ class GameEngine {
     }
 
     setupKickoff(homeStarts: boolean) {
-        this.state = 'STOPPED'; this.stateTimer = 1.0;
-        this.ball.pos = new Vector(50, 50); this.ball.vel = new Vector(0, 0); this.ballOwner = null; this.lastToucher = null;
-        this.players.forEach(p => { p.pos = this.period === 2 ? new Vector(100 - p.basePos.x, p.basePos.y) : p.basePos.clone(); p.vel = new Vector(0, 0); });
+        this.state = 'STOPPED';
+        this.stateTimer = 1.0;
+        this.ball.pos = new Vector(50, 50);
+        this.ball.vel = new Vector(0, 0);
+        this.ballOwner = null;
+        this.lastToucher = null;
+        
+        this.players.forEach(p => {
+            p.pos = this.period === 2 ? new Vector(100 - p.basePos.x, p.basePos.y) : p.basePos.clone();
+            p.vel = new Vector(0, 0);
+        });
+        
         const striker = this.players.find(p => p.teamId === (homeStarts ? this.homeTeam.id : this.awayTeam.id) && p.role !== 'GK');
-        if (striker) { striker.pos = new Vector(50, 50.5); this.ballOwner = striker; }
+        if (striker) {
+            striker.pos = new Vector(50, 50.5);
+            this.ballOwner = striker;
+        }
     }
 
-    startSecondHalf() { this.period = 2; this.events.unshift("45' Second Half Started"); this.setupKickoff(false); }
+    startSecondHalf() {
+        this.period = 2;
+        this.events.unshift("45' Second Half Started");
+        this.setupKickoff(false);
+    }
 
     update(dt: number) {
         if (this.minute >= 90) return;
 
         if (this.state === 'PLAYING' || this.state === 'STOPPED') {
             this.minute += dt * (45 / HALF_DURATION_REAL_SEC);
+            
             if (this.ballOwner) {
                 if (this.ballOwner.isHome) this.homeStats.possessionFrames++;
                 else this.awayStats.possessionFrames++;
             }
+            
             if (this.period === 1 && this.minute >= 45) {
-                this.state = 'HALFTIME'; this.events.unshift("45' Halftime");
-                this.triggerUpdate(); this.onHalftime(); return;
+                this.state = 'HALFTIME';
+                this.events.unshift("45' Halftime");
+                this.triggerUpdate();
+                this.onHalftime();
+                return;
             }
         }
 
@@ -123,18 +233,24 @@ class GameEngine {
                 }
                 this.state = 'PLAYING';
             }
-            this.physicsStep(dt * 0.5); return;
+            this.physicsStep(dt * 0.5);
+            return;
         }
 
         if (this.state === 'PLAYING') {
-            this.aiStep(dt); this.physicsStep(dt); this.checkCollisions(); this.checkBoundaries();
+            this.aiStep(dt);
+            this.physicsStep(dt);
+            this.checkCollisions();
+            this.checkBoundaries();
         }
+        
         this.triggerUpdate();
     }
 
     aiStep(dt: number) {
         const ballPos = this.ball.pos;
         let cHome: Agent | null = null, cAway: Agent | null = null, dHome = Infinity, dAway = Infinity;
+        
         this.players.forEach(p => {
             const d = Vector.dist(p.pos, ballPos);
             if (p.isHome && d < dHome) { dHome = d; cHome = p; }
@@ -162,7 +278,9 @@ class GameEngine {
                             const mate = this.players.find(m => m.teamId === p.teamId && m !== p && Vector.dist(p.pos, m.pos) < 35 && Vector.dist(p.pos, m.pos) > 10);
                             if (mate) this.pass(p, mate);
                         }
-                    } else force.add(p.arrive(new Vector(target.x + (p.isHome === homeAttacksRight ? 20 : -20), target.y)));
+                    } else {
+                        force.add(p.arrive(new Vector(target.x + (p.isHome === homeAttacksRight ? 20 : -20), target.y)));
+                    }
                 } else {
                     if (p === cHome || p === cAway) force.add(p.arrive(ballPos).mult(1.5));
                     else force.add(p.arrive(target));
@@ -170,28 +288,45 @@ class GameEngine {
             }
             p.applyForce(force);
         });
+        
         if (this.cooldown > 0) this.cooldown -= dt;
     }
 
     physicsStep(dt: number) {
-        this.players.forEach(p => { p.updatePhysics(dt); p.vel.mult(FRICTION); p.pos.x = Math.max(0, Math.min(100, p.pos.x)); p.pos.y = Math.max(0, Math.min(100, p.pos.y)); });
+        this.players.forEach(p => {
+            p.updatePhysics(dt);
+            p.vel.mult(FRICTION);
+            p.pos.x = Math.max(0, Math.min(100, p.pos.x));
+            p.pos.y = Math.max(0, Math.min(100, p.pos.y));
+        });
+        
         if (this.ballOwner) {
             this.ball.pos.x += (this.ballOwner.pos.x + this.ballOwner.vel.x * 0.1 - this.ball.pos.x) * 0.3;
             this.ball.pos.y += (this.ballOwner.pos.y + this.ballOwner.vel.y * 0.1 - this.ball.pos.y) * 0.3;
             this.ball.vel = this.ballOwner.vel.clone();
-        } else { this.ball.updatePhysics(dt); this.ball.vel.mult(BALL_FRICTION); }
+        } else {
+            this.ball.updatePhysics(dt);
+            this.ball.vel.mult(BALL_FRICTION);
+        }
     }
 
     pass(from: Agent, to: Agent) {
-        this.ballOwner = null; this.lastToucher = from;
+        this.ballOwner = null;
+        this.lastToucher = from;
         const dir = new Vector(to.pos.x - from.pos.x, to.pos.y - from.pos.y).normalize();
-        dir.x += (Math.random() - 0.5) * 0.1; dir.y += (Math.random() - 0.5) * 0.1;
-        this.ball.vel = dir.mult(PASS_SPEED); this.cooldown = 0.3;
+        dir.x += (Math.random() - 0.5) * 0.1;
+        dir.y += (Math.random() - 0.5) * 0.1;
+        this.ball.vel = dir.mult(PASS_SPEED);
+        this.cooldown = 0.3;
     }
 
     shoot(from: Agent) {
-        this.ballOwner = null; this.lastToucher = from;
-        if (from.isHome) this.homeStats.shots++; else this.awayStats.shots++;
+        this.ballOwner = null;
+        this.lastToucher = from;
+        
+        if (from.isHome) this.homeStats.shots++;
+        else this.awayStats.shots++;
+        
         const oppGoalX = from.isHome ? (this.period === 1 ? 100 : 0) : (this.period === 1 ? 0 : 100);
         this.ball.vel = new Vector(oppGoalX - from.pos.x, 50 - from.pos.y).normalize().mult(SHOOT_SPEED);
         this.cooldown = 0.5;
@@ -201,17 +336,36 @@ class GameEngine {
     checkCollisions() {
         if (!this.ballOwner) {
             let closest: Agent | null = null, minDist = 2.5;
-            this.players.forEach(p => { const d = Vector.dist(p.pos, this.ball.pos); if (d < minDist && !(this.lastToucher === p && this.cooldown > 0)) { minDist = d; closest = p; } });
+            this.players.forEach(p => {
+                const d = Vector.dist(p.pos, this.ball.pos);
+                if (d < minDist && !(this.lastToucher === p && this.cooldown > 0)) {
+                    minDist = d;
+                    closest = p;
+                }
+            });
+            
             if (closest) {
                 if (Math.random() * 100 + closest.rating > this.ball.vel.mag() * 0.4) {
                     this.ballOwner = closest;
-                    if (closest.role === 'GK') { this.state = 'STOPPED'; this.stateTimer = 1.0; this.events.unshift(`${Math.floor(this.minute)}' Great Save!`); }
-                } else { this.ball.vel.mult(-0.5); this.lastToucher = closest; this.cooldown = 0.2; }
+                    if (closest.role === 'GK') {
+                        this.state = 'STOPPED';
+                        this.stateTimer = 1.0;
+                        this.events.unshift(`${Math.floor(this.minute)}' Great Save!`);
+                    }
+                } else {
+                    this.ball.vel.mult(-0.5);
+                    this.lastToucher = closest;
+                    this.cooldown = 0.2;
+                }
             }
         } else {
             this.players.forEach(p => {
                 if (p.teamId !== this.ballOwner!.teamId && Vector.dist(p.pos, this.ballOwner!.pos) < 2.0 && this.cooldown <= 0) {
-                    if (Math.random() * p.rating > Math.random() * this.ballOwner!.rating) { this.ballOwner = p; this.lastToucher = p; this.cooldown = 0.5; }
+                    if (Math.random() * p.rating > Math.random() * this.ballOwner!.rating) {
+                        this.ballOwner = p;
+                        this.lastToucher = p;
+                        this.cooldown = 0.5;
+                    }
                 }
             });
         }
@@ -225,46 +379,77 @@ class GameEngine {
             return;
         }
         if (y < 0 || y > 100 || x < 0 || x > 100) {
-            this.state = 'STOPPED'; this.stateTimer = 1.0; this.ballOwner = null;
-            if (y < 0 || y > 100) { this.ball.pos.y = y < 0 ? 0.5 : 99.5; this.events.unshift(`${Math.floor(this.minute)}' Throw-in`); }
-            else { 
+            this.state = 'STOPPED';
+            this.stateTimer = 1.0;
+            this.ballOwner = null;
+            
+            if (y < 0 || y > 100) {
+                this.ball.pos.y = y < 0 ? 0.5 : 99.5;
+                this.events.unshift(`${Math.floor(this.minute)}' Throw-in`);
+            } else { 
                 const isHomeGoalLine = this.period === 1 ? x < 50 : x > 50;
                 this.ball.pos = new Vector(isHomeGoalLine ? 5 : 95, 50);
                 this.events.unshift(`${Math.floor(this.minute)}' Goal Kick`);
             }
+            
             this.ball.vel = new Vector(0, 0);
             const teamId = (this.lastToucher?.teamId === this.homeTeam.id) ? this.awayTeam.id : this.homeTeam.id;
-            const nearest = this.players.filter(p => p.teamId === teamId && p.role !== 'GK').sort((a, b) => Vector.dist(a.pos, this.ball.pos) - Vector.dist(b.pos, this.ball.pos))[0];
-            if (nearest) { nearest.pos = this.ball.pos.clone(); this.ballOwner = nearest; }
+            const nearest = this.players
+                .filter(p => p.teamId === teamId && p.role !== 'GK')
+                .sort((a, b) => Vector.dist(a.pos, this.ball.pos) - Vector.dist(b.pos, this.ball.pos))[0];
+                
+            if (nearest) {
+                nearest.pos = this.ball.pos.clone();
+                this.ballOwner = nearest;
+            }
         }
     }
 
     scoreGoal(isHome: boolean) {
-        this.state = 'STOPPED'; this.stateTimer = 1.0;
-        if (isHome) { this.homeScore++; this.events.unshift(`${Math.floor(this.minute)}' GOAL! ${this.homeTeam.shortName}`); }
-        else { this.awayScore++; this.events.unshift(`${Math.floor(this.minute)}' GOAL! ${this.awayTeam.shortName}`); }
-        this.setupKickoff(!isHome); this.triggerUpdate();
+        this.state = 'STOPPED';
+        this.stateTimer = 1.0;
+        if (isHome) {
+            this.homeScore++;
+            this.events.unshift(`${Math.floor(this.minute)}' GOAL! ${this.homeTeam.shortName}`);
+        } else {
+            this.awayScore++;
+            this.events.unshift(`${Math.floor(this.minute)}' GOAL! ${this.awayTeam.shortName}`);
+        }
+        this.setupKickoff(!isHome);
+        this.triggerUpdate();
     }
 
     skipToEnd() {
-        const remaining = 90 - this.minute; if (remaining <= 0) return;
+        const remaining = 90 - this.minute;
+        if (remaining <= 0) return;
         const diff = (this.homeTeam.strength + 5) - this.awayTeam.strength;
-        const hProb = 0.015 + (diff * 0.0006), aProb = 0.015 - (diff * 0.0006);
+        const hProb = 0.015 + (diff * 0.0006);
+        const aProb = 0.015 - (diff * 0.0006);
+        
         for (let m = 0; m < remaining; m++) {
-            if (Math.random() < hProb) { this.homeScore++; this.homeStats.shots++; this.events.unshift(`${Math.floor(this.minute + m)}' GOAL! (Sim)`); }
-            if (Math.random() < aProb) { this.awayScore++; this.awayStats.shots++; this.events.unshift(`${Math.floor(this.minute + m)}' GOAL! (Sim)`); }
+            if (Math.random() < hProb) {
+                this.homeScore++;
+                this.homeStats.shots++;
+                this.events.unshift(`${Math.floor(this.minute + m)}' GOAL! (Sim)`);
+            }
+            if (Math.random() < aProb) {
+                this.awayScore++;
+                this.awayStats.shots++;
+                this.events.unshift(`${Math.floor(this.minute + m)}' GOAL! (Sim)`);
+            }
         }
-        this.minute = 90; this.triggerUpdate();
+        this.minute = 90;
+        this.triggerUpdate();
     }
 }
 
 const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, onMatchComplete, competition = 'La Liga' }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const engineRef = useRef<GameEngine | null>(null);
-    const requestRef = useRef<number>(0);
     const prevTimeRef = useRef<number>(0);
     const isFinishedRef = useRef(false);
 
+    // Dynamic state
     const [isPausedState, setIsPausedState] = useState(false);
     const [isHalftime, setIsHalftime] = useState(false);
     const [score, setScore] = useState({ home: 0, away: 0 });
@@ -272,54 +457,133 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, onMatchComple
     const [events, setEvents] = useState<string[]>([]);
     const [stats, setStats] = useState<MatchStats>({ home: { shots: 0, possession: 50 }, away: { shots: 0, possession: 50 } });
 
+    // Mutable refs for closures in the animation frame loop
+    const isPausedRef = useRef(isPausedState);
+    const isHalftimeRef = useRef(isHalftime);
+    const onMatchCompleteRef = useRef(onMatchComplete);
+
     useEffect(() => {
-        engineRef.current = new GameEngine(homeTeam, awayTeam, (h, a, m, e, s) => {
-            setScore({ home: h, away: a }); setMinute(m); setEvents([...e]); setStats(s);
-        }, () => { setIsHalftime(true); setIsPausedState(true); });
+        isPausedRef.current = isPausedState;
+    }, [isPausedState]);
+
+    useEffect(() => {
+        isHalftimeRef.current = isHalftime;
+    }, [isHalftime]);
+
+    useEffect(() => {
+        onMatchCompleteRef.current = onMatchComplete;
+    }, [onMatchComplete]);
+
+    const draw = useCallback((game: GameEngine) => {
+        const cvs = canvasRef.current;
+        const ctx = cvs?.getContext('2d');
+        if (!cvs || !ctx) return;
+        
+        const scaleX = cvs.width / 100;
+        const scaleY = cvs.height / 100;
+        
+        ctx.fillStyle = '#15803d';
+        ctx.fillRect(0, 0, cvs.width, cvs.height);
+        
+        ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(5 * scaleX, 0, 90 * scaleX, cvs.height);
+        
+        ctx.beginPath();
+        ctx.moveTo(cvs.width / 2, 0);
+        ctx.lineTo(cvs.width / 2, cvs.height);
+        ctx.stroke();
+        
+        ctx.beginPath();
+        ctx.arc(cvs.width / 2, cvs.height / 2, 9 * scaleX, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        ctx.strokeRect(5 * scaleX, 20 * scaleY, 15 * scaleX, 60 * scaleY);
+        ctx.strokeRect(80 * scaleX, 20 * scaleY, 15 * scaleX, 60 * scaleY);
+
+        game.players.forEach(p => {
+            const x = p.pos.x * scaleX;
+            const y = p.pos.y * scaleY;
+            ctx.fillStyle = p.isHome ? homeTeam.primaryColor : awayTeam.primaryColor;
+            
+            ctx.beginPath();
+            ctx.arc(x, y, 1.5 * scaleX, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 10px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(p.number.toString(), x, y);
+        });
+
+        const bx = game.ball.pos.x * scaleX;
+        const by = game.ball.pos.y * scaleY;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(bx, by, 1.0 * scaleX, 0, Math.PI * 2);
+        ctx.fill();
+    }, [homeTeam.primaryColor, awayTeam.primaryColor]);
+
+    useEffect(() => {
+        if (!engineRef.current) {
+            engineRef.current = new GameEngine(
+                homeTeam,
+                awayTeam,
+                (h, a, m, e, s) => {
+                    setScore({ home: h, away: a });
+                    setMinute(m);
+                    setEvents([...e]);
+                    setStats(s);
+                },
+                () => {
+                    setIsHalftime(true);
+                    setIsPausedState(true);
+                }
+            );
+        }
+
+        let requestRefId: number;
 
         const loop = (time: number) => {
             if (!prevTimeRef.current) prevTimeRef.current = time;
             const dt = Math.min((time - prevTimeRef.current) / 1000, 0.1);
             prevTimeRef.current = time;
 
-            if (engineRef.current && !isPausedState && !isHalftime && !isFinishedRef.current) {
+            if (
+                engineRef.current &&
+                !isPausedRef.current &&
+                !isHalftimeRef.current &&
+                !isFinishedRef.current
+            ) {
                 engineRef.current.update(dt);
                 draw(engineRef.current);
+                
                 if (engineRef.current.minute >= 90) {
                     isFinishedRef.current = true;
-                    setTimeout(() => onMatchComplete(engineRef.current!.homeScore, engineRef.current!.awayScore), 1000);
-                    return;
+                    setTimeout(() => {
+                        onMatchCompleteRef.current(
+                            engineRef.current!.homeScore,
+                            engineRef.current!.awayScore
+                        );
+                    }, 1000);
+                    return; 
                 }
             }
-            requestRef.current = requestAnimationFrame(loop);
+            
+            requestRefId = requestAnimationFrame(loop);
         };
-        requestRef.current = requestAnimationFrame(loop);
-        return () => cancelAnimationFrame(requestRef.current);
-    }, [isHalftime, isPausedState]);
-
-    const draw = (game: GameEngine) => {
-        const cvs = canvasRef.current, ctx = cvs?.getContext('2d'); if (!cvs || !ctx) return;
-        const scaleX = cvs.width / 100, scaleY = cvs.height / 100;
-        ctx.fillStyle = '#15803d'; ctx.fillRect(0, 0, cvs.width, cvs.height);
         
-        ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 2;
-        ctx.strokeRect(5 * scaleX, 0, 90 * scaleX, cvs.height);
-        ctx.beginPath(); ctx.moveTo(cvs.width / 2, 0); ctx.lineTo(cvs.width / 2, cvs.height); ctx.stroke();
-        ctx.beginPath(); ctx.arc(cvs.width / 2, cvs.height / 2, 9 * scaleX, 0, Math.PI * 2); ctx.stroke();
-        ctx.strokeRect(5 * scaleX, 20 * scaleY, 15 * scaleX, 60 * scaleY);
-        ctx.strokeRect(80 * scaleX, 20 * scaleY, 15 * scaleX, 60 * scaleY);
-
-        game.players.forEach(p => {
-            const x = p.pos.x * scaleX, y = p.pos.y * scaleY;
-            ctx.fillStyle = p.isHome ? homeTeam.primaryColor : awayTeam.primaryColor;
-            ctx.beginPath(); ctx.arc(x, y, 1.5 * scaleX, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
-            ctx.fillStyle = '#fff'; ctx.font = 'bold 10px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(p.number.toString(), x, y);
-        });
-
-        const bx = game.ball.pos.x * scaleX, by = game.ball.pos.y * scaleY;
-        ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(bx, by, 1.0 * scaleX, 0, Math.PI * 2); ctx.fill();
-    };
+        requestRefId = requestAnimationFrame(loop);
+        
+        return () => {
+            cancelAnimationFrame(requestRefId);
+        };
+    }, [draw, homeTeam, awayTeam]); 
 
     return (
         <div className="flex flex-col h-[100dvh] bg-slate-900 text-white overflow-hidden min-w-0">
