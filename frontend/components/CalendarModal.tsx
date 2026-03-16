@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Match, Team } from '../types';
 import { X, ChevronLeft, ChevronRight, PlayCircle, Trophy, Globe, Calendar as CalendarIcon } from 'lucide-react';
-import { LIGA_LOGO_URL, UCL_LOGO_URL } from '../constants';
+import { LIGA_LOGO_URL, UCL_LOGO_URL, getCompetitionWeeks } from '../constants';
 
 interface CalendarModalProps {
   isOpen: boolean;
@@ -17,14 +17,14 @@ interface CalendarModalProps {
 const CalendarModal: React.FC<CalendarModalProps> = ({ 
   isOpen, onClose, schedule, userTeamId, teams, currentWeek, currentSeasonYear, onSimulateToWeek
 }) => {
-  // FIX: Extract the starting year dynamically based on the current season string
   const startYear = parseInt(currentSeasonYear.split('/')[0] || '2025', 10);
   const [displayDate, setDisplayDate] = useState(new Date(startYear, 7, 1)); 
 
   const currentWeekDate = useMemo(() => {
-      const match = schedule.find(m => m.week === currentWeek);
-      return match ? new Date(match.date) : new Date(startYear, 7, 1);
-  }, [schedule, currentWeek, startYear]);
+      const { days } = getCompetitionWeeks(currentSeasonYear);
+      const day = days.find(d => d.week === currentWeek);
+      return day ? new Date(`${day.date}T12:00:00Z`) : new Date(startYear, 7, 15);
+  }, [currentWeek, currentSeasonYear, startYear]);
 
   useEffect(() => {
       if (isOpen) setDisplayDate(new Date(currentWeekDate.getFullYear(), currentWeekDate.getMonth(), 1));
@@ -78,7 +78,7 @@ const CalendarModal: React.FC<CalendarModalProps> = ({
                  const opponent = match ? teams.find(t => t.id === (match.homeTeamId === userTeamId ? match.awayTeamId : match.homeTeamId)) : null;
                  const isUCL = match?.competition === 'Champions League', isPlayed = match?.played, isFuture = match && match.week >= currentWeek, isHome = match && match.homeTeamId === userTeamId;
                  const canSimTo = isFuture && !isPlayed;
-                 const isSimCurrentDate = day === currentWeekDate.getDate() && displayDate.getMonth() === currentWeekDate.getMonth();
+                 const isSimCurrentDate = day === currentWeekDate.getDate() && displayDate.getMonth() === currentWeekDate.getMonth() && displayDate.getFullYear() === currentWeekDate.getFullYear();
 
                  return (
                      <div key={idx} className={`bg-slate-900 min-h-[60px] md:min-h-[100px] p-1 md:p-2 relative group border-t border-l border-slate-800 hover:bg-slate-800/50 transition-colors ${isSimCurrentDate ? 'bg-indigo-900/20' : ''}`}>

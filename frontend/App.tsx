@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import confetti from 'canvas-confetti';
-import { generateMasterSchedule, INITIAL_STATS, INITIAL_UCL_STATS, SIMULATION_SCHEDULE, LIGA_LOGO_URL, UCL_LOGO_URL } from './constants';
+import { generateMasterSchedule, INITIAL_STATS, INITIAL_UCL_STATS, LIGA_LOGO_URL, UCL_LOGO_URL, getCompetitionWeeks } from './constants';
 import { Team, Match, SimulationState, SeasonSummary, Competition, ManagerProfile as ManagerProfileType } from './types';
 import TeamSelector from './components/TeamSelector';
 import LeagueTable from './components/LeagueTable';
@@ -46,6 +46,11 @@ const App: React.FC = () => {
     const [seasonId, setSeasonId] = useState<string>(() => crypto.randomUUID());
     const seasonIdRef = useRef(seasonId);
     const lastInitializedProfileId = useRef<string | null>(null);
+
+    const maxWeek = useMemo(() => {
+        if (!currentSeasonYear) return 300;
+        return getCompetitionWeeks(currentSeasonYear).days.length;
+    }, [currentSeasonYear]);
 
     useEffect(() => { seasonIdRef.current = seasonId; }, [seasonId]);
     useEffect(() => { if (isAuthenticated) fetchCurrentUser().then(data => setUserAccount(data)); }, [isAuthenticated]);
@@ -143,14 +148,13 @@ const App: React.FC = () => {
 
     const handleSimulateToWeek = (targetWeek: number) => { setTargetSimWeek(targetWeek); setIsSimulatingFast(true); setIsCalendarOpen(false); };
 
-    const getMatchDate = (week: number) => {
-        const startYear = parseInt(currentSeasonYear.split('/')[0], 10);
-        const entry = SIMULATION_SCHEDULE.find(s => s.week === week);
-        if (!entry) return new Date();
-        const monthStr = entry.date.split('-')[1];
-        const isNextYear = parseInt(monthStr, 10) < 7;
-        const year = isNextYear ? startYear + 1 : startYear;
-        return new Date(`${year}-${monthStr}-${entry.date.split('-')[2]}T12:00:00Z`);
+    const handleSimToNextMatch = () => {
+        const nextMatch = schedule.find(m => m.week > currentWeek && !m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId));
+        if (nextMatch) {
+            handleSimulateToWeek(nextMatch.week);
+        } else {
+            handleSimulateToWeek(maxWeek + 1);
+        }
     };
 
     const getPenaltyResult = () => { const possibleScores = [[5, 4], [5, 3], [4, 3], [4, 2], [3, 1], [3, 2], [6, 5]]; const score = possibleScores[Math.floor(Math.random() * possibleScores.length)]; const homeWins = Math.random() > 0.5; return homeWins ? { home: score[0], away: score[1] } : { home: score[1], away: score[0] }; };
@@ -163,24 +167,40 @@ const App: React.FC = () => {
         if (isPhaseComplete('League Phase') && !hasNextStageGenerated('Playoffs')) {
             const uclTeams = teamsState.filter(t => t.isUCL && t.id !== 'TBD').sort((a, b) => { if (b.uclStats!.points !== a.uclStats!.points) return b.uclStats!.points - a.uclStats!.points; if (b.uclStats!.gd !== a.uclStats!.gd) return b.uclStats!.gd - a.uclStats!.gd; return b.uclStats!.gf - a.uclStats!.gf; });
             const topSeeds = uclTeams.slice(0, 8);
+            
+            const { uclBase, days } = getCompetitionWeeks(currentSeasonYear);
+            const KNOCKOUT_WEEKS = uclBase.slice(8, 17);
+            const getUclDate = (baseWeekIndex: number) => {
+                const bw = KNOCKOUT_WEEKS[baseWeekIndex];
+                const offset = [-1, 0][Math.floor(Math.random() * 2)];
+                const actualWeek = Math.max(1, Math.min(days.length, bw + offset));
+                return { week: actualWeek, date: new Date(`${days.find(d => d.week === actualWeek)?.date || days[0].date}T12:00:00Z`) };
+            };
+
+            const wPO1 = getUclDate(0), wPO2 = getUclDate(1);
+            const wR16_1 = getUclDate(2), wR16_2 = getUclDate(3);
+            const wQF1 = getUclDate(4), wQF2 = getUclDate(5);
+            const wSF1 = getUclDate(6), wSF2 = getUclDate(7);
+            const wF = getUclDate(8);
+
             const playoffsMatches: Match[] = [], r16Matches: Match[] = [], qfMatches: Match[] = [], sfMatches: Match[] = [];
 
             for (let i = 0; i < 8; i++) {
                 const seedHigh = uclTeams[8 + i], seedLow = uclTeams[23 - i];
                 if (seedHigh && seedLow) {
-                    playoffsMatches.push({ id: `UCL-PO-L1-${i}`, week: 30, homeTeamId: seedLow.id, awayTeamId: seedHigh.id, date: getMatchDate(30), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Playoffs', isLeg2: false });
-                    playoffsMatches.push({ id: `UCL-PO-L2-${i}`, week: 32, homeTeamId: seedHigh.id, awayTeamId: seedLow.id, date: getMatchDate(32), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Playoffs', isLeg2: true });
+                    playoffsMatches.push({ id: `UCL-PO-L1-${i}`, week: wPO1.week, homeTeamId: seedLow.id, awayTeamId: seedHigh.id, date: wPO1.date, homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Playoffs', isLeg2: false });
+                    playoffsMatches.push({ id: `UCL-PO-L2-${i}`, week: wPO2.week, homeTeamId: seedHigh.id, awayTeamId: seedLow.id, date: wPO2.date, homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Playoffs', isLeg2: true });
                 }
             }
             [...topSeeds].sort(() => Math.random() - 0.5).forEach((seed, idx) => {
                 const placeholderText = `Winner: ${uclTeams[8 + idx]?.shortName} / ${uclTeams[23 - idx]?.shortName}`;
-                r16Matches.push({ id: `UCL-R16-L1-${idx}`, week: 35, homeTeamId: 'TBD', awayTeamId: seed.id, date: getMatchDate(35), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Round of 16', isLeg2: false, placeholder: placeholderText });
-                r16Matches.push({ id: `UCL-R16-L2-${idx}`, week: 37, homeTeamId: seed.id, awayTeamId: 'TBD', date: getMatchDate(37), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Round of 16', isLeg2: true, placeholder: placeholderText });
+                r16Matches.push({ id: `UCL-R16-L1-${idx}`, week: wR16_1.week, homeTeamId: 'TBD', awayTeamId: seed.id, date: wR16_1.date, homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Round of 16', isLeg2: false, placeholder: placeholderText });
+                r16Matches.push({ id: `UCL-R16-L2-${idx}`, week: wR16_2.week, homeTeamId: seed.id, awayTeamId: 'TBD', date: wR16_2.date, homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Round of 16', isLeg2: true, placeholder: placeholderText });
             });
-            for (let i = 0; i < 4; i++) { qfMatches.push({ id: `UCL-QF-L1-${i}`, week: 41, homeTeamId: 'TBD', awayTeamId: 'TBD', date: getMatchDate(41), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Quarter-finals', isLeg2: false }); qfMatches.push({ id: `UCL-QF-L2-${i}`, week: 43, homeTeamId: 'TBD', awayTeamId: 'TBD', date: getMatchDate(43), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Quarter-finals', isLeg2: true }); }
-            for (let i = 0; i < 2; i++) { sfMatches.push({ id: `UCL-SF-L1-${i}`, week: 47, homeTeamId: 'TBD', awayTeamId: 'TBD', date: getMatchDate(47), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Semi-finals', isLeg2: false }); sfMatches.push({ id: `UCL-SF-L2-${i}`, week: 49, homeTeamId: 'TBD', awayTeamId: 'TBD', date: getMatchDate(49), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Semi-finals', isLeg2: true }); }
+            for (let i = 0; i < 4; i++) { qfMatches.push({ id: `UCL-QF-L1-${i}`, week: wQF1.week, homeTeamId: 'TBD', awayTeamId: 'TBD', date: wQF1.date, homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Quarter-finals', isLeg2: false }); qfMatches.push({ id: `UCL-QF-L2-${i}`, week: wQF2.week, homeTeamId: 'TBD', awayTeamId: 'TBD', date: wQF2.date, homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Quarter-finals', isLeg2: true }); }
+            for (let i = 0; i < 2; i++) { sfMatches.push({ id: `UCL-SF-L1-${i}`, week: wSF1.week, homeTeamId: 'TBD', awayTeamId: 'TBD', date: wSF1.date, homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Semi-finals', isLeg2: false }); sfMatches.push({ id: `UCL-SF-L2-${i}`, week: wSF2.week, homeTeamId: 'TBD', awayTeamId: 'TBD', date: wSF2.date, homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Semi-finals', isLeg2: true }); }
 
-            updatedSchedule.push(...playoffsMatches, ...r16Matches, ...qfMatches, ...sfMatches, { id: `UCL-FINAL`, week: 55, homeTeamId: 'TBD', awayTeamId: 'TBD', date: getMatchDate(55), homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Final', isLeg2: false });
+            updatedSchedule.push(...playoffsMatches, ...r16Matches, ...qfMatches, ...sfMatches, { id: `UCL-FINAL`, week: wF.week, homeTeamId: 'TBD', awayTeamId: 'TBD', date: wF.date, homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Final', isLeg2: false });
         }
 
         const processStageWinners = (currentStage: string) => {
@@ -239,51 +259,48 @@ const App: React.FC = () => {
     };
 
     const simulateWeekLogic = useCallback((userResult: { matchId: string, homeScore: number, awayScore: number } | null, targetState: SimulationState | 'match_recap' | null = null) => {
-        if (currentWeek > 55) return;
-        let procWeek = currentWeek, nextTeams = [...teams], nextSchedule = [...schedule];
-        while (procWeek <= 55) {
-            const matchesToPlay = nextSchedule.filter(m => m.week === procWeek && !m.played);
-            if (matchesToPlay.length > 0) {
-                const simulatedResults = matchesToPlay.map(match => {
-                    if (userResult && match.id === userResult.matchId && procWeek === currentWeek) return { ...match, homeScore: userResult.homeScore, awayScore: userResult.awayScore, played: true };
-                    const home = nextTeams.find(t => t.id === match.homeTeamId), away = nextTeams.find(t => t.id === match.awayTeamId);
-                    return (!home || !away || home.id === 'TBD' || away.id === 'TBD') ? match : calculateMatchResult(match, home, away);
-                });
-                nextSchedule = nextSchedule.map(m => simulatedResults.find(r => r.id === m.id) || m);
-                const tempTeams = [...nextTeams];
-                simulatedResults.forEach(match => {
-                    if (!match.played) return;
-                    const homeIdx = tempTeams.findIndex(t => t.id === match.homeTeamId), awayIdx = tempTeams.findIndex(t => t.id === match.awayTeamId);
-                    if (homeIdx === -1 || awayIdx === -1) return;
-                    const home = { ...tempTeams[homeIdx] }, away = { ...tempTeams[awayIdx] };
-                    const updateStatObj = (stats: any, hS: number, aS: number) => {
-                        stats.played += 1; stats.gf += hS; stats.ga += aS; stats.gd = stats.gf - stats.ga;
-                        if (hS > aS) { stats.won++; stats.points += 3; } else if (hS < aS) { stats.lost++; } else { stats.drawn++; stats.points += 1; }
-                    };
-                    if (match.competition === 'La Liga') {
-                        home.stats = { ...home.stats, form: [...home.stats.form] }; away.stats = { ...away.stats, form: [...away.stats.form] };
-                        updateStatObj(home.stats, match.homeScore!, match.awayScore!);
-                        const hRes = match.homeScore! > match.awayScore! ? 'W' : match.homeScore! === match.awayScore! ? 'D' : 'L';
-                        const aRes = match.homeScore! < match.awayScore! ? 'W' : match.homeScore! === match.awayScore! ? 'D' : 'L';
-                        home.stats.form = [hRes as any, ...home.stats.form].slice(0, 5); away.stats.form = [aRes as any, ...away.stats.form].slice(0, 5);
-                        updateStatObj(away.stats, match.awayScore!, match.homeScore!);
-                    } else if (match.competition === 'Champions League' && match.stage === 'League Phase') {
-                        if (home.uclStats) { home.uclStats = { ...home.uclStats }; updateStatObj(home.uclStats, match.homeScore!, match.awayScore!); }
-                        if (away.uclStats) { away.uclStats = { ...away.uclStats }; updateStatObj(away.uclStats, match.awayScore!, match.homeScore!); }
-                    }
-                    tempTeams[homeIdx] = home; tempTeams[awayIdx] = away;
-                });
-                nextTeams = tempTeams; nextSchedule = resolveUCLKnockouts(nextSchedule, nextTeams);
-            }
-            const nextW = procWeek + 1;
-            if (nextW > 55) { procWeek = nextW; break; }
-            const matchesNext = nextSchedule.filter(m => m.week === nextW);
-            if (matchesNext.length === 0 || matchesNext.some(m => m.homeTeamId === userTeamId || m.awayTeamId === userTeamId)) { procWeek = nextW; break; }
-            procWeek = nextW;
+        if (currentWeek > maxWeek) return;
+        
+        let nextTeams = [...teams], nextSchedule = [...schedule];
+        const matchesToPlay = nextSchedule.filter(m => m.week === currentWeek && !m.played);
+        
+        if (matchesToPlay.length > 0) {
+            const simulatedResults = matchesToPlay.map(match => {
+                if (userResult && match.id === userResult.matchId) return { ...match, homeScore: userResult.homeScore, awayScore: userResult.awayScore, played: true };
+                const home = nextTeams.find(t => t.id === match.homeTeamId), away = nextTeams.find(t => t.id === match.awayTeamId);
+                return (!home || !away || home.id === 'TBD' || away.id === 'TBD') ? match : calculateMatchResult(match, home, away);
+            });
+            nextSchedule = nextSchedule.map(m => simulatedResults.find(r => r.id === m.id) || m);
+            const tempTeams = [...nextTeams];
+            simulatedResults.forEach(match => {
+                if (!match.played) return;
+                const homeIdx = tempTeams.findIndex(t => t.id === match.homeTeamId), awayIdx = tempTeams.findIndex(t => t.id === match.awayTeamId);
+                if (homeIdx === -1 || awayIdx === -1) return;
+                const home = { ...tempTeams[homeIdx] }, away = { ...tempTeams[awayIdx] };
+                const updateStatObj = (stats: any, hS: number, aS: number) => {
+                    stats.played += 1; stats.gf += hS; stats.ga += aS; stats.gd = stats.gf - stats.ga;
+                    if (hS > aS) { stats.won++; stats.points += 3; } else if (hS < aS) { stats.lost++; } else { stats.drawn++; stats.points += 1; }
+                };
+                if (match.competition === 'La Liga') {
+                    home.stats = { ...home.stats, form: [...home.stats.form] }; away.stats = { ...away.stats, form: [...away.stats.form] };
+                    updateStatObj(home.stats, match.homeScore!, match.awayScore!);
+                    const hRes = match.homeScore! > match.awayScore! ? 'W' : match.homeScore! === match.awayScore! ? 'D' : 'L';
+                    const aRes = match.homeScore! < match.awayScore! ? 'W' : match.homeScore! === match.awayScore! ? 'D' : 'L';
+                    home.stats.form = [hRes as any, ...home.stats.form].slice(0, 5); away.stats.form = [aRes as any, ...away.stats.form].slice(0, 5);
+                    updateStatObj(away.stats, match.awayScore!, match.homeScore!);
+                } else if (match.competition === 'Champions League' && match.stage === 'League Phase') {
+                    if (home.uclStats) { home.uclStats = { ...home.uclStats }; updateStatObj(home.uclStats, match.homeScore!, match.awayScore!); }
+                    if (away.uclStats) { away.uclStats = { ...away.uclStats }; updateStatObj(away.uclStats, match.awayScore!, match.homeScore!); }
+                }
+                tempTeams[homeIdx] = home; tempTeams[awayIdx] = away;
+            });
+            nextTeams = tempTeams; nextSchedule = resolveUCLKnockouts(nextSchedule, nextTeams);
         }
-        setTeams(nextTeams); setSchedule(nextSchedule); setCurrentWeek(procWeek); setSimState(targetState || 'ready');
-        performAutoSave(nextTeams, nextSchedule, procWeek);
-    }, [currentWeek, schedule, teams, userTeamId]);
+        
+        const nextW = currentWeek + 1;
+        setTeams(nextTeams); setSchedule(nextSchedule); setCurrentWeek(nextW); setSimState(targetState || 'ready');
+        performAutoSave(nextTeams, nextSchedule, nextW);
+    }, [currentWeek, schedule, teams, userTeamId, currentSeasonYear, maxWeek]);
 
     const performAutoSave = async (newTeams: Team[], newSchedule: Match[], newWeek: number) => {
         if (activeProfile && userTeamId) saveGame(activeProfile.id, { currentWeek: newWeek, userTeamId: userTeamId, schedule: newSchedule, teams: newTeams });
@@ -300,12 +317,11 @@ const App: React.FC = () => {
     useEffect(() => {
         let timer: ReturnType<typeof setTimeout>;
         if (isSimulatingFast) {
-            const maxWeek = schedule.reduce((max, m) => Math.max(max, m.week), 55);
-            if (targetSimWeek ? currentWeek < targetSimWeek : currentWeek <= maxWeek) timer = setTimeout(() => simulateWeekLogic(null), 80);
+            if (targetSimWeek ? currentWeek < targetSimWeek : currentWeek <= maxWeek) timer = setTimeout(() => simulateWeekLogic(null), 30);
             else { setIsSimulatingFast(false); setTargetSimWeek(null); }
         }
         return () => clearTimeout(timer);
-    }, [isSimulatingFast, currentWeek, simulateWeekLogic, schedule, targetSimWeek]);
+    }, [isSimulatingFast, currentWeek, simulateWeekLogic, targetSimWeek, maxWeek]);
 
     const handleConcludeSeason = async () => {
         if (!userTeamId || !activeProfile) return;
@@ -327,7 +343,6 @@ const App: React.FC = () => {
                 else { const uclMatches = schedule.filter(m => m.competition === 'Champions League' && m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId)); const lastMatch = uclMatches[uclMatches.length - 1]; if (lastMatch) uclResultString = lastMatch.stage || ''; }
             }
 
-            // --- DEEP STATS EXTRACTION ---
             const userMatches = schedule.filter(m => m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId));
             let wins = 0, draws = 0, losses = 0;
             let biggestWinDiff = -1, biggestLossDiff = -1;
@@ -339,7 +354,7 @@ const App: React.FC = () => {
                 const conceded = isHome ? m.awayScore! : m.homeScore!;
                 const oppId = isHome ? m.awayTeamId : m.homeTeamId;
                 const oppTeam = teams.find(t => t.id === oppId);
-                const oppName = oppTeam ? oppTeam.name : oppId; // FORCE FULL NAME
+                const oppName = oppTeam ? oppTeam.name : oppId;
 
                 if (scored > conceded) {
                     wins++;
@@ -402,7 +417,8 @@ const App: React.FC = () => {
         return uniqueWeeks.map(week => {
             const matches = playedInComp.filter(m => m.week === week);
             if (userTeamId) matches.sort((a, b) => (a.homeTeamId === userTeamId || a.awayTeamId === userTeamId) ? -1 : 1);
-            let label = resultsComp === 'La Liga' ? `Matchday ${uniqueWeeks.indexOf(week) + 1}` : (matches[0]?.stage === 'League Phase' ? `League Phase Game ${uniqueWeeks.indexOf(week) + 1}` : matches[0]?.stage || `Week ${week}`);
+            const dateStr = new Date(matches[0]?.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            let label = resultsComp === 'La Liga' ? dateStr : (matches[0]?.stage === 'League Phase' ? `League Phase - ${dateStr}` : `${matches[0]?.stage} - ${dateStr}`);
             return { week, matches, label };
         });
     }, [schedule, resultsComp, userTeamId]);
@@ -410,12 +426,33 @@ const App: React.FC = () => {
     useEffect(() => { setResultsIndex(resultGroups.length > 0 ? resultGroups.length - 1 : 0); }, [resultGroups.length, resultsComp]);
 
     const currentResultGroup = resultGroups[resultsIndex];
+
+    const currentDayObj = useMemo(() => {
+        if (!currentSeasonYear) return undefined;
+        const { days } = getCompetitionWeeks(currentSeasonYear);
+        return days.find(d => d.week === currentWeek) || days[days.length - 1];
+    }, [currentSeasonYear, currentWeek]);
+
+    const formattedCurrentDate = useMemo(() => {
+        if (!currentDayObj) return "Unknown Date";
+        const d = new Date(`${currentDayObj.date}T12:00:00Z`);
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const dayName = d.toLocaleDateString('en-US', { weekday: 'long' });
+        return `${mm}.${dd} ${dayName}`;
+    }, [currentDayObj]);
+
+    const nextUserMatch = useMemo(() => {
+        if (!userTeamId) return undefined;
+        return schedule.find(m => m.week > currentWeek && !m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId));
+    }, [schedule, currentWeek, userTeamId]);
+
     const userMatch = useMemo(() => { if (!userTeamId) return undefined; return schedule.find(m => m.week === currentWeek && !m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId)); }, [schedule, currentWeek, userTeamId]);
     const userHome = useMemo(() => userMatch ? teams.find(t => t.id === userMatch.homeTeamId) : undefined, [userMatch, teams]);
     const userAway = useMemo(() => userMatch ? teams.find(t => t.id === userMatch.awayTeamId) : undefined, [userMatch, teams]);
     const isUCLWeek = useMemo(() => { if (simState === 'match_recap' && lastSimulatedMatchId) { const lastMatch = schedule.find(m => m.id === lastSimulatedMatchId); if (lastMatch) return lastMatch.competition === 'Champions League'; } if (userMatch) return userMatch.competition === 'Champions League'; return schedule.some(m => m.week === currentWeek && m.competition === 'Champions League'); }, [userMatch, schedule, currentWeek, simState, lastSimulatedMatchId]);
     const isSeasonFinished = simState === 'season_over';
-    const isScheduleComplete = currentWeek > 55;
+    const isScheduleComplete = currentWeek > maxWeek;
     const lastSimMatch = useMemo(() => lastSimulatedMatchId ? schedule.find(m => m.id === lastSimulatedMatchId) : undefined, [lastSimulatedMatchId, schedule]);
     const lastSimHome = useMemo(() => lastSimMatch ? teams.find(t => t.id === lastSimMatch.homeTeamId) : undefined, [lastSimMatch, teams]);
     const lastSimAway = useMemo(() => lastSimMatch ? teams.find(t => t.id === lastSimMatch.awayTeamId) : undefined, [lastSimMatch, teams]);
@@ -429,7 +466,6 @@ const App: React.FC = () => {
     return (
         <div className={`min-h-screen text-slate-100 p-3 md:p-8 transition-colors duration-500 ${isUCLWeek ? 'bg-slate-950' : 'bg-slate-900'}`}>
 
-            {/* MANAGER PROFILE - Passed Current Live Stats Arrays */}
             <ManagerProfile
                 isOpen={isProfileOpen}
                 onClose={() => setIsProfileOpen(false)}
@@ -448,11 +484,11 @@ const App: React.FC = () => {
             <header className={`flex flex-col md:flex-row justify-between items-center mb-6 md:mb-8 p-4 gap-4 rounded-xl border shadow-md transition-colors ${isUCLWeek ? 'bg-blue-950/50 border-blue-900' : 'bg-slate-800 border-slate-700'}`}>
                 <div className="flex items-center gap-4 w-full md:w-auto">
                     <div className="flex items-center justify-center w-12 h-12 shrink-0">{isUCLWeek ? (UCL_LOGO_URL ? <div className="bg-white rounded-lg p-1 w-10 h-10 flex items-center justify-center shadow-sm"><img src={UCL_LOGO_URL} alt="UCL" className="w-full h-full object-contain" /></div> : <Globe size={24} className="text-blue-400" />) : (LIGA_LOGO_URL ? <img src={LIGA_LOGO_URL} alt="La Liga" className="w-10 h-10 object-contain" /> : <Trophy size={24} className="text-[#FF2B44]" />)}</div>
-                    <div className="flex-1"><h1 className="text-lg md:text-xl font-bold">{isUCLWeek ? 'Champions League Matchday' : 'La Liga Matchday'}</h1><p className={`text-xs ${isUCLWeek ? 'text-blue-300' : 'text-slate-400'}`}>Season {currentSeasonYear}</p></div>
+                    <div className="flex-1"><h1 className="text-lg md:text-xl font-bold">{isUCLWeek ? 'Champions League Action' : 'La Liga Action'}</h1><p className={`text-xs ${isUCLWeek ? 'text-blue-300' : 'text-slate-400'}`}>Season {currentSeasonYear}</p></div>
                 </div>
                 <div className="flex items-center gap-2 md:gap-4 w-full md:w-auto justify-end">
                     <div className="flex items-center bg-slate-900 rounded-lg border border-slate-700 font-mono font-bold text-white shadow-inner overflow-hidden max-w-[200px] md:max-w-none">
-                        <div className="px-3 py-2 text-xs md:text-sm truncate hidden sm:block">{userMatch ? `Upcoming: ${(userHome?.id === userTeamId ? userAway : userHome)?.name} ${userHome?.id === userTeamId ? '(H)' : '(A)'} (${userMatch.competition === 'Champions League' ? 'UCL' : 'Liga'})` : (isSeasonFinished || isScheduleComplete) ? "End of Season" : "No Match"}</div>
+                        <div className="px-3 py-2 text-xs md:text-sm truncate hidden sm:block">{userMatch ? `Upcoming: ${(userHome?.id === userTeamId ? userAway : userHome)?.name} ${userHome?.id === userTeamId ? '(H)' : '(A)'} (${userMatch.competition === 'Champions League' ? 'UCL' : 'Liga'})` : (isSeasonFinished || isScheduleComplete) ? "End of Season" : "No Match Today"}</div>
                         <button onClick={() => setIsCalendarOpen(true)} className="bg-slate-800 hover:bg-slate-700 p-2 h-full border-l border-slate-700 transition-colors text-slate-400 hover:text-white"><CalendarDays size={18} /></button>
                     </div>
 
@@ -489,16 +525,101 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="flex flex-col gap-6 order-1 lg:order-2">
-                    <div className={`p-4 md:p-6 rounded-xl border shadow-lg ${isUCLWeek ? 'bg-blue-950 border-blue-900' : 'bg-slate-800 border-slate-700'}`}>
-                        <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><Calendar size={18} className="text-blue-400" /> Action Center</h2>
-                        {simState === 'season_over' ? (
-                            <div className="grid grid-cols-1 gap-3"><h3 className="text-slate-400 text-sm font-bold uppercase mb-1">Contract Options</h3><button onClick={() => handleSeasonTransition(true)} className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 px-4 rounded-xl shadow-lg transition-all"><Briefcase size={20} /> Renew Contract</button><button onClick={() => handleSeasonTransition(false)} className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold py-4 px-4 rounded-xl border border-slate-600 transition-all"><Search size={20} /> Resign</button></div>
-                        ) : simState === 'match_recap' && lastSimMatch && lastSimHome && lastSimAway ? (
-                            <div className="flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-300"><div className="mb-2 p-4 bg-slate-900 rounded-lg border border-slate-700 shadow-xl"><div className="text-center text-xs mb-2 uppercase tracking-wide font-bold text-green-400">Match Finished</div><div className="flex items-center justify-between"><div className="text-center w-1/3 flex flex-col items-center">{lastSimHome.logoUrl ? <img src={lastSimHome.logoUrl} className="w-12 h-12 mb-2 object-contain" /> : <div className="w-12 h-12 rounded-full mb-2" style={{ backgroundColor: lastSimHome.primaryColor }}></div>}<div className="font-bold text-sm md:text-lg leading-tight truncate w-full">{lastSimHome.shortName}</div></div><div className="text-2xl md:text-3xl font-mono font-bold text-white bg-slate-800 px-3 py-1 rounded border border-slate-700">{lastSimMatch.homeScore} - {lastSimMatch.awayScore}</div><div className="text-center w-1/3 flex flex-col items-center">{lastSimAway.logoUrl ? <img src={lastSimAway.logoUrl} className="w-12 h-12 mb-2 object-contain" /> : <div className="w-12 h-12 rounded-full mb-2" style={{ backgroundColor: lastSimAway.primaryColor }}></div>}<div className="font-bold text-sm md:text-lg leading-tight truncate w-full">{lastSimAway.shortName}</div></div></div></div><button onClick={() => setSimState('ready')} className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 px-4 rounded-xl transition-all shadow-lg active:scale-95">Continue <ArrowRight size={18} /></button></div>
-                        ) : (
-                            <><div className="mb-6 p-4 bg-slate-900 rounded-lg border border-slate-700">{userMatch ? <><div className={`text-center text-xs mb-2 uppercase tracking-wide font-bold ${isUCLWeek ? 'text-blue-400' : 'text-slate-500'}`}>{userMatch.competition}</div><div className="flex items-center justify-between"><div className="text-center w-1/3 flex flex-col items-center">{userHome?.logoUrl ? <img src={userHome.logoUrl} className="w-10 h-10 mb-2 object-contain" /> : null}<div className="font-bold text-sm md:text-lg leading-tight truncate w-full">{userHome?.name}</div><div className="text-xs text-slate-400">Home</div></div><div className="text-lg md:text-xl font-bold text-slate-600">VS</div><div className="text-center w-1/3 flex flex-col items-center">{userAway?.logoUrl ? <img src={userAway.logoUrl} className="w-10 h-10 mb-2 object-contain" /> : null}<div className="font-bold text-sm md:text-lg leading-tight truncate w-full">{userAway?.name}</div><div className="text-xs text-slate-400">Away</div></div></div></> : isScheduleComplete ? <div className="mb-6 p-4 bg-emerald-900/30 rounded-lg border border-emerald-500/30 flex flex-col items-center text-center"><CheckCircle className="w-8 h-8 text-emerald-400 mb-2" /><div className="font-bold text-emerald-100">Schedule Complete</div><div className="text-xs text-emerald-200/70 mt-1">Ready to finalize season</div></div> : null}</div><div className="grid grid-cols-2 gap-3">{isScheduleComplete ? <button onClick={handleConcludeSeason} className="col-span-2 flex items-center justify-center gap-2 bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-4 px-4 rounded-lg shadow-lg animate-pulse"><Trophy size={20} /> Conclude Season</button> : <><button onClick={handlePlayVisualMatch} disabled={isSimulatingFast || !userMatch} className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white font-bold py-3 px-4 rounded-lg shadow-lg text-sm md:text-base"><Play size={18} fill="currentColor" /> Play</button><button onClick={handleQuickSimWeek} disabled={isSimulatingFast} className="flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 text-white font-bold py-3 px-4 rounded-lg border border-slate-600 text-sm md:text-base"><FastForward size={18} /> Quick Sim</button><button onClick={toggleFastSim} className={`col-span-2 flex items-center justify-center gap-2 font-bold py-3 px-4 rounded-lg text-sm md:text-base ${isSimulatingFast ? 'bg-red-500 hover:bg-red-400 text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-600'}`}>{isSimulatingFast ? <><Pause size={18} fill="currentColor" /> Stop Sim</> : <><FastForward size={18} /> Sim Season</>}</button></>}</div></>
+                    <div className={`p-4 md:p-6 rounded-xl border shadow-lg flex flex-col justify-between ${isUCLWeek ? 'bg-blue-950 border-blue-900' : 'bg-slate-800 border-slate-700'}`}>
+                        <div>
+                            <div className="flex justify-between items-start mb-4">
+                                <h2 className="text-lg font-bold flex items-center gap-2"><Calendar size={18} className="text-blue-400" /> Action Center</h2>
+                                {simState !== 'season_over' && (
+                                    <div className="text-xs md:text-sm font-mono font-bold text-slate-300 bg-slate-900/80 px-2 md:px-3 py-1.5 rounded-lg border border-slate-700 shadow-inner">
+                                        {formattedCurrentDate}
+                                    </div>
+                                )}
+                            </div>
+                            
+                            {simState === 'season_over' ? (
+                                <div className="grid grid-cols-1 gap-3 mb-6"><h3 className="text-slate-400 text-sm font-bold uppercase mb-1">Contract Options</h3><button onClick={() => handleSeasonTransition(true)} className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 px-4 rounded-xl shadow-lg transition-all"><Briefcase size={20} /> Renew Contract</button><button onClick={() => handleSeasonTransition(false)} className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold py-4 px-4 rounded-xl border border-slate-600 transition-all"><Search size={20} /> Resign</button></div>
+                            ) : simState === 'match_recap' && lastSimMatch && lastSimHome && lastSimAway ? (
+                                <div className="flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-300 mb-6"><div className="mb-2 p-4 bg-slate-900 rounded-lg border border-slate-700 shadow-xl"><div className="text-center text-xs mb-2 uppercase tracking-wide font-bold text-green-400">Match Finished</div><div className="flex items-center justify-between"><div className="text-center w-1/3 flex flex-col items-center">{lastSimHome.logoUrl ? <img src={lastSimHome.logoUrl} className="w-12 h-12 mb-2 object-contain" /> : <div className="w-12 h-12 rounded-full mb-2" style={{ backgroundColor: lastSimHome.primaryColor }}></div>}<div className="font-bold text-sm md:text-lg leading-tight truncate w-full">{lastSimHome.shortName}</div></div><div className="text-2xl md:text-3xl font-mono font-bold text-white bg-slate-800 px-3 py-1 rounded border border-slate-700">{lastSimMatch.homeScore} - {lastSimMatch.awayScore}</div><div className="text-center w-1/3 flex flex-col items-center">{lastSimAway.logoUrl ? <img src={lastSimAway.logoUrl} className="w-12 h-12 mb-2 object-contain" /> : <div className="w-12 h-12 rounded-full mb-2" style={{ backgroundColor: lastSimAway.primaryColor }}></div>}<div className="font-bold text-sm md:text-lg leading-tight truncate w-full">{lastSimAway.shortName}</div></div></div></div><button onClick={() => setSimState('ready')} className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 px-4 rounded-xl transition-all shadow-lg active:scale-95">Continue <ArrowRight size={18} /></button></div>
+                            ) : (
+                                <div className="mb-6 p-4 bg-slate-900 rounded-lg border border-slate-700">
+                                    {userMatch ? (
+                                        <>
+                                            <div className={`text-center text-xs mb-2 uppercase tracking-wide font-bold ${isUCLWeek ? 'text-blue-400' : 'text-slate-500'}`}>{userMatch.competition}</div>
+                                            <div className="flex items-center justify-between">
+                                                <div className="text-center w-1/3 flex flex-col items-center">{userHome?.logoUrl ? <img src={userHome.logoUrl} className="w-10 h-10 mb-2 object-contain" /> : null}<div className="font-bold text-sm md:text-lg leading-tight truncate w-full">{userHome?.name}</div><div className="text-xs text-slate-400">Home</div></div>
+                                                <div className="text-lg md:text-xl font-bold text-slate-600">VS</div>
+                                                <div className="text-center w-1/3 flex flex-col items-center">{userAway?.logoUrl ? <img src={userAway.logoUrl} className="w-10 h-10 mb-2 object-contain" /> : null}<div className="font-bold text-sm md:text-lg leading-tight truncate w-full">{userAway?.name}</div><div className="text-xs text-slate-400">Away</div></div>
+                                            </div>
+                                        </>
+                                    ) : isScheduleComplete ? (
+                                        <div className="flex flex-col items-center text-center">
+                                            <CheckCircle className="w-8 h-8 text-emerald-400 mb-2" />
+                                            <div className="font-bold text-emerald-100">Schedule Complete</div>
+                                            <div className="text-xs text-emerald-200/70 mt-1">Ready to finalize season</div>
+                                        </div>
+                                    ) : (
+                                        <div className="flex flex-col items-center text-center p-2">
+                                            <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center mb-3 border border-slate-700 shadow-inner">
+                                                <Calendar size={24} className="text-slate-400" />
+                                            </div>
+                                            <div className="font-bold text-slate-300 text-lg">Training & Rest</div>
+                                            <div className="text-xs text-slate-500 uppercase tracking-wider mt-1">No match today</div>
+                                            
+                                            {nextUserMatch && (() => {
+                                                const oppId = nextUserMatch.homeTeamId === userTeamId ? nextUserMatch.awayTeamId : nextUserMatch.homeTeamId;
+                                                const opp = teams.find(t => t.id === oppId);
+                                                const d = typeof nextUserMatch.date === 'string' ? new Date(nextUserMatch.date) : nextUserMatch.date;
+                                                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                                                const dd = String(d.getDate()).padStart(2, '0');
+                                                const dayName = d.toLocaleDateString('en-US', { weekday: 'long' });
+                                                
+                                                return (
+                                                    <div className="mt-5 w-full bg-slate-900/80 rounded-lg border border-slate-700 p-3 shadow-sm">
+                                                        <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1 font-bold">Next Match</div>
+                                                        <div className="font-mono font-bold text-indigo-300 text-sm">{mm}.{dd} {dayName}</div>
+                                                        <div className="flex items-center justify-center gap-2 mt-2">
+                                                            {opp?.logoUrl ? <img src={opp.logoUrl} className="w-4 h-4 object-contain" /> : <div className="w-3 h-3 rounded-full" style={{backgroundColor: opp?.primaryColor || '#94a3b8'}}></div>}
+                                                            <span className="text-white font-bold text-sm truncate max-w-[120px]">{opp?.name}</span>
+                                                            <span className="text-xs text-slate-400 font-mono">({nextUserMatch.homeTeamId === userTeamId ? 'H' : 'A'})</span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        {simState !== 'season_over' && simState !== 'match_recap' && (
+                            <div className="grid grid-cols-2 gap-3 mt-auto">
+                                {isScheduleComplete ? (
+                                    <button onClick={handleConcludeSeason} className="col-span-2 flex items-center justify-center gap-2 bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-4 px-4 rounded-lg shadow-lg animate-pulse">
+                                        <Trophy size={20} /> Conclude Season
+                                    </button>
+                                ) : (
+                                    <>
+                                        {userMatch ? (
+                                            <button onClick={handlePlayVisualMatch} disabled={isSimulatingFast} className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white font-bold py-3 px-4 rounded-lg shadow-lg text-sm md:text-base">
+                                                <Play size={18} fill="currentColor" /> Play
+                                            </button>
+                                        ) : (
+                                            <button onClick={handleSimToNextMatch} disabled={isSimulatingFast} className="flex items-center justify-center gap-2 bg-indigo-700 hover:bg-indigo-600 disabled:bg-slate-800 text-white font-bold py-3 px-4 rounded-lg border border-indigo-600 text-sm md:text-base">
+                                                <CalendarDays size={18} /> Sim to Match
+                                            </button>
+                                        )}
+                                        <button onClick={handleQuickSimWeek} disabled={isSimulatingFast} className="flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 text-white font-bold py-3 px-4 rounded-lg border border-slate-600 text-sm md:text-base">
+                                            <FastForward size={18} /> {userMatch ? 'Sim Match' : 'Sim Day'}
+                                        </button>
+                                        <button onClick={toggleFastSim} className={`col-span-2 flex items-center justify-center gap-2 font-bold py-3 px-4 rounded-lg text-sm md:text-base ${isSimulatingFast ? 'bg-red-500 hover:bg-red-400 text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-600'}`}>
+                                            {isSimulatingFast ? <><Pause size={18} fill="currentColor" /> Stop Sim</> : <><FastForward size={18} /> Sim Season</>}
+                                        </button>
+                                    </>
+                                )}
+                            </div>
                         )}
                     </div>
+                    
                     <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden flex-1 min-h-[300px] flex flex-col">
                         <div className="p-4 bg-slate-900/50 border-b border-slate-700 space-y-3"><div className="relative"><select value={resultsComp} onChange={(e) => setResultsComp(e.target.value as Competition)} className="w-full bg-slate-800 border border-slate-600 text-white text-sm font-bold rounded-lg p-2.5 outline-none pl-10 appearance-none"><option value="La Liga">La Liga</option><option value="Champions League">Champions League</option></select><div className="absolute left-3 top-3 pointer-events-none flex items-center justify-center w-5 h-5">{resultsComp === 'La Liga' && LIGA_LOGO_URL ? <img src={LIGA_LOGO_URL} className="w-4 h-4 object-contain" /> : null}{resultsComp === 'Champions League' && UCL_LOGO_URL ? <div className="bg-slate-200 rounded-full p-0.5 w-4 h-4 flex items-center justify-center"><img src={UCL_LOGO_URL} className="w-3 h-3 object-contain" /></div> : null}</div><ChevronDown className="absolute right-3 top-3 text-slate-400" size={16} /></div><div className="flex items-center justify-between bg-slate-700/30 rounded-lg p-1"><button onClick={() => setResultsIndex((prev: number) => Math.max(0, prev - 1))} className="p-1.5 hover:bg-slate-700 rounded disabled:opacity-30" disabled={resultsIndex <= 0}><ChevronLeft size={16} /></button><h3 className="font-bold text-xs uppercase">{currentResultGroup?.label || 'No Matches'}</h3><button onClick={() => setResultsIndex((prev: number) => Math.min(resultGroups.length - 1, prev + 1))} className="p-1.5 hover:bg-slate-700 rounded disabled:opacity-30" disabled={resultsIndex >= resultGroups.length - 1}><ChevronRight size={16} /></button></div></div>
                         <div className="flex-1 overflow-y-auto max-h-[400px] divide-y divide-slate-700/50">{currentResultGroup?.matches.length ? currentResultGroup.matches.map(match => { const h = teams.find(t => t.id === match.homeTeamId), a = teams.find(t => t.id === match.awayTeamId); if (!h || !a) return null; return (<div key={match.id} className={`p-3 flex justify-between items-center text-sm ${(h.id === userTeamId || a.id === userTeamId) ? (match.competition === 'Champions League' ? 'bg-blue-900/20 border-l-2 border-blue-500' : 'bg-indigo-900/20 border-l-2 border-indigo-500') : 'bg-slate-800/10'}`}><div className="flex-1 text-right font-medium text-slate-300 flex items-center justify-end gap-2 min-w-0"><span className={`truncate ${h.id === userTeamId ? 'text-white font-bold' : ''}`}>{h.name}</span>{h.logoUrl ? <img src={h.logoUrl} className="w-5 h-5 object-contain shrink-0" /> : <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: h.primaryColor }}></div>}</div><div className="px-3 font-bold text-white bg-slate-800/50 py-1 rounded mx-2 min-w-[45px] text-center text-xs">{match.homeScore} - {match.awayScore}</div><div className="flex-1 text-left font-medium text-slate-300 flex items-center gap-2 min-w-0">{a.logoUrl ? <img src={a.logoUrl} className="w-5 h-5 object-contain shrink-0" /> : <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: a.primaryColor }}></div>}<span className={`truncate ${a.id === userTeamId ? 'text-white font-bold' : ''}`}>{a.name}</span></div></div>); }) : <div className="p-8 text-center text-slate-500 italic">No matches...</div>}</div>
