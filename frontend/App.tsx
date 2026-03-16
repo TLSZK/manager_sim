@@ -16,7 +16,18 @@ import { Play, FastForward, Trophy, Calendar, CheckCircle, ChevronLeft, ChevronR
 import { getBoardFeedback } from './services/geminiService';
 import { fetchTeams, saveSeasonResult, updateProfileName, fetchSavedGame, saveGame, fetchCurrentUser } from './services/api';
 
-const TBD_TEAM: Team = { id: 'TBD', name: 'TBD', shortName: 'TBD', tier: 0, strength: 0, primaryColor: '#334155', secondaryColor: '#94a3b8', roster: [], formation: '4-3-3', stats: { ...INITIAL_STATS, form: [] } };
+const TBD_TEAM: Team = { 
+    id: 'TBD', 
+    name: 'TBD', 
+    shortName: 'TBD', 
+    tier: 0, 
+    strength: 0, 
+    primaryColor: '#334155', 
+    secondaryColor: '#94a3b8', 
+    roster: [], 
+    formation: '4-3-3', 
+    stats: { ...INITIAL_STATS, form: [] } 
+};
 
 const App: React.FC = () => {
     const [isAuthenticated, setIsAuthenticated] = useState<boolean>(!!localStorage.getItem('auth_token'));
@@ -57,8 +68,15 @@ const App: React.FC = () => {
         return getCompetitionWeeks(currentSeasonYear).days.length;
     }, [currentSeasonYear]);
 
-    useEffect(() => { seasonIdRef.current = seasonId; }, [seasonId]);
-    useEffect(() => { if (isAuthenticated) fetchCurrentUser().then(data => setUserAccount(data)); }, [isAuthenticated]);
+    useEffect(() => { 
+        seasonIdRef.current = seasonId; 
+    }, [seasonId]);
+
+    useEffect(() => { 
+        if (isAuthenticated) {
+            fetchCurrentUser().then(data => setUserAccount(data)); 
+        }
+    }, [isAuthenticated]);
 
     useEffect(() => {
         if (userTeamId) {
@@ -70,7 +88,10 @@ const App: React.FC = () => {
                 const nextMatch = schedule.find(m => m.week === currentWeek && !m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId));
                 if (nextMatch) targetComp = nextMatch.competition;
             }
-            if (targetComp) { setActiveTableTab(targetComp); setResultsComp(targetComp); }
+            if (targetComp) { 
+                setActiveTableTab(targetComp); 
+                setResultsComp(targetComp); 
+            }
         }
     }, [currentWeek, userTeamId, schedule, simState, lastSimulatedMatchId]);
 
@@ -88,27 +109,38 @@ const App: React.FC = () => {
                     const startYear = firstDate.getFullYear();
                     setCurrentSeasonYear(`${startYear}/${(startYear + 1).toString().slice(2)}`);
                 }
-                setTeams(savedGame.teams); setSchedule(savedGame.schedule); setCurrentWeek(savedGame.currentWeek);
-                setUserTeamId(savedGame.userTeamId); setSimState('ready');
+                setTeams(savedGame.teams); 
+                setSchedule(savedGame.schedule); 
+                setCurrentWeek(savedGame.currentWeek);
+                setUserTeamId(savedGame.userTeamId); 
+                setSimState('ready');
                 return;
             }
 
             try {
                 const fetchedTeams = await fetchTeams();
-                const allTeams = [...fetchedTeams.map(t => ({ 
-                    ...t, 
-                    isLaLiga: t.tier === 1,
-                    roster: t.roster ? [...t.roster].sort((a, b) => a.number - b.number) : []
-                })), TBD_TEAM];
+                const allTeams = [
+                    ...fetchedTeams.map(t => ({ 
+                        ...t, 
+                        isLaLiga: t.tier === 1,
+                        roster: t.roster ? [...t.roster].sort((a, b) => a.number - b.number) : []
+                    })), 
+                    TBD_TEAM
+                ];
                 setTeams(allTeams);
 
                 const ligaTeams = allTeams.filter(t => t.tier === 1 && t.id !== 'TBD');
                 const uclTeams = allTeams.filter(t => t.isUCL && t.id !== 'TBD');
 
                 const masterSchedule = generateMasterSchedule(ligaTeams, uclTeams, "2025/26");
-                setSchedule(masterSchedule); setSimState('select_team'); setCurrentSeasonYear("2025/26");
-                setCurrentWeek(1); setUserTeamId(null);
-            } catch (err) { alert("Error connecting to database. Please check your connection."); }
+                setSchedule(masterSchedule); 
+                setSimState('select_team'); 
+                setCurrentSeasonYear("2025/26");
+                setCurrentWeek(1); 
+                setUserTeamId(null);
+            } catch (err) { 
+                alert("Error connecting to database. Please check your connection."); 
+            }
         };
         initGame();
     }, [activeProfile?.id]);
@@ -125,45 +157,105 @@ const App: React.FC = () => {
         setSchedule([]);
     };
 
-    const handleLogout = () => { localStorage.removeItem('auth_token'); setIsAuthenticated(false); setActiveProfile(null); lastInitializedProfileId.current = null; setShowAccountMenu(false); setSimState('select_team'); setUserTeamId(null); setTeams([]); setSchedule([]); };
+    const handleLogout = () => { 
+        localStorage.removeItem('auth_token'); 
+        setIsAuthenticated(false); 
+        setActiveProfile(null); 
+        lastInitializedProfileId.current = null; 
+        setShowAccountMenu(false); 
+        setSimState('select_team'); 
+        setUserTeamId(null); 
+        setTeams([]); 
+        setSchedule([]); 
+    };
+
     const handleSelectProfile = (profile: ManagerProfileType) => setActiveProfile(profile);
-    const handleUpdateManagerName = async (name: string) => { if (activeProfile) { await updateProfileName(activeProfile.id, name); setActiveProfile({ ...activeProfile, name }); } };
-    const handleSelectTeam = (id: string) => { setUserTeamId(id); setSimState('ready'); setCurrentWeek(1); };
+    
+    const handleUpdateManagerName = async (name: string) => { 
+        if (activeProfile) { 
+            await updateProfileName(activeProfile.id, name); 
+            setActiveProfile({ ...activeProfile, name }); 
+        } 
+    };
+
+    const handleSelectTeam = (id: string) => { 
+        setUserTeamId(id); 
+        setSimState('ready'); 
+        setCurrentWeek(1); 
+    };
 
     const calculateMatchResult = useCallback((match: Match, home: Team, away: Team): Match => {
         if (home.id === 'TBD' || away.id === 'TBD') return match;
-        let homeStr = home.strength, awayStr = away.strength;
+        
+        let homeStr = home.strength;
+        let awayStr = away.strength;
         if (match.stage !== 'Final') homeStr += 5;
+        
         const diff = homeStr - awayStr;
-        let homeProb = 0.38 + (diff * 0.015), drawProb = 0.26 - (Math.abs(diff) * 0.005);
-        if (!['League Phase', 'Regular Season', 'Playoffs', 'Final'].includes(match.stage || '')) drawProb *= 0.8;
-        homeProb = Math.max(0.1, Math.min(0.85, homeProb)); drawProb = Math.max(0.1, drawProb);
+        let homeProb = 0.38 + (diff * 0.015);
+        let drawProb = 0.26 - (Math.abs(diff) * 0.005);
+        
+        if (!['League Phase', 'Regular Season', 'Playoffs', 'Final'].includes(match.stage || '')) {
+            drawProb *= 0.8;
+        }
+        
+        homeProb = Math.max(0.1, Math.min(0.85, homeProb)); 
+        drawProb = Math.max(0.1, drawProb);
         const rand = Math.random();
+        
         let homeGoals = 0, awayGoals = 0;
-        if (rand < homeProb) { homeGoals = Math.floor(Math.random() * 4) + 1; awayGoals = Math.floor(Math.random() * homeGoals); }
-        else if (rand < homeProb + drawProb) { homeGoals = Math.floor(Math.random() * 4); awayGoals = homeGoals; }
-        else { awayGoals = Math.floor(Math.random() * 4) + 1; homeGoals = Math.floor(Math.random() * awayGoals); }
+        if (rand < homeProb) { 
+            homeGoals = Math.floor(Math.random() * 4) + 1; 
+            awayGoals = Math.floor(Math.random() * homeGoals); 
+        } else if (rand < homeProb + drawProb) { 
+            homeGoals = Math.floor(Math.random() * 4); 
+            awayGoals = homeGoals; 
+        } else { 
+            awayGoals = Math.floor(Math.random() * 4) + 1; 
+            homeGoals = Math.floor(Math.random() * awayGoals); 
+        }
+        
         return { ...match, homeScore: homeGoals, awayScore: awayGoals, played: true };
     }, []);
 
-    const getPenaltyResult = useCallback(() => { const possibleScores = [[5, 4], [5, 3], [4, 3], [4, 2], [3, 1], [3, 2], [6, 5]]; const score = possibleScores[Math.floor(Math.random() * possibleScores.length)]; const homeWins = Math.random() > 0.5; return homeWins ? { home: score[0], away: score[1] } : { home: score[1], away: score[0] }; }, []);
+    const getPenaltyResult = useCallback(() => { 
+        const possibleScores = [[5, 4], [5, 3], [4, 3], [4, 2], [3, 1], [3, 2], [6, 5]]; 
+        const score = possibleScores[Math.floor(Math.random() * possibleScores.length)]; 
+        const homeWins = Math.random() > 0.5; 
+        return homeWins ? { home: score[0], away: score[1] } : { home: score[1], away: score[0] }; 
+    }, []);
 
     const resolveUCLKnockouts = useCallback((currentSchedule: Match[], teamsState: Team[]): Match[] => {
         let updatedSchedule = [...currentSchedule];
-        const isPhaseComplete = (stage: string) => { const matches = updatedSchedule.filter(m => m.stage === stage); return matches.length > 0 && matches.every(m => m.played); };
+        
+        const isPhaseComplete = (stage: string) => { 
+            const matches = updatedSchedule.filter(m => m.stage === stage); 
+            return matches.length > 0 && matches.every(m => m.played); 
+        };
+        
         const hasNextStageGenerated = (stage: string) => updatedSchedule.some(m => m.stage === stage);
 
         if (isPhaseComplete('League Phase') && !hasNextStageGenerated('Playoffs')) {
-            const uclTeams = teamsState.filter(t => t.isUCL && t.id !== 'TBD').sort((a, b) => { if (b.uclStats!.points !== a.uclStats!.points) return b.uclStats!.points - a.uclStats!.points; if (b.uclStats!.gd !== a.uclStats!.gd) return b.uclStats!.gd - a.uclStats!.gd; return b.uclStats!.gf - a.uclStats!.gf; });
+            const uclTeams = teamsState
+                .filter(t => t.isUCL && t.id !== 'TBD')
+                .sort((a, b) => { 
+                    if (b.uclStats!.points !== a.uclStats!.points) return b.uclStats!.points - a.uclStats!.points; 
+                    if (b.uclStats!.gd !== a.uclStats!.gd) return b.uclStats!.gd - a.uclStats!.gd; 
+                    return b.uclStats!.gf - a.uclStats!.gf; 
+                });
+                
             const topSeeds = uclTeams.slice(0, 8);
-            
             const { uclBase, days } = getCompetitionWeeks(currentSeasonYear);
             const KNOCKOUT_WEEKS = uclBase.slice(8, 17);
+            
             const getUclDate = (baseWeekIndex: number) => {
                 const bw = KNOCKOUT_WEEKS[baseWeekIndex];
                 const offset = [-1, 0][Math.floor(Math.random() * 2)];
                 const actualWeek = Math.max(1, Math.min(days.length, bw + offset));
-                return { week: actualWeek, date: new Date(`${days.find(d => d.week === actualWeek)?.date || days[0].date}T12:00:00Z`) };
+                return { 
+                    week: actualWeek, 
+                    date: new Date(`${days.find(d => d.week === actualWeek)?.date || days[0].date}T12:00:00Z`) 
+                };
             };
 
             const wPO1 = getUclDate(0), wPO2 = getUclDate(1);
@@ -172,46 +264,119 @@ const App: React.FC = () => {
             const wSF1 = getUclDate(6), wSF2 = getUclDate(7);
             const wF = getUclDate(8);
 
-            const playoffsMatches: Match[] = [], r16Matches: Match[] = [], qfMatches: Match[] = [], sfMatches: Match[] = [];
+            const playoffsMatches: Match[] = [];
+            const r16Matches: Match[] = [];
+            const qfMatches: Match[] = [];
+            const sfMatches: Match[] = [];
 
+            // Playoffs setup
             for (let i = 0; i < 8; i++) {
-                const seedHigh = uclTeams[8 + i], seedLow = uclTeams[23 - i];
+                const seedHigh = uclTeams[8 + i];
+                const seedLow = uclTeams[23 - i];
+                
                 if (seedHigh && seedLow) {
-                    playoffsMatches.push({ id: `UCL-PO-L1-${i}`, week: wPO1.week, homeTeamId: seedLow.id, awayTeamId: seedHigh.id, date: wPO1.date, homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Playoffs', isLeg2: false });
-                    playoffsMatches.push({ id: `UCL-PO-L2-${i}`, week: wPO2.week, homeTeamId: seedHigh.id, awayTeamId: seedLow.id, date: wPO2.date, homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Playoffs', isLeg2: true });
+                    playoffsMatches.push({ 
+                        id: `UCL-PO-L1-${i}`, week: wPO1.week, homeTeamId: seedLow.id, awayTeamId: seedHigh.id, date: wPO1.date, 
+                        homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Playoffs', isLeg2: false 
+                    });
+                    playoffsMatches.push({ 
+                        id: `UCL-PO-L2-${i}`, week: wPO2.week, homeTeamId: seedHigh.id, awayTeamId: seedLow.id, date: wPO2.date, 
+                        homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Playoffs', isLeg2: true 
+                    });
                 }
             }
+            
+            // Round of 16 placeholders
             [...topSeeds].sort(() => Math.random() - 0.5).forEach((seed, idx) => {
                 const placeholderText = `Winner: ${uclTeams[8 + idx]?.shortName} / ${uclTeams[23 - idx]?.shortName}`;
-                r16Matches.push({ id: `UCL-R16-L1-${idx}`, week: wR16_1.week, homeTeamId: 'TBD', awayTeamId: seed.id, date: wR16_1.date, homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Round of 16', isLeg2: false, placeholder: placeholderText });
-                r16Matches.push({ id: `UCL-R16-L2-${idx}`, week: wR16_2.week, homeTeamId: seed.id, awayTeamId: 'TBD', date: wR16_2.date, homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Round of 16', isLeg2: true, placeholder: placeholderText });
+                r16Matches.push({ 
+                    id: `UCL-R16-L1-${idx}`, week: wR16_1.week, homeTeamId: 'TBD', awayTeamId: seed.id, date: wR16_1.date, 
+                    homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Round of 16', isLeg2: false, placeholder: placeholderText 
+                });
+                r16Matches.push({ 
+                    id: `UCL-R16-L2-${idx}`, week: wR16_2.week, homeTeamId: seed.id, awayTeamId: 'TBD', date: wR16_2.date, 
+                    homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Round of 16', isLeg2: true, placeholder: placeholderText 
+                });
             });
-            for (let i = 0; i < 4; i++) { qfMatches.push({ id: `UCL-QF-L1-${i}`, week: wQF1.week, homeTeamId: 'TBD', awayTeamId: 'TBD', date: wQF1.date, homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Quarter-finals', isLeg2: false }); qfMatches.push({ id: `UCL-QF-L2-${i}`, week: wQF2.week, homeTeamId: 'TBD', awayTeamId: 'TBD', date: wQF2.date, homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Quarter-finals', isLeg2: true }); }
-            for (let i = 0; i < 2; i++) { sfMatches.push({ id: `UCL-SF-L1-${i}`, week: wSF1.week, homeTeamId: 'TBD', awayTeamId: 'TBD', date: wSF1.date, homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Semi-finals', isLeg2: false }); sfMatches.push({ id: `UCL-SF-L2-${i}`, week: wSF2.week, homeTeamId: 'TBD', awayTeamId: 'TBD', date: wSF2.date, homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Semi-finals', isLeg2: true }); }
+            
+            // Quarter-finals placeholders
+            for (let i = 0; i < 4; i++) { 
+                qfMatches.push({ 
+                    id: `UCL-QF-L1-${i}`, week: wQF1.week, homeTeamId: 'TBD', awayTeamId: 'TBD', date: wQF1.date, 
+                    homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Quarter-finals', isLeg2: false 
+                }); 
+                qfMatches.push({ 
+                    id: `UCL-QF-L2-${i}`, week: wQF2.week, homeTeamId: 'TBD', awayTeamId: 'TBD', date: wQF2.date, 
+                    homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Quarter-finals', isLeg2: true 
+                }); 
+            }
+            
+            // Semi-finals placeholders
+            for (let i = 0; i < 2; i++) { 
+                sfMatches.push({ 
+                    id: `UCL-SF-L1-${i}`, week: wSF1.week, homeTeamId: 'TBD', awayTeamId: 'TBD', date: wSF1.date, 
+                    homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Semi-finals', isLeg2: false 
+                }); 
+                sfMatches.push({ 
+                    id: `UCL-SF-L2-${i}`, week: wSF2.week, homeTeamId: 'TBD', awayTeamId: 'TBD', date: wSF2.date, 
+                    homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Semi-finals', isLeg2: true 
+                }); 
+            }
 
-            updatedSchedule.push(...playoffsMatches, ...r16Matches, ...qfMatches, ...sfMatches, { id: `UCL-FINAL`, week: wF.week, homeTeamId: 'TBD', awayTeamId: 'TBD', date: wF.date, homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Final', isLeg2: false });
+            updatedSchedule.push(
+                ...playoffsMatches, 
+                ...r16Matches, 
+                ...qfMatches, 
+                ...sfMatches, 
+                { id: `UCL-FINAL`, week: wF.week, homeTeamId: 'TBD', awayTeamId: 'TBD', date: wF.date, homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Final', isLeg2: false }
+            );
         }
 
         const processStageWinners = (currentStage: string) => {
             if (!isPhaseComplete(currentStage)) return null;
+            
             const stageMatches = updatedSchedule.filter(m => m.stage === currentStage);
             const winners: string[] = [];
             const pairs: Record<string, Match[]> = {};
-            stageMatches.forEach(m => { const idx = m.id.split('-').pop(); if (idx) { pairs[idx] = pairs[idx] || []; pairs[idx].push(m); } });
+            
+            stageMatches.forEach(m => { 
+                const idx = m.id.split('-').pop(); 
+                if (idx) { 
+                    pairs[idx] = pairs[idx] || []; 
+                    pairs[idx].push(m); 
+                } 
+            });
 
             Object.keys(pairs).sort((a, b) => parseInt(a) - parseInt(b)).forEach(key => {
                 if (currentStage === 'Final') {
                     const m = pairs[key][0];
-                    if (m.homeScore === m.awayScore && m.homePenalties === undefined) { const pens = getPenaltyResult(); const idx = updatedSchedule.findIndex(match => match.id === m.id); updatedSchedule[idx] = { ...updatedSchedule[idx], homePenalties: pens.home, awayPenalties: pens.away }; }
+                    if (m.homeScore === m.awayScore && m.homePenalties === undefined) { 
+                        const pens = getPenaltyResult(); 
+                        const idx = updatedSchedule.findIndex(match => match.id === m.id); 
+                        updatedSchedule[idx] = { ...updatedSchedule[idx], homePenalties: pens.home, awayPenalties: pens.away }; 
+                    }
                     return;
                 }
-                const l1 = pairs[key].find(m => !m.isLeg2), l2 = pairs[key].find(m => m.isLeg2);
+                
+                const l1 = pairs[key].find(m => !m.isLeg2);
+                const l2 = pairs[key].find(m => m.isLeg2);
+                
                 if (l1 && l2 && l1.played && l2.played) {
-                    const aggHome = l2.homeScore! + l1.awayScore!, aggAway = l2.awayScore! + l1.homeScore!;
+                    const aggHome = l2.homeScore! + l1.awayScore!;
+                    const aggAway = l2.awayScore! + l1.homeScore!;
                     let winnerId = aggHome > aggAway ? l2.homeTeamId : l2.awayTeamId;
+                    
                     if (aggHome === aggAway) {
-                        let hp = l2.homePenalties, ap = l2.awayPenalties;
-                        if (hp === undefined || ap === undefined) { const pens = getPenaltyResult(); hp = pens.home; ap = pens.away; const idx = updatedSchedule.findIndex(match => match.id === l2.id); updatedSchedule[idx] = { ...updatedSchedule[idx], homePenalties: hp, awayPenalties: ap }; }
+                        let hp = l2.homePenalties;
+                        let ap = l2.awayPenalties;
+                        
+                        if (hp === undefined || ap === undefined) { 
+                            const pens = getPenaltyResult(); 
+                            hp = pens.home; 
+                            ap = pens.away; 
+                            const idx = updatedSchedule.findIndex(match => match.id === l2.id); 
+                            updatedSchedule[idx] = { ...updatedSchedule[idx], homePenalties: hp, awayPenalties: ap }; 
+                        }
                         winnerId = hp! > ap! ? l2.homeTeamId : l2.awayTeamId;
                     }
                     winners.push(winnerId);
@@ -227,8 +392,18 @@ const App: React.FC = () => {
                     updatedSchedule = updatedSchedule.map(m => {
                         if (m.stage === targetStage) {
                             const idx = parseInt(m.id.split('-').pop() || '');
-                            if (pairFactor === 0) { const winnerId = winners[idx]; if (winnerId) return !m.isLeg2 ? { ...m, homeTeamId: winnerId, placeholder: undefined } : { ...m, awayTeamId: winnerId, placeholder: undefined }; }
-                            else { const t1 = winners[idx * 2], t2 = winners[idx * 2 + 1]; if (t1 && t2) return { ...m, homeTeamId: m.isLeg2 ? t2 : t1, awayTeamId: m.isLeg2 ? t1 : t2 }; }
+                            if (pairFactor === 0) { 
+                                const winnerId = winners[idx]; 
+                                if (winnerId) {
+                                    return !m.isLeg2 ? { ...m, homeTeamId: winnerId, placeholder: undefined } : { ...m, awayTeamId: winnerId, placeholder: undefined }; 
+                                }
+                            } else { 
+                                const t1 = winners[idx * 2];
+                                const t2 = winners[idx * 2 + 1]; 
+                                if (t1 && t2) {
+                                    return { ...m, homeTeamId: m.isLeg2 ? t2 : t1, awayTeamId: m.isLeg2 ? t1 : t2 }; 
+                                }
+                            }
                         }
                         return m;
                     });
@@ -236,19 +411,27 @@ const App: React.FC = () => {
             }
         };
 
-        mapWinners('Playoffs', 'Round of 16', 0); mapWinners('Round of 16', 'Quarter-finals', 1);
+        mapWinners('Playoffs', 'Round of 16', 0); 
+        mapWinners('Round of 16', 'Quarter-finals', 1);
         mapWinners('Quarter-finals', 'Semi-finals', 1);
 
         if (isPhaseComplete('Semi-finals') && updatedSchedule.some(m => m.stage === 'Final' && m.homeTeamId === 'TBD')) {
             const winners = processStageWinners('Semi-finals');
-            if (winners && winners.length === 2) updatedSchedule = updatedSchedule.map(m => m.stage === 'Final' ? { ...m, homeTeamId: winners[0], awayTeamId: winners[1] } : m);
+            if (winners && winners.length === 2) {
+                updatedSchedule = updatedSchedule.map(m => m.stage === 'Final' ? { ...m, homeTeamId: winners[0], awayTeamId: winners[1] } : m);
+            }
         }
-        if (isPhaseComplete('Final')) processStageWinners('Final');
+        
+        if (isPhaseComplete('Final')) {
+            processStageWinners('Final');
+        }
         return updatedSchedule;
     }, [currentSeasonYear, getPenaltyResult]);
 
     const performAutoSave = async (newTeams: Team[], newSchedule: Match[], newWeek: number) => {
-        if (activeProfile && userTeamId) saveGame(activeProfile.id, { currentWeek: newWeek, userTeamId: userTeamId, schedule: newSchedule, teams: newTeams });
+        if (activeProfile && userTeamId) {
+            saveGame(activeProfile.id, { currentWeek: newWeek, userTeamId: userTeamId, schedule: newSchedule, teams: newTeams });
+        }
     };
 
     const runSimulation = useCallback((targetWeek: number, userResult: { matchId: string, homeScore: number, awayScore: number } | null = null, stopAtUserMatch: boolean = true, showSummary: boolean = false) => {
@@ -260,7 +443,6 @@ const App: React.FC = () => {
         
         let finalState: SimulationState | 'match_recap' | null = null;
         let finalLastSimMatchId = lastSimulatedMatchId;
-        
         let newlyPlayedMatches: Match[] = [];
 
         while (tempWeek < targetWeek && tempWeek <= maxWeek) {
@@ -293,31 +475,55 @@ const App: React.FC = () => {
                 const nextTempTeams = [...tempTeams];
                 simulatedResults.forEach(match => {
                     if (!match.played) return;
+                    
                     const homeIdx = nextTempTeams.findIndex(t => t.id === match.homeTeamId);
                     const awayIdx = nextTempTeams.findIndex(t => t.id === match.awayTeamId);
+                    
                     if (homeIdx === -1 || awayIdx === -1) return;
                     
                     const home = { ...nextTempTeams[homeIdx] };
                     const away = { ...nextTempTeams[awayIdx] };
                     
                     const updateStatObj = (stats: any, hS: number, aS: number) => {
-                        stats.played += 1; stats.gf += hS; stats.ga += aS; stats.gd = stats.gf - stats.ga;
-                        if (hS > aS) { stats.won++; stats.points += 3; } else if (hS < aS) { stats.lost++; } else { stats.drawn++; stats.points += 1; }
+                        stats.played += 1; 
+                        stats.gf += hS; 
+                        stats.ga += aS; 
+                        stats.gd = stats.gf - stats.ga;
+                        if (hS > aS) { 
+                            stats.won++; 
+                            stats.points += 3; 
+                        } else if (hS < aS) { 
+                            stats.lost++; 
+                        } else { 
+                            stats.drawn++; 
+                            stats.points += 1; 
+                        }
                     };
 
                     if (match.competition === 'La Liga') {
                         home.stats = { ...home.stats, form: [...home.stats.form] }; 
                         away.stats = { ...away.stats, form: [...away.stats.form] };
+                        
                         updateStatObj(home.stats, match.homeScore!, match.awayScore!);
+                        
                         const hRes = match.homeScore! > match.awayScore! ? 'W' : match.homeScore! === match.awayScore! ? 'D' : 'L';
                         const aRes = match.homeScore! < match.awayScore! ? 'W' : match.homeScore! === match.awayScore! ? 'D' : 'L';
+                        
                         home.stats.form = [hRes as any, ...home.stats.form].slice(0, 5); 
                         away.stats.form = [aRes as any, ...away.stats.form].slice(0, 5);
+                        
                         updateStatObj(away.stats, match.awayScore!, match.homeScore!);
                     } else if (match.competition === 'Champions League' && match.stage === 'League Phase') {
-                        if (home.uclStats) { home.uclStats = { ...home.uclStats }; updateStatObj(home.uclStats, match.homeScore!, match.awayScore!); }
-                        if (away.uclStats) { away.uclStats = { ...away.uclStats }; updateStatObj(away.uclStats, match.awayScore!, match.homeScore!); }
+                        if (home.uclStats) { 
+                            home.uclStats = { ...home.uclStats }; 
+                            updateStatObj(home.uclStats, match.homeScore!, match.awayScore!); 
+                        }
+                        if (away.uclStats) { 
+                            away.uclStats = { ...away.uclStats }; 
+                            updateStatObj(away.uclStats, match.awayScore!, match.homeScore!); 
+                        }
                     }
+                    
                     nextTempTeams[homeIdx] = home; 
                     nextTempTeams[awayIdx] = away;
                 });
@@ -393,21 +599,38 @@ const App: React.FC = () => {
     const handleConcludeSeason = useCallback(async () => {
         if (!userTeamId || !activeProfile) return;
         try {
-            const sorted = teams.filter(t => t.isLaLiga && t.id !== 'TBD').sort((a, b) => b.stats.points - a.stats.points || b.stats.gd - a.stats.gd);
-            const userPos = sorted.findIndex(t => t.id === userTeamId) + 1, userTeam = teams.find(t => t.id === userTeamId);
+            const sorted = teams
+                .filter(t => t.isLaLiga && t.id !== 'TBD')
+                .sort((a, b) => b.stats.points - a.stats.points || b.stats.gd - a.stats.gd);
+                
+            const userPos = sorted.findIndex(t => t.id === userTeamId) + 1;
+            const userTeam = teams.find(t => t.id === userTeamId);
             if (!userTeam) return;
+            
             setSimState('season_over');
 
-            let wonUCL = false, uclResultString = '';
+            let wonUCL = false;
+            let uclResultString = '';
             const final = schedule.find(m => m.stage === 'Final' && m.played);
+            
             if (final) {
                 const isParticipant = final.homeTeamId === userTeamId || final.awayTeamId === userTeamId;
                 let homeWin = final.homeScore! > final.awayScore!;
-                if (final.homeScore === final.awayScore && final.homePenalties !== undefined) homeWin = final.homePenalties > final.awayPenalties!;
+                if (final.homeScore === final.awayScore && final.homePenalties !== undefined) {
+                    homeWin = final.homePenalties > final.awayPenalties!;
+                }
                 const isWinner = (final.homeTeamId === userTeamId && homeWin) || (final.awayTeamId === userTeamId && !homeWin);
-                if (isWinner) { wonUCL = true; uclResultString = 'Winner'; }
-                else if (isParticipant) uclResultString = 'Runner-up';
-                else { const uclMatches = schedule.filter(m => m.competition === 'Champions League' && m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId)); const lastMatch = uclMatches[uclMatches.length - 1]; if (lastMatch) uclResultString = lastMatch.stage || ''; }
+                
+                if (isWinner) { 
+                    wonUCL = true; 
+                    uclResultString = 'Winner'; 
+                } else if (isParticipant) {
+                    uclResultString = 'Runner-up';
+                } else { 
+                    const uclMatches = schedule.filter(m => m.competition === 'Champions League' && m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId)); 
+                    const lastMatch = uclMatches[uclMatches.length - 1]; 
+                    if (lastMatch) uclResultString = lastMatch.stage || ''; 
+                }
             }
 
             const userMatches = schedule.filter(m => m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId));
@@ -427,18 +650,24 @@ const App: React.FC = () => {
                     wins++;
                     const diff = scored - conceded;
                     if (diff > biggestWinDiff || (diff === biggestWinDiff && scored > parseInt(biggestWinStr.split('-')[0] || '0'))) {
-                        biggestWinDiff = diff; biggestWinStr = `${scored}-${conceded} vs ${oppName}`;
+                        biggestWinDiff = diff; 
+                        biggestWinStr = `${scored}-${conceded} vs ${oppName}`;
                     }
                 } else if (scored < conceded) {
                     losses++;
                     const diff = conceded - scored;
                     if (diff > biggestLossDiff || (diff === biggestLossDiff && conceded > parseInt(biggestLossStr.split('-')[1] || '0'))) {
-                        biggestLossDiff = diff; biggestLossStr = `${scored}-${conceded} vs ${oppName}`;
+                        biggestLossDiff = diff; 
+                        biggestLossStr = `${scored}-${conceded} vs ${oppName}`;
                     }
-                } else { draws++; }
+                } else { 
+                    draws++; 
+                }
             });
 
-            if (userPos === 1 || wonUCL) confetti({ particleCount: 200, spread: 70, origin: { y: 0.6 } });
+            if (userPos === 1 || wonUCL) {
+                confetti({ particleCount: 200, spread: 70, origin: { y: 0.6 } });
+            }
 
             const newRecord = await saveSeasonResult(activeProfile.id, {
                 seasonYear: currentSeasonYear, teamId: userTeam.id, teamName: userTeam.name,
@@ -451,8 +680,16 @@ const App: React.FC = () => {
             const activeSeasonId = seasonId;
             setSeasonSummary({ position: userPos, points: userTeam.stats.points, wonLeague: userPos === 1, uclResult: uclResultString, message: "Waiting for board evaluation..." });
             setIsRecapOpen(true);
-            getBoardFeedback(userTeam, userPos, sorted.length, uclResultString).then(feedback => { if (seasonIdRef.current === activeSeasonId) setSeasonSummary(prev => prev ? { ...prev, message: feedback } : null); });
-        } catch (error) { alert("Failed to save season data."); setSimState('ready'); }
+            
+            getBoardFeedback(userTeam, userPos, sorted.length, uclResultString).then(feedback => { 
+                if (seasonIdRef.current === activeSeasonId) {
+                    setSeasonSummary(prev => prev ? { ...prev, message: feedback } : null); 
+                }
+            });
+        } catch (error) { 
+            alert("Failed to save season data."); 
+            setSimState('ready'); 
+        }
     }, [userTeamId, activeProfile, teams, schedule, currentSeasonYear, seasonId]);
 
     useEffect(() => {
@@ -481,26 +718,44 @@ const App: React.FC = () => {
         setCurrentSeasonYear(newSeasonYear);
 
         const nextSchedule = generateMasterSchedule(ligaTeams, uclTeams, newSeasonYear);
-        setSchedule(nextSchedule); setCurrentWeek(1); setSeasonSummary(null);
+        setSchedule(nextSchedule); 
+        setCurrentWeek(1); 
+        setSeasonSummary(null);
 
         let newUserTeamId = userTeamId;
-        if (!stayWithTeam || !userTeamId) { newUserTeamId = null; setUserTeamId(null); setSimState('select_team'); } else { setSimState('ready'); }
-        if (activeProfile && newUserTeamId) saveGame(activeProfile.id, { currentWeek: 1, userTeamId: newUserTeamId, schedule: nextSchedule, teams: resetTeams });
+        if (!stayWithTeam || !userTeamId) { 
+            newUserTeamId = null; 
+            setUserTeamId(null); 
+            setSimState('select_team'); 
+        } else { 
+            setSimState('ready'); 
+        }
+        
+        if (activeProfile && newUserTeamId) {
+            saveGame(activeProfile.id, { currentWeek: 1, userTeamId: newUserTeamId, schedule: nextSchedule, teams: resetTeams });
+        }
     };
 
     const resultGroups = useMemo(() => {
         const playedInComp = schedule.filter(m => m.competition === resultsComp && m.played);
         const uniqueWeeks = Array.from(new Set(playedInComp.map(m => m.week))).sort((a: number, b: number) => a - b);
+        
         return uniqueWeeks.map(week => {
             const matches = playedInComp.filter(m => m.week === week);
             if (userTeamId) matches.sort((a, b) => (a.homeTeamId === userTeamId || a.awayTeamId === userTeamId) ? -1 : 1);
+            
             const dateStr = new Date(matches[0]?.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            let label = resultsComp === 'La Liga' ? dateStr : (matches[0]?.stage === 'League Phase' ? `League Phase - ${dateStr}` : `${matches[0]?.stage} - ${dateStr}`);
+            let label = resultsComp === 'La Liga' 
+                ? dateStr 
+                : (matches[0]?.stage === 'League Phase' ? `League Phase - ${dateStr}` : `${matches[0]?.stage} - ${dateStr}`);
+                
             return { week, matches, label };
         });
     }, [schedule, resultsComp, userTeamId]);
 
-    useEffect(() => { setResultsIndex(resultGroups.length > 0 ? resultGroups.length - 1 : 0); }, [resultGroups.length, resultsComp]);
+    useEffect(() => { 
+        setResultsIndex(resultGroups.length > 0 ? resultGroups.length - 1 : 0); 
+    }, [resultGroups.length, resultsComp]);
 
     const currentResultGroup = resultGroups[resultsIndex];
 
@@ -524,10 +779,23 @@ const App: React.FC = () => {
         return schedule.find(m => m.week > currentWeek && !m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId));
     }, [schedule, currentWeek, userTeamId]);
 
-    const userMatch = useMemo(() => { if (!userTeamId) return undefined; return schedule.find(m => m.week === currentWeek && !m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId)); }, [schedule, currentWeek, userTeamId]);
+    const userMatch = useMemo(() => { 
+        if (!userTeamId) return undefined; 
+        return schedule.find(m => m.week === currentWeek && !m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId)); 
+    }, [schedule, currentWeek, userTeamId]);
+    
     const userHome = useMemo(() => userMatch ? teams.find(t => t.id === userMatch.homeTeamId) : undefined, [userMatch, teams]);
     const userAway = useMemo(() => userMatch ? teams.find(t => t.id === userMatch.awayTeamId) : undefined, [userMatch, teams]);
-    const isUCLWeek = useMemo(() => { if (simState === 'match_recap' && lastSimulatedMatchId) { const lastMatch = schedule.find(m => m.id === lastSimulatedMatchId); if (lastMatch) return lastMatch.competition === 'Champions League'; } if (userMatch) return userMatch.competition === 'Champions League'; return schedule.some(m => m.week === currentWeek && m.competition === 'Champions League'); }, [userMatch, schedule, currentWeek, simState, lastSimulatedMatchId]);
+    
+    const isUCLWeek = useMemo(() => { 
+        if (simState === 'match_recap' && lastSimulatedMatchId) { 
+            const lastMatch = schedule.find(m => m.id === lastSimulatedMatchId); 
+            if (lastMatch) return lastMatch.competition === 'Champions League'; 
+        } 
+        if (userMatch) return userMatch.competition === 'Champions League'; 
+        return schedule.some(m => m.week === currentWeek && m.competition === 'Champions League'); 
+    }, [userMatch, schedule, currentWeek, simState, lastSimulatedMatchId]);
+    
     const isSeasonFinished = simState === 'season_over';
     const isScheduleComplete = currentWeek > maxWeek;
     const lastSimMatch = useMemo(() => lastSimulatedMatchId ? schedule.find(m => m.id === lastSimulatedMatchId) : undefined, [lastSimulatedMatchId, schedule]);
@@ -535,10 +803,19 @@ const App: React.FC = () => {
     const lastSimAway = useMemo(() => lastSimMatch ? teams.find(t => t.id === lastSimMatch.awayTeamId) : undefined, [lastSimMatch, teams]);
 
     if (!isAuthenticated) return <LoginScreen onLogin={handleLogin} />;
+    
     if (!activeProfile) return <ProfileSelector onSelectProfile={handleSelectProfile} onLogout={handleLogout} />;
+    
     if (!userTeamId) return <TeamSelector teams={teams.filter(t => t.id !== 'TBD')} onSelect={handleSelectTeam} />;
-    if (simState === 'squad_management') { const myTeam = teams.find(t => t.id === userTeamId); if (myTeam) return <SquadManagement team={myTeam} onUpdateTeam={handleUpdateTeam} onBack={() => setSimState('ready')} />; }
-    if (simState === 'playing_match' && userMatch && userHome && userAway) { return <MatchView homeTeam={userHome} awayTeam={userAway} userTeamId={userTeamId} onMatchComplete={handleMatchComplete} competition={userMatch.competition} stage={userMatch.stage} />; }
+    
+    if (simState === 'squad_management') { 
+        const myTeam = teams.find(t => t.id === userTeamId); 
+        if (myTeam) return <SquadManagement team={myTeam} onUpdateTeam={handleUpdateTeam} onBack={() => setSimState('ready')} />; 
+    }
+    
+    if (simState === 'playing_match' && userMatch && userHome && userAway) { 
+        return <MatchView homeTeam={userHome} awayTeam={userAway} userTeamId={userTeamId} onMatchComplete={handleMatchComplete} competition={userMatch.competition} stage={userMatch.stage} />; 
+    }
 
     return (
         <div className={`min-h-screen w-full overflow-x-hidden text-slate-100 p-2 sm:p-3 md:p-8 transition-colors duration-500 ${isUCLWeek ? 'bg-slate-950' : 'bg-slate-900'}`}>
@@ -675,23 +952,76 @@ const App: React.FC = () => {
                 onResign={() => handleSeasonTransition(false)}
             />
 
-            <CalendarModal isOpen={isCalendarOpen} onClose={() => setIsCalendarOpen(false)} schedule={schedule} teams={teams} userTeamId={userTeamId} currentWeek={currentWeek} onSimulateToWeek={handleSimulateToWeek} currentSeasonYear={currentSeasonYear} />
+            <CalendarModal 
+                isOpen={isCalendarOpen} 
+                onClose={() => setIsCalendarOpen(false)} 
+                schedule={schedule} 
+                teams={teams} 
+                userTeamId={userTeamId} 
+                currentWeek={currentWeek} 
+                onSimulateToWeek={handleSimulateToWeek} 
+                currentSeasonYear={currentSeasonYear} 
+            />
 
             <header className={`flex flex-col md:flex-row justify-between items-center mb-4 md:mb-8 p-3 sm:p-4 gap-3 sm:gap-4 rounded-xl border shadow-md transition-colors ${isUCLWeek ? 'bg-blue-950/50 border-blue-900' : 'bg-slate-800 border-slate-700'}`}>
                 <div className="flex items-center gap-3 w-full md:w-auto min-w-0">
-                    <div className="flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 shrink-0">{isUCLWeek ? (UCL_LOGO_URL ? <div className="bg-white rounded-lg p-1 w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center shadow-sm"><img src={UCL_LOGO_URL} alt="UCL" className="w-full h-full object-contain" /></div> : <Globe size={24} className="text-blue-400" />) : (LIGA_LOGO_URL ? <img src={LIGA_LOGO_URL} alt="La Liga" className="w-8 h-8 sm:w-10 sm:h-10 object-contain" /> : <Trophy size={24} className="text-[#FF2B44]" />)}</div>
-                    <div className="flex-1 min-w-0"><h1 className="text-base sm:text-lg md:text-xl font-bold truncate">{isUCLWeek ? 'Champions League Action' : 'La Liga Action'}</h1><p className={`text-[10px] sm:text-xs truncate ${isUCLWeek ? 'text-blue-300' : 'text-slate-400'}`}>Season {currentSeasonYear}</p></div>
+                    <div className="flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 shrink-0">
+                        {isUCLWeek ? (
+                            UCL_LOGO_URL ? (
+                                <div className="bg-white rounded-lg p-1 w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center shadow-sm">
+                                    <img src={UCL_LOGO_URL} alt="UCL" className="w-full h-full object-contain" />
+                                </div>
+                            ) : (
+                                <Globe size={24} className="text-blue-400" />
+                            )
+                        ) : (
+                            LIGA_LOGO_URL ? (
+                                <img src={LIGA_LOGO_URL} alt="La Liga" className="w-8 h-8 sm:w-10 sm:h-10 object-contain" />
+                            ) : (
+                                <Trophy size={24} className="text-[#FF2B44]" />
+                            )
+                        )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <h1 className="text-base sm:text-lg md:text-xl font-bold truncate">
+                            {isUCLWeek ? 'Champions League Action' : 'La Liga Action'}
+                        </h1>
+                        <p className={`text-[10px] sm:text-xs truncate ${isUCLWeek ? 'text-blue-300' : 'text-slate-400'}`}>
+                            Season {currentSeasonYear}
+                        </p>
+                    </div>
                 </div>
+                
                 <div className="flex items-center gap-2 w-full md:w-auto justify-between sm:justify-end">
                     <div className="flex flex-1 sm:flex-none items-center bg-slate-900 rounded-lg border border-slate-700 font-mono font-bold text-white shadow-inner overflow-hidden min-w-0">
-                        <div className="px-2 sm:px-3 py-1.5 sm:py-2 text-[10px] sm:text-xs md:text-sm truncate hidden sm:block flex-1">{userMatch ? `Upcoming: ${(userHome?.id === userTeamId ? userAway : userHome)?.name} ${userHome?.id === userTeamId ? '(H)' : '(A)'} (${userMatch.competition === 'Champions League' ? 'UCL' : 'Liga'})` : (isSeasonFinished || isScheduleComplete) ? "End of Season" : "No Match Today"}</div>
-                        <button onClick={() => setIsCalendarOpen(true)} className="bg-slate-800 hover:bg-slate-700 p-2 sm:p-2 h-full w-full sm:w-auto flex items-center justify-center sm:border-l border-slate-700 transition-colors text-slate-400 hover:text-white shrink-0"><CalendarDays size={16} className="sm:w-[18px] sm:h-[18px]" /></button>
+                        <div className="px-2 sm:px-3 py-1.5 sm:py-2 text-[10px] sm:text-xs md:text-sm truncate hidden sm:block flex-1">
+                            {userMatch 
+                                ? `Upcoming: ${(userHome?.id === userTeamId ? userAway : userHome)?.name} ${userHome?.id === userTeamId ? '(H)' : '(A)'} (${userMatch.competition === 'Champions League' ? 'UCL' : 'Liga'})` 
+                                : (isSeasonFinished || isScheduleComplete) 
+                                    ? "End of Season" 
+                                    : "No Match Today"}
+                        </div>
+                        <button 
+                            onClick={() => setIsCalendarOpen(true)} 
+                            className="bg-slate-800 hover:bg-slate-700 p-2 sm:p-2 h-full w-full sm:w-auto flex items-center justify-center sm:border-l border-slate-700 transition-colors text-slate-400 hover:text-white shrink-0"
+                        >
+                            <CalendarDays size={16} className="sm:w-[18px] sm:h-[18px]" />
+                        </button>
                     </div>
 
-                    <button onClick={() => setSimState('squad_management')} className="flex items-center justify-center gap-2 px-3 sm:px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors font-bold text-[10px] sm:text-xs md:text-sm shrink-0"><Shirt size={16} /><span className="hidden lg:inline">Squad</span></button>
+                    <button 
+                        onClick={() => setSimState('squad_management')} 
+                        className="flex items-center justify-center gap-2 px-3 sm:px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors font-bold text-[10px] sm:text-xs md:text-sm shrink-0"
+                    >
+                        <Shirt size={16} />
+                        <span className="hidden lg:inline">Squad</span>
+                    </button>
 
                     <div className="relative z-50 shrink-0">
-                        <button onClick={() => setShowAccountMenu(!showAccountMenu)} className="flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-colors text-slate-300 hover:text-white shadow-sm">
+                        <button 
+                            onClick={() => setShowAccountMenu(!showAccountMenu)} 
+                            className="flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-colors text-slate-300 hover:text-white shadow-sm"
+                        >
                             <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-inner border border-blue-400/50">
                                 <User size={14} className="sm:w-[16px] sm:h-[16px]" />
                             </div>
@@ -701,14 +1031,25 @@ const App: React.FC = () => {
                             </div>
                             <ChevronDown size={14} className={`hidden sm:block text-slate-400 transition-transform ${showAccountMenu ? 'rotate-180' : ''}`} />
                         </button>
+                        
                         {showAccountMenu && (
                             <div className="absolute right-0 mt-2 w-56 bg-slate-800 rounded-xl shadow-2xl border border-slate-700 overflow-hidden animate-in fade-in slide-in-from-top-2">
                                 <div className="p-4 border-b border-slate-700 bg-slate-900/50">
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Manager</p>
                                     <p className="text-sm text-white font-bold truncate mt-1">{activeProfile.name}</p>
                                 </div>
-                                <button onClick={() => { setShowAccountMenu(false); setIsProfileOpen(true); }} className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white flex items-center gap-2 transition-colors"><Trophy size={16} /> Career History</button>
-                                <button onClick={() => { setShowAccountMenu(false); handleExitProfile(); }} className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white flex items-center gap-2 transition-colors border-t border-slate-700"><Users size={16} /> Switch Manager</button>
+                                <button 
+                                    onClick={() => { setShowAccountMenu(false); setIsProfileOpen(true); }} 
+                                    className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white flex items-center gap-2 transition-colors"
+                                >
+                                    <Trophy size={16} /> Career History
+                                </button>
+                                <button 
+                                    onClick={() => { setShowAccountMenu(false); handleExitProfile(); }} 
+                                    className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white flex items-center gap-2 transition-colors border-t border-slate-700"
+                                >
+                                    <Users size={16} /> Switch Manager
+                                </button>
                             </div>
                         )}
                     </div>
@@ -718,7 +1059,14 @@ const App: React.FC = () => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 md:gap-8 relative z-10 w-full min-w-0">
                 <div className="lg:col-span-2 flex flex-col order-2 lg:order-1 min-w-0 w-full">
                     <div className="w-full overflow-x-auto">
-                        <LeagueTable teams={teams} userTeamId={userTeamId || ''} activeTab={activeTableTab} onTabChange={setActiveTableTab} schedule={schedule} currentWeek={currentWeek} />
+                        <LeagueTable 
+                            teams={teams} 
+                            userTeamId={userTeamId || ''} 
+                            activeTab={activeTableTab} 
+                            onTabChange={setActiveTableTab} 
+                            schedule={schedule} 
+                            currentWeek={currentWeek} 
+                        />
                     </div>
                 </div>
 
@@ -726,7 +1074,9 @@ const App: React.FC = () => {
                     <div className={`p-3 sm:p-4 md:p-6 rounded-xl border shadow-lg flex flex-col justify-between ${isUCLWeek ? 'bg-blue-950 border-blue-900' : 'bg-slate-800 border-slate-700'}`}>
                         <div>
                             <div className="flex justify-between items-start mb-4">
-                                <h2 className="text-base sm:text-lg font-bold flex items-center gap-2"><Calendar size={18} className="text-blue-400" /> Action Center</h2>
+                                <h2 className="text-base sm:text-lg font-bold flex items-center gap-2">
+                                    <Calendar size={18} className="text-blue-400" /> Action Center
+                                </h2>
                                 {simState !== 'season_over' && (
                                     <div className="text-[10px] sm:text-xs md:text-sm font-mono font-bold text-slate-300 bg-slate-900/80 px-2 md:px-3 py-1 sm:py-1.5 rounded-lg border border-slate-700 shadow-inner">
                                         {formattedCurrentDate}
@@ -741,16 +1091,57 @@ const App: React.FC = () => {
                                     <p className="text-slate-400 text-xs sm:text-sm">Please finalize your contract options in the pop-up.</p>
                                 </div>
                             ) : simState === 'match_recap' && lastSimMatch && lastSimHome && lastSimAway ? (
-                                <div className="flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-300 mb-6"><div className="mb-2 p-3 sm:p-4 bg-slate-900 rounded-lg border border-slate-700 shadow-xl"><div className="text-center text-[10px] sm:text-xs mb-2 uppercase tracking-wide font-bold text-green-400">Match Finished</div><div className="flex items-center justify-between"><div className="text-center w-[40%] sm:w-1/3 flex flex-col items-center">{lastSimHome.logoUrl ? <img src={lastSimHome.logoUrl} className="w-10 h-10 sm:w-12 sm:h-12 mb-2 object-contain" /> : <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full mb-2" style={{ backgroundColor: lastSimHome.primaryColor }}></div>}<div className="font-bold text-xs sm:text-sm md:text-lg leading-tight truncate w-full">{lastSimHome.shortName}</div></div><div className="text-xl sm:text-2xl md:text-3xl font-mono font-bold text-white bg-slate-800 px-2 sm:px-3 py-1 rounded border border-slate-700 mx-1">{lastSimMatch.homeScore} - {lastSimMatch.awayScore}</div><div className="text-center w-[40%] sm:w-1/3 flex flex-col items-center">{lastSimAway.logoUrl ? <img src={lastSimAway.logoUrl} className="w-10 h-10 sm:w-12 sm:h-12 mb-2 object-contain" /> : <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full mb-2" style={{ backgroundColor: lastSimAway.primaryColor }}></div>}<div className="font-bold text-xs sm:text-sm md:text-lg leading-tight truncate w-full">{lastSimAway.shortName}</div></div></div></div><button onClick={() => setSimState('ready')} className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 sm:py-4 px-4 rounded-xl transition-all shadow-lg active:scale-95 text-sm sm:text-base">Continue <ArrowRight size={18} /></button></div>
+                                <div className="flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-300 mb-6">
+                                    <div className="mb-2 p-3 sm:p-4 bg-slate-900 rounded-lg border border-slate-700 shadow-xl">
+                                        <div className="text-center text-[10px] sm:text-xs mb-2 uppercase tracking-wide font-bold text-green-400">Match Finished</div>
+                                        <div className="flex items-center justify-between">
+                                            <div className="text-center w-[40%] sm:w-1/3 flex flex-col items-center">
+                                                {lastSimHome.logoUrl ? (
+                                                    <img src={lastSimHome.logoUrl} className="w-10 h-10 sm:w-12 sm:h-12 mb-2 object-contain" />
+                                                ) : (
+                                                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full mb-2" style={{ backgroundColor: lastSimHome.primaryColor }}></div>
+                                                )}
+                                                <div className="font-bold text-xs sm:text-sm md:text-lg leading-tight truncate w-full">{lastSimHome.shortName}</div>
+                                            </div>
+                                            <div className="text-xl sm:text-2xl md:text-3xl font-mono font-bold text-white bg-slate-800 px-2 sm:px-3 py-1 rounded border border-slate-700 mx-1">
+                                                {lastSimMatch.homeScore} - {lastSimMatch.awayScore}
+                                            </div>
+                                            <div className="text-center w-[40%] sm:w-1/3 flex flex-col items-center">
+                                                {lastSimAway.logoUrl ? (
+                                                    <img src={lastSimAway.logoUrl} className="w-10 h-10 sm:w-12 sm:h-12 mb-2 object-contain" />
+                                                ) : (
+                                                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full mb-2" style={{ backgroundColor: lastSimAway.primaryColor }}></div>
+                                                )}
+                                                <div className="font-bold text-xs sm:text-sm md:text-lg leading-tight truncate w-full">{lastSimAway.shortName}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button 
+                                        onClick={() => setSimState('ready')} 
+                                        className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 sm:py-4 px-4 rounded-xl transition-all shadow-lg active:scale-95 text-sm sm:text-base"
+                                    >
+                                        Continue <ArrowRight size={18} />
+                                    </button>
+                                </div>
                             ) : (
                                 <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-slate-900 rounded-lg border border-slate-700">
                                     {userMatch ? (
                                         <>
-                                            <div className={`text-center text-[10px] sm:text-xs mb-2 uppercase tracking-wide font-bold ${isUCLWeek ? 'text-blue-400' : 'text-slate-500'}`}>{userMatch.competition}</div>
+                                            <div className={`text-center text-[10px] sm:text-xs mb-2 uppercase tracking-wide font-bold ${isUCLWeek ? 'text-blue-400' : 'text-slate-500'}`}>
+                                                {userMatch.competition}
+                                            </div>
                                             <div className="flex items-center justify-between">
-                                                <div className="text-center w-[40%] sm:w-1/3 flex flex-col items-center">{userHome?.logoUrl ? <img src={userHome.logoUrl} className="w-8 h-8 sm:w-10 sm:h-10 mb-2 object-contain" /> : null}<div className="font-bold text-xs sm:text-sm md:text-lg leading-tight truncate w-full">{userHome?.name}</div><div className="text-[10px] sm:text-xs text-slate-400">Home</div></div>
+                                                <div className="text-center w-[40%] sm:w-1/3 flex flex-col items-center">
+                                                    {userHome?.logoUrl ? <img src={userHome.logoUrl} className="w-8 h-8 sm:w-10 sm:h-10 mb-2 object-contain" /> : null}
+                                                    <div className="font-bold text-xs sm:text-sm md:text-lg leading-tight truncate w-full">{userHome?.name}</div>
+                                                    <div className="text-[10px] sm:text-xs text-slate-400">Home</div>
+                                                </div>
                                                 <div className="text-base sm:text-lg md:text-xl font-bold text-slate-600 px-1">VS</div>
-                                                <div className="text-center w-[40%] sm:w-1/3 flex flex-col items-center">{userAway?.logoUrl ? <img src={userAway.logoUrl} className="w-8 h-8 sm:w-10 sm:h-10 mb-2 object-contain" /> : null}<div className="font-bold text-xs sm:text-sm md:text-lg leading-tight truncate w-full">{userAway?.name}</div><div className="text-[10px] sm:text-xs text-slate-400">Away</div></div>
+                                                <div className="text-center w-[40%] sm:w-1/3 flex flex-col items-center">
+                                                    {userAway?.logoUrl ? <img src={userAway.logoUrl} className="w-8 h-8 sm:w-10 sm:h-10 mb-2 object-contain" /> : null}
+                                                    <div className="font-bold text-xs sm:text-sm md:text-lg leading-tight truncate w-full">{userAway?.name}</div>
+                                                    <div className="text-[10px] sm:text-xs text-slate-400">Away</div>
+                                                </div>
                                             </div>
                                         </>
                                     ) : isScheduleComplete ? (
@@ -780,9 +1171,15 @@ const App: React.FC = () => {
                                                         <div className="text-[9px] sm:text-[10px] text-slate-400 uppercase tracking-wider mb-1 font-bold">Next Match</div>
                                                         <div className="font-mono font-bold text-indigo-300 text-xs sm:text-sm">{mm}.{dd} {dayName}</div>
                                                         <div className="flex items-center justify-center gap-1.5 sm:gap-2 mt-2 min-w-0">
-                                                            {opp?.logoUrl ? <img src={opp.logoUrl} className="w-3 h-3 sm:w-4 sm:h-4 object-contain shrink-0" /> : <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shrink-0" style={{backgroundColor: opp?.primaryColor || '#94a3b8'}}></div>}
+                                                            {opp?.logoUrl ? (
+                                                                <img src={opp.logoUrl} className="w-3 h-3 sm:w-4 sm:h-4 object-contain shrink-0" />
+                                                            ) : (
+                                                                <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shrink-0" style={{backgroundColor: opp?.primaryColor || '#94a3b8'}}></div>
+                                                            )}
                                                             <span className="text-white font-bold text-xs sm:text-sm truncate">{opp?.name}</span>
-                                                            <span className="text-[10px] sm:text-xs text-slate-400 font-mono shrink-0">({nextUserMatch.homeTeamId === userTeamId ? 'H' : 'A'})</span>
+                                                            <span className="text-[10px] sm:text-xs text-slate-400 font-mono shrink-0">
+                                                                ({nextUserMatch.homeTeamId === userTeamId ? 'H' : 'A'})
+                                                            </span>
                                                         </div>
                                                     </div>
                                                 );
@@ -796,18 +1193,30 @@ const App: React.FC = () => {
                         {simState !== 'season_over' && simState !== 'match_recap' && !isScheduleComplete && (
                             <div className="grid grid-cols-2 gap-2 sm:gap-3 mt-auto">
                                 {userMatch ? (
-                                    <button onClick={handlePlayVisualMatch} className="flex items-center justify-center gap-1 sm:gap-2 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 sm:py-3 px-2 sm:px-4 rounded-lg shadow-lg text-xs sm:text-sm md:text-base">
+                                    <button 
+                                        onClick={handlePlayVisualMatch} 
+                                        className="flex items-center justify-center gap-1 sm:gap-2 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 sm:py-3 px-2 sm:px-4 rounded-lg shadow-lg text-xs sm:text-sm md:text-base"
+                                    >
                                         <Play size={14} className="sm:w-[18px] sm:h-[18px]" fill="currentColor" /> Play
                                     </button>
                                 ) : (
-                                    <button onClick={handleSimToNextMatch} className="flex items-center justify-center gap-1 sm:gap-2 bg-indigo-700 hover:bg-indigo-600 text-white font-bold py-2.5 sm:py-3 px-2 sm:px-4 rounded-lg border border-indigo-600 text-xs sm:text-sm md:text-base">
+                                    <button 
+                                        onClick={handleSimToNextMatch} 
+                                        className="flex items-center justify-center gap-1 sm:gap-2 bg-indigo-700 hover:bg-indigo-600 text-white font-bold py-2.5 sm:py-3 px-2 sm:px-4 rounded-lg border border-indigo-600 text-xs sm:text-sm md:text-base"
+                                    >
                                         <CalendarDays size={14} className="sm:w-[18px] sm:h-[18px]" /> Sim to Match
                                     </button>
                                 )}
-                                <button onClick={handleQuickSimWeek} className="flex items-center justify-center gap-1 sm:gap-2 bg-slate-700 hover:bg-slate-600 text-white font-bold py-2.5 sm:py-3 px-2 sm:px-4 rounded-lg border border-slate-600 text-xs sm:text-sm md:text-base">
+                                <button 
+                                    onClick={handleQuickSimWeek} 
+                                    className="flex items-center justify-center gap-1 sm:gap-2 bg-slate-700 hover:bg-slate-600 text-white font-bold py-2.5 sm:py-3 px-2 sm:px-4 rounded-lg border border-slate-600 text-xs sm:text-sm md:text-base"
+                                >
                                     <FastForward size={14} className="sm:w-[18px] sm:h-[18px]" /> {userMatch ? 'Sim Match' : 'Sim Day'}
                                 </button>
-                                <button onClick={() => setIsSkipSeasonConfirmOpen(true)} className="col-span-2 flex items-center justify-center gap-1 sm:gap-2 font-bold py-2.5 sm:py-3 px-2 sm:px-4 rounded-lg text-xs sm:text-sm md:text-base bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-600">
+                                <button 
+                                    onClick={() => setIsSkipSeasonConfirmOpen(true)} 
+                                    className="col-span-2 flex items-center justify-center gap-1 sm:gap-2 font-bold py-2.5 sm:py-3 px-2 sm:px-4 rounded-lg text-xs sm:text-sm md:text-base bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-600"
+                                >
                                     <FastForward size={14} className="sm:w-[18px] sm:h-[18px]" /> Skip to Season End
                                 </button>
                             </div>
@@ -815,8 +1224,89 @@ const App: React.FC = () => {
                     </div>
                     
                     <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden flex-1 min-h-[300px] flex flex-col w-full min-w-0">
-                        <div className="p-3 sm:p-4 bg-slate-900/50 border-b border-slate-700 space-y-2 sm:space-y-3"><div className="relative"><select value={resultsComp} onChange={(e) => setResultsComp(e.target.value as Competition)} className="w-full bg-slate-800 border border-slate-600 text-white text-xs sm:text-sm font-bold rounded-lg p-2 sm:p-2.5 outline-none pl-8 sm:pl-10 appearance-none"><option value="La Liga">La Liga</option><option value="Champions League">Champions League</option></select><div className="absolute left-2.5 sm:left-3 top-2.5 sm:top-3 pointer-events-none flex items-center justify-center w-4 h-4 sm:w-5 sm:h-5">{resultsComp === 'La Liga' && LIGA_LOGO_URL ? <img src={LIGA_LOGO_URL} className="w-3.5 h-3.5 sm:w-4 sm:h-4 object-contain" /> : null}{resultsComp === 'Champions League' && UCL_LOGO_URL ? <div className="bg-slate-200 rounded-full p-0.5 w-3.5 h-3.5 sm:w-4 sm:h-4 flex items-center justify-center"><img src={UCL_LOGO_URL} className="w-2.5 h-2.5 sm:w-3 sm:h-3 object-contain" /></div> : null}</div><ChevronDown className="absolute right-2.5 sm:right-3 top-2.5 sm:top-3 text-slate-400 sm:w-[16px] sm:h-[16px]" size={14} /></div><div className="flex items-center justify-between bg-slate-700/30 rounded-lg p-1"><button onClick={() => setResultsIndex((prev: number) => Math.max(0, prev - 1))} className="p-1 sm:p-1.5 hover:bg-slate-700 rounded disabled:opacity-30" disabled={resultsIndex <= 0}><ChevronLeft size={14} className="sm:w-[16px] sm:h-[16px]" /></button><h3 className="font-bold text-[10px] sm:text-xs uppercase truncate px-2">{currentResultGroup?.label || 'No Matches'}</h3><button onClick={() => setResultsIndex((prev: number) => Math.min(resultGroups.length - 1, prev + 1))} className="p-1 sm:p-1.5 hover:bg-slate-700 rounded disabled:opacity-30" disabled={resultsIndex >= resultGroups.length - 1}><ChevronRight size={14} className="sm:w-[16px] sm:h-[16px]" /></button></div></div>
-                        <div className="flex-1 overflow-y-auto max-h-[400px] divide-y divide-slate-700/50 min-w-0">{currentResultGroup?.matches.length ? currentResultGroup.matches.map(match => { const h = teams.find(t => t.id === match.homeTeamId), a = teams.find(t => t.id === match.awayTeamId); if (!h || !a) return null; return (<div key={match.id} className={`p-2 sm:p-3 flex justify-between items-center text-[10px] sm:text-sm min-w-0 ${(h.id === userTeamId || a.id === userTeamId) ? (match.competition === 'Champions League' ? 'bg-blue-900/20 border-l-2 border-blue-500' : 'bg-indigo-900/20 border-l-2 border-indigo-500') : 'bg-slate-800/10'}`}><div className="flex-1 text-right font-medium text-slate-300 flex items-center justify-end gap-1.5 sm:gap-2 min-w-0"><span className={`truncate ${h.id === userTeamId ? 'text-white font-bold' : ''}`}>{h.name}</span>{h.logoUrl ? <img src={h.logoUrl} className="w-4 h-4 sm:w-5 sm:h-5 object-contain shrink-0" /> : <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full shrink-0" style={{ backgroundColor: h.primaryColor }}></div>}</div><div className="px-1.5 sm:px-3 font-bold text-white bg-slate-800/50 py-1 rounded mx-1.5 sm:mx-2 min-w-[40px] sm:min-w-[45px] text-center text-[10px] sm:text-xs shrink-0">{match.homeScore} - {match.awayScore}</div><div className="flex-1 text-left font-medium text-slate-300 flex items-center gap-1.5 sm:gap-2 min-w-0">{a.logoUrl ? <img src={a.logoUrl} className="w-4 h-4 sm:w-5 sm:h-5 object-contain shrink-0" /> : <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full shrink-0" style={{ backgroundColor: a.primaryColor }}></div>}<span className={`truncate ${a.id === userTeamId ? 'text-white font-bold' : ''}`}>{a.name}</span></div></div>); }) : <div className="p-6 sm:p-8 text-center text-[10px] sm:text-sm text-slate-500 italic">No matches...</div>}</div>
+                        <div className="p-3 sm:p-4 bg-slate-900/50 border-b border-slate-700 space-y-2 sm:space-y-3">
+                            <div className="relative">
+                                <select 
+                                    value={resultsComp} 
+                                    onChange={(e) => setResultsComp(e.target.value as Competition)} 
+                                    className="w-full bg-slate-800 border border-slate-600 text-white text-xs sm:text-sm font-bold rounded-lg p-2 sm:p-2.5 outline-none pl-8 sm:pl-10 appearance-none"
+                                >
+                                    <option value="La Liga">La Liga</option>
+                                    <option value="Champions League">Champions League</option>
+                                </select>
+                                <div className="absolute left-2.5 sm:left-3 top-2.5 sm:top-3 pointer-events-none flex items-center justify-center w-4 h-4 sm:w-5 sm:h-5">
+                                    {resultsComp === 'La Liga' && LIGA_LOGO_URL ? (
+                                        <img src={LIGA_LOGO_URL} className="w-3.5 h-3.5 sm:w-4 sm:h-4 object-contain" />
+                                    ) : null}
+                                    {resultsComp === 'Champions League' && UCL_LOGO_URL ? (
+                                        <div className="bg-slate-200 rounded-full p-0.5 w-3.5 h-3.5 sm:w-4 sm:h-4 flex items-center justify-center">
+                                            <img src={UCL_LOGO_URL} className="w-2.5 h-2.5 sm:w-3 sm:h-3 object-contain" />
+                                        </div>
+                                    ) : null}
+                                </div>
+                                <ChevronDown className="absolute right-2.5 sm:right-3 top-2.5 sm:top-3 text-slate-400 sm:w-[16px] sm:h-[16px]" size={14} />
+                            </div>
+                            <div className="flex items-center justify-between bg-slate-700/30 rounded-lg p-1">
+                                <button 
+                                    onClick={() => setResultsIndex((prev: number) => Math.max(0, prev - 1))} 
+                                    className="p-1 sm:p-1.5 hover:bg-slate-700 rounded disabled:opacity-30" 
+                                    disabled={resultsIndex <= 0}
+                                >
+                                    <ChevronLeft size={14} className="sm:w-[16px] sm:h-[16px]" />
+                                </button>
+                                <h3 className="font-bold text-[10px] sm:text-xs uppercase truncate px-2">
+                                    {currentResultGroup?.label || 'No Matches'}
+                                </h3>
+                                <button 
+                                    onClick={() => setResultsIndex((prev: number) => Math.min(resultGroups.length - 1, prev + 1))} 
+                                    className="p-1 sm:p-1.5 hover:bg-slate-700 rounded disabled:opacity-30" 
+                                    disabled={resultsIndex >= resultGroups.length - 1}
+                                >
+                                    <ChevronRight size={14} className="sm:w-[16px] sm:h-[16px]" />
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto max-h-[400px] divide-y divide-slate-700/50 min-w-0">
+                            {currentResultGroup?.matches.length ? currentResultGroup.matches.map(match => { 
+                                const h = teams.find(t => t.id === match.homeTeamId);
+                                const a = teams.find(t => t.id === match.awayTeamId); 
+                                
+                                if (!h || !a) return null; 
+                                
+                                return (
+                                    <div key={match.id} className={`p-2 sm:p-3 flex justify-between items-center text-[10px] sm:text-sm min-w-0 ${(h.id === userTeamId || a.id === userTeamId) ? (match.competition === 'Champions League' ? 'bg-blue-900/20 border-l-2 border-blue-500' : 'bg-indigo-900/20 border-l-2 border-indigo-500') : 'bg-slate-800/10'}`}>
+                                        <div className="flex-1 text-right font-medium text-slate-300 flex items-center justify-end gap-1.5 sm:gap-2 min-w-0">
+                                            <span className={`truncate ${h.id === userTeamId ? 'text-white font-bold' : ''}`}>
+                                                {h.name}
+                                            </span>
+                                            {h.logoUrl ? (
+                                                <img src={h.logoUrl} className="w-4 h-4 sm:w-5 sm:h-5 object-contain shrink-0" />
+                                            ) : (
+                                                <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full shrink-0" style={{ backgroundColor: h.primaryColor }}></div>
+                                            )}
+                                        </div>
+                                        <div className="px-1.5 sm:px-3 font-bold text-white bg-slate-800/50 py-1 rounded mx-1.5 sm:mx-2 min-w-[40px] sm:min-w-[45px] text-center text-[10px] sm:text-xs shrink-0">
+                                            {match.homeScore} - {match.awayScore}
+                                        </div>
+                                        <div className="flex-1 text-left font-medium text-slate-300 flex items-center gap-1.5 sm:gap-2 min-w-0">
+                                            {a.logoUrl ? (
+                                                <img src={a.logoUrl} className="w-4 h-4 sm:w-5 sm:h-5 object-contain shrink-0" />
+                                            ) : (
+                                                <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full shrink-0" style={{ backgroundColor: a.primaryColor }}></div>
+                                            )}
+                                            <span className={`truncate ${a.id === userTeamId ? 'text-white font-bold' : ''}`}>
+                                                {a.name}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ); 
+                            }) : (
+                                <div className="p-6 sm:p-8 text-center text-[10px] sm:text-sm text-slate-500 italic">
+                                    No matches...
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
