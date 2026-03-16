@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Team, Player } from '../types';
-import { FORMATIONS, LIGA_LOGO_URL, UCL_LOGO_URL } from '../constants';
-import { FastForward, Activity, Play, Pause, RotateCcw, PieChart } from 'lucide-react';
+import { FORMATIONS } from '../constants';
+import { FastForward, Play, Pause, RotateCcw, PieChart } from 'lucide-react';
 
 interface MatchViewProps {
     homeTeam: Team;
@@ -17,9 +17,7 @@ export interface MatchStats {
     away: { shots: number, possession: number };
 }
 
-// REALISTIC PHYSICS
 const HALF_DURATION_REAL_SEC = 18;
-const PITCH_WIDTH = 100, PITCH_HEIGHT = 100;
 const MAX_SPEED = 45.0, MAX_FORCE = 150.0;
 const FRICTION = 0.92, BALL_FRICTION = 0.98;
 const PASS_SPEED = 65.0, SHOOT_SPEED = 95.0;
@@ -64,7 +62,6 @@ class GameEngine {
     state: 'PLAYING' | 'HALFTIME' | 'STOPPED' = 'PLAYING';
     private cooldown = 0; private stateTimer = 0; private lastToucher: Agent | null = null;
     
-    // Stats accumulation (never resets at half time)
     homeStats = { shots: 0, possessionFrames: 0 };
     awayStats = { shots: 0, possessionFrames: 0 };
 
@@ -154,7 +151,7 @@ class GameEngine {
             } else {
                 let target = p.basePos.clone();
                 if (this.period === 2) target.x = 100 - target.x;
-                target.x += (ballPos.x - 50) * 0.5; // Dynamic team shift
+                target.x += (ballPos.x - 50) * 0.5;
                 
                 if (this.ballOwner?.teamId === p.teamId) {
                     if (this.ballOwner === p) {
@@ -167,8 +164,8 @@ class GameEngine {
                         }
                     } else force.add(p.arrive(new Vector(target.x + (p.isHome === homeAttacksRight ? 20 : -20), target.y)));
                 } else {
-                    if (p === cHome || p === cAway) force.add(p.arrive(ballPos).mult(1.5)); // Only closest presses
-                    else force.add(p.arrive(target)); // Others maintain shape
+                    if (p === cHome || p === cAway) force.add(p.arrive(ballPos).mult(1.5));
+                    else force.add(p.arrive(target));
                 }
             }
             p.applyForce(force);
@@ -325,73 +322,73 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, onMatchComple
     };
 
     return (
-        <div className="flex flex-col h-screen bg-slate-900 text-white overflow-hidden">
-            <div className="h-20 bg-slate-800 border-b border-slate-700 flex items-center justify-between px-6 shadow-xl z-10 shrink-0">
-                <div className="flex items-center gap-6 w-1/3">
-                    <div className="w-14 h-14 flex items-center justify-center bg-slate-700 rounded-full shadow-inner p-1">
-                        {homeTeam.logoUrl ? <img src={homeTeam.logoUrl} className="w-full h-full object-contain" /> : <div className="font-bold">{homeTeam.shortName[0]}</div>}
+        <div className="flex flex-col h-[100dvh] bg-slate-900 text-white overflow-hidden min-w-0">
+            <div className="h-16 md:h-20 bg-slate-800 border-b border-slate-700 flex items-center justify-between px-2 md:px-6 shadow-xl z-10 shrink-0 min-w-0">
+                <div className="flex items-center gap-1.5 md:gap-6 w-[35%] md:w-1/3 min-w-0">
+                    <div className="w-8 h-8 md:w-14 md:h-14 flex items-center justify-center bg-slate-700 rounded-full shadow-inner p-1 shrink-0">
+                        {homeTeam.logoUrl ? <img src={homeTeam.logoUrl} className="w-full h-full object-contain" /> : <div className="font-bold text-xs md:text-base">{homeTeam.shortName[0]}</div>}
                     </div>
-                    <div><div className="text-3xl font-black">{homeTeam.shortName}</div></div>
-                    <div className="text-5xl font-mono font-bold ml-auto">{score.home}</div>
+                    <div className="min-w-0"><div className="text-base md:text-3xl font-black truncate">{homeTeam.shortName}</div></div>
+                    <div className="text-2xl md:text-5xl font-mono font-bold ml-auto shrink-0">{score.home}</div>
                 </div>
-                <div className="flex flex-col items-center w-1/3 px-4">
-                    <div className="bg-slate-900 px-6 py-2 rounded-full border border-slate-700 mb-2">
-                        <span className="font-mono font-bold text-xl text-blue-100">{minute >= 90 ? 'FT' : `${Math.floor(minute)}'`}</span>
+                <div className="flex flex-col items-center w-[30%] md:w-1/3 px-1 md:px-4 shrink-0">
+                    <div className="bg-slate-900 px-3 md:px-6 py-1 md:py-2 rounded-full border border-slate-700 mb-1 md:mb-2">
+                        <span className="font-mono font-bold text-xs md:text-xl text-blue-100">{minute >= 90 ? 'FT' : `${Math.floor(minute)}'`}</span>
                     </div>
-                    <div className="w-full max-w-[200px] h-2 bg-slate-700 rounded-full overflow-hidden">
+                    <div className="w-full max-w-[200px] h-1 md:h-2 bg-slate-700 rounded-full overflow-hidden">
                         <div className="h-full bg-blue-500 transition-all duration-1000" style={{ width: `${(minute / 90) * 100}%` }}></div>
                     </div>
                 </div>
-                <div className="flex items-center gap-6 w-1/3 justify-end">
-                    <div className="text-5xl font-mono font-bold mr-auto">{score.away}</div>
-                    <div className="text-right"><div className="text-3xl font-black">{awayTeam.shortName}</div></div>
-                    <div className="w-14 h-14 flex items-center justify-center bg-slate-700 rounded-full p-1">
-                        {awayTeam.logoUrl ? <img src={awayTeam.logoUrl} className="w-full h-full object-contain" /> : <div className="font-bold">{awayTeam.shortName[0]}</div>}
+                <div className="flex items-center gap-1.5 md:gap-6 w-[35%] md:w-1/3 justify-end min-w-0">
+                    <div className="text-2xl md:text-5xl font-mono font-bold mr-auto shrink-0">{score.away}</div>
+                    <div className="text-right min-w-0"><div className="text-base md:text-3xl font-black truncate">{awayTeam.shortName}</div></div>
+                    <div className="w-8 h-8 md:w-14 md:h-14 flex items-center justify-center bg-slate-700 rounded-full p-1 shrink-0">
+                        {awayTeam.logoUrl ? <img src={awayTeam.logoUrl} className="w-full h-full object-contain" /> : <div className="font-bold text-xs md:text-base">{awayTeam.shortName[0]}</div>}
                     </div>
                 </div>
             </div>
 
-            <div className="flex-1 flex overflow-hidden">
-                <div className="flex-1 bg-slate-950 p-6 flex items-center justify-center relative">
-                    <canvas ref={canvasRef} width={1000} height={600} className="max-w-full max-h-full aspect-[5/3] bg-emerald-800 rounded-xl shadow-2xl border-4 border-slate-800" />
+            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-w-0">
+                <div className="w-full lg:flex-1 bg-slate-950 p-2 md:p-6 flex items-center justify-center relative min-h-[40vh] lg:min-h-0 shrink-0 border-b lg:border-b-0 border-slate-800">
+                    <canvas ref={canvasRef} width={1000} height={600} className="max-w-full max-h-full aspect-[5/3] bg-emerald-800 rounded-lg md:rounded-xl shadow-2xl border-2 md:border-4 border-slate-800" />
                     
                     {isHalftime && (
                         <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center z-30">
-                            <div className="text-4xl font-black mb-6">HALFTIME</div>
-                            <button onClick={() => { if (engineRef.current) engineRef.current.startSecondHalf(); setIsHalftime(false); setIsPausedState(false); }} className="bg-blue-600 px-8 py-3 rounded-xl font-bold flex items-center gap-2"><RotateCcw size={20} /> Start Second Half</button>
+                            <div className="text-2xl md:text-4xl font-black mb-4 md:mb-6">HALFTIME</div>
+                            <button onClick={() => { if (engineRef.current) engineRef.current.startSecondHalf(); setIsHalftime(false); setIsPausedState(false); }} className="bg-blue-600 px-4 md:px-8 py-2 md:py-3 rounded-xl font-bold flex items-center gap-2 text-sm md:text-base"><RotateCcw size={18} /> Start Second Half</button>
                         </div>
                     )}
 
                     {!isHalftime && !isFinishedRef.current && (
-                        <div className="absolute bottom-8 flex gap-4 bg-slate-900/90 p-2 rounded-2xl border border-slate-700">
-                            <button onClick={() => setIsPausedState(!isPausedState)} className="w-14 h-14 flex items-center justify-center bg-blue-600 rounded-xl">
-                                {isPausedState ? <Play fill="currentColor" size={28} /> : <Pause fill="currentColor" size={28} />}
+                        <div className="absolute bottom-2 md:bottom-8 flex gap-2 md:gap-4 bg-slate-900/90 p-1.5 md:p-2 rounded-xl md:rounded-2xl border border-slate-700 scale-90 md:scale-100 origin-bottom">
+                            <button onClick={() => setIsPausedState(!isPausedState)} className="w-10 h-10 md:w-14 md:h-14 flex items-center justify-center bg-blue-600 rounded-lg md:rounded-xl">
+                                {isPausedState ? <Play fill="currentColor" size={20} className="md:w-[28px] md:h-[28px]" /> : <Pause fill="currentColor" size={20} className="md:w-[28px] md:h-[28px]" />}
                             </button>
-                            <button onClick={() => { if (engineRef.current && !isFinishedRef.current) { isFinishedRef.current = true; engineRef.current.skipToEnd(); setIsPausedState(true); onMatchComplete(engineRef.current.homeScore, engineRef.current.awayScore); } }} className="px-6 h-14 flex items-center gap-2 bg-slate-700 rounded-xl font-bold">
-                                <FastForward fill="currentColor" size={24} /> Skip to Result
+                            <button onClick={() => { if (engineRef.current && !isFinishedRef.current) { isFinishedRef.current = true; engineRef.current.skipToEnd(); setIsPausedState(true); onMatchComplete(engineRef.current.homeScore, engineRef.current.awayScore); } }} className="px-3 md:px-6 h-10 md:h-14 flex items-center gap-2 bg-slate-700 rounded-lg md:rounded-xl font-bold text-xs md:text-base">
+                                <FastForward fill="currentColor" size={18} className="md:w-[24px] md:h-[24px]" /> Skip to Result
                             </button>
                         </div>
                     )}
                 </div>
 
-                <div className="w-96 bg-slate-900 border-l border-slate-800 flex flex-col shadow-2xl z-20">
+                <div className="w-full lg:w-96 bg-slate-900 lg:border-l border-slate-800 flex flex-col shadow-2xl z-20 flex-1 min-h-0 min-w-0">
                     <div className="border-b border-slate-800 bg-slate-800/30 flex flex-col shrink-0">
-                        <div className="p-4 border-b border-slate-800/50 flex items-center gap-2 font-bold"><PieChart size={18} className="text-blue-400" /> Match Stats</div>
-                        <div className="p-4 space-y-3">
+                        <div className="p-2 md:p-4 border-b border-slate-800/50 flex items-center gap-2 font-bold text-sm md:text-base"><PieChart size={16} className="text-blue-400 md:w-[18px] md:h-[18px]" /> Match Stats</div>
+                        <div className="p-2 md:p-4 space-y-2 md:space-y-3">
                             <div>
-                                <div className="flex justify-between text-xs font-bold uppercase mb-1"><span className="text-blue-300">{stats.home.possession}%</span><span>Possession</span><span className="text-red-300">{stats.away.possession}%</span></div>
-                                <div className="flex h-2 rounded-full overflow-hidden bg-slate-700"><div className="bg-blue-500 transition-all duration-300" style={{ width: `${stats.home.possession}%` }}></div><div className="bg-red-500 transition-all duration-300" style={{ width: `${stats.away.possession}%` }}></div></div>
+                                <div className="flex justify-between text-[10px] md:text-xs font-bold uppercase mb-1"><span className="text-blue-300">{stats.home.possession}%</span><span>Possession</span><span className="text-red-300">{stats.away.possession}%</span></div>
+                                <div className="flex h-1.5 md:h-2 rounded-full overflow-hidden bg-slate-700"><div className="bg-blue-500 transition-all duration-300" style={{ width: `${stats.home.possession}%` }}></div><div className="bg-red-500 transition-all duration-300" style={{ width: `${stats.away.possession}%` }}></div></div>
                             </div>
-                            <div className="flex justify-between items-center text-sm py-1">
-                                <span className="font-bold text-blue-400 w-8 text-center">{stats.home.shots}</span><span className="text-slate-400 text-xs uppercase text-center flex-1">Shots</span><span className="font-bold text-red-400 w-8 text-center">{stats.away.shots}</span>
+                            <div className="flex justify-between items-center text-xs md:text-sm py-1">
+                                <span className="font-bold text-blue-400 w-8 text-center">{stats.home.shots}</span><span className="text-slate-400 text-[10px] md:text-xs uppercase text-center flex-1">Shots</span><span className="font-bold text-red-400 w-8 text-center">{stats.away.shots}</span>
                             </div>
                         </div>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    <div className="flex-1 overflow-y-auto p-2 md:p-4 space-y-2 md:space-y-4">
                         {events.map((ev, i) => (
-                            <div key={i} className="flex gap-4 items-start animate-in slide-in-from-right-4 fade-in duration-500">
-                                <div className="text-slate-500 font-mono text-xs font-bold pt-1">{ev.split(' ')[0]}</div>
-                                <div className={`p-3 rounded-lg text-sm w-full border ${ev.includes('GOAL') ? 'bg-yellow-900/20 border-yellow-700/50 text-yellow-400 font-bold' : 'bg-slate-800 border-slate-700 text-slate-200'}`}>
+                            <div key={i} className="flex gap-2 md:gap-4 items-start animate-in slide-in-from-right-4 fade-in duration-500">
+                                <div className="text-slate-500 font-mono text-[10px] md:text-xs font-bold pt-1 min-w-[30px]">{ev.split(' ')[0]}</div>
+                                <div className={`p-2 md:p-3 rounded-lg text-xs md:text-sm w-full border ${ev.includes('GOAL') ? 'bg-yellow-900/20 border-yellow-700/50 text-yellow-400 font-bold' : 'bg-slate-800 border-slate-700 text-slate-200'}`}>
                                     {ev.substring(ev.indexOf(' ') + 1)}
                                 </div>
                             </div>
