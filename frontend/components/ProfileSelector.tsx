@@ -3,6 +3,7 @@ import { ManagerProfile } from '../types';
 import { fetchProfiles, createProfile, deleteProfile, fetchCurrentUser, updateAccountName } from '../services/api';
 import { User, Plus, Trash2, Trophy, Calendar, LogOut, AlertTriangle, ChevronDown, Edit2, X } from 'lucide-react';
 import SetupModal from './SetupModal';
+import ProfileIcon from './ProfileIcon';
 
 interface ProfileSelectorProps {
   onSelectProfile: (profile: ManagerProfile) => void;
@@ -203,7 +204,7 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onSelectProfile, onLo
                 >
                   <div className="flex justify-between items-start mb-4">
                     <div className="w-14 h-14 bg-gradient-to-br from-slate-700 to-slate-600 rounded-full flex items-center justify-center text-xl font-bold text-white shadow-lg">
-                      {profile.name.substring(0, 2).toUpperCase()}
+                      <User className="w-8 h-8 rounded-full text-sm" />
                     </div>
                   </div>
 

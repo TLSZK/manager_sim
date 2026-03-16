@@ -107,7 +107,7 @@ const ManagerProfile: React.FC<ManagerProfileProps> = ({
         <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-6 flex justify-between items-start border-b border-slate-700 shrink-0">
           <div className="flex gap-4 items-center flex-1">
             <div className="w-16 h-16 rounded-full bg-blue-600 flex items-center justify-center text-2xl font-bold text-white ring-4 ring-slate-700 shadow-lg shrink-0">
-              {editName ? editName.substring(0, 2).toUpperCase() : <User />}
+              {<User size="36" />}
             </div>
             <div>
               <div className="flex items-center gap-2">
