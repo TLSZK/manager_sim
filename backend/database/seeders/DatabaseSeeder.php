@@ -75,16 +75,18 @@ class DatabaseSeeder extends Seeder
             ['id' => 'stg', 'name' => 'Sturm Graz', 'shortName' => 'STU', 'strength' => 72, 'primaryColor' => '#000000', 'secondaryColor' => '#FFFFFF', 'isUCL' => true, 'logoUrl' => 'https://images.fotmob.com/image_resources/logo/teamlogo/10014.png', 'tier' => 2],
         ];
 
-        // Specific real players for major teams
+        // Exactly ordered for a 4-3-3 shape to match $this->getPosition() index map perfectly!
+        // 0:GK, 1:RB, 2:CB, 3:CB, 4:LB, 5:CDM, 6:CM, 7:CM, 8:RW, 9:LW, 10:ST
+        // 11-21: Sub equivalents
         $realPlayers = [
-            'bar' => ['J. Garcia', 'Cubarsí', 'Balde', 'Araújo', 'Koundé', 'Pedri', 'Gavi', 'De Jong', 'Raphinha', 'Yamal', 'Lewandowski', 'Szczesny', 'Christensen', 'Fermin', 'Olmo', 'Ferran', 'Martinez', 'Fati', 'Casado', 'Fort', 'Pena'],
-            'rma' => ['Courtois', 'Carvajal', 'Militao', 'Rüdiger', 'Mendy', 'Tchouaméni', 'Valverde', 'Bellingham', 'Rodrygo', 'Mbappé', 'Vinícius Jr', 'Lunin', 'Camavinga', 'Brahim', 'Güler', 'Alaba', 'Vazquez', 'Garcia', 'Modric', 'Ceballos', 'Endrick'],
-            'atm' => ['Oblak', 'Molina', 'Gimenez', 'Le Normand', 'Lino', 'De Paul', 'Koke', 'Gallagher', 'Griezmann', 'Alvarez', 'Sorloth', 'Musso', 'Witsel', 'Azpilicueta', 'Llorente', 'Riquelme', 'Correa', 'Barrios', 'Mandava'],
-            'mci' => ['Ederson', 'Walker', 'Dias', 'Gvardiol', 'Ake', 'Rodri', 'Kovacic', 'De Bruyne', 'Silva', 'Foden', 'Haaland', 'Ortega', 'Stones', 'Akanji', 'Grealish', 'Doku', 'Savinho', 'Nunes', 'Bobb', 'Lewis'],
-            'liv' => ['Alisson', 'Alexander-Arnold', 'Van Dijk', 'Konate', 'Robertson', 'Mac Allister', 'Gravenberch', 'Szoboszlai', 'Salah', 'Diaz', 'Jota', 'Kelleher', 'Gomez', 'Quansah', 'Bradley', 'Endo', 'Jones', 'Elliott', 'Gakpo', 'Nunez', 'Chiesa'],
-            'ars' => ['Raya', 'White', 'Saliba', 'Gabriel', 'Timber', 'Rice', 'Odegaard', 'Merino', 'Saka', 'Martinelli', 'Havertz', 'Neto', 'Kiwior', 'Zinchenko', 'Calafiori', 'Partey', 'Jorginho', 'Trossard', 'Sterling', 'Jesus'],
-            'bay' => ['Neuer', 'Boey', 'Upamecano', 'Kim', 'Davies', 'Kimmich', 'Pavlovic', 'Musiala', 'Olise', 'Sane', 'Kane', 'Ulreich', 'Dier', 'Ito', 'Guerreiro', 'Palhinha', 'Laimer', 'Goretzka', 'Gnabry', 'Coman', 'Muller', 'Tel'],
-            'psg' => ['Donnarumma', 'Hakimi', 'Marquinhos', 'Pacho', 'Mendes', 'Vitinha', 'Neves', 'Zaire-Emery', 'Dembele', 'Barcola', 'Asensio', 'Safonov', 'Skriniar', 'Beraldo', 'Ruiz', 'Lee', 'Doue', 'Kolo Muani', 'Ramos', 'Hernandez']
+            'bar' => ['Ter Stegen', 'Koundé', 'Araújo', 'Cubarsí', 'Balde', 'De Jong', 'Pedri', 'Gavi', 'Yamal', 'Raphinha', 'Lewandowski', 'Szczesny', 'Fort', 'Christensen', 'Martin', 'Casado', 'Fermin', 'Olmo', 'Ferran', 'Fati', 'Victor', 'Guiu'],
+            'rma' => ['Courtois', 'Carvajal', 'Rüdiger', 'Militao', 'Mendy', 'Tchouaméni', 'Valverde', 'Bellingham', 'Rodrygo', 'Vinícius Jr', 'Mbappé', 'Lunin', 'Vazquez', 'Alaba', 'Garcia', 'Camavinga', 'Modric', 'Brahim', 'Güler', 'Paz', 'Endrick', 'Joselu'],
+            'atm' => ['Oblak', 'Molina', 'Gimenez', 'Le Normand', 'Lino', 'Koke', 'De Paul', 'Gallagher', 'Griezmann', 'Riquelme', 'Alvarez', 'Musso', 'Azpilicueta', 'Witsel', 'Mandava', 'Barrios', 'Lemar', 'Correa', 'Simeone', 'Sorloth', 'Giuliano', 'Mourino'],
+            'mci' => ['Ederson', 'Walker', 'Dias', 'Akanji', 'Gvardiol', 'Rodri', 'Kovacic', 'De Bruyne', 'Silva', 'Doku', 'Haaland', 'Ortega', 'Lewis', 'Stones', 'Ake', 'Nunes', 'Gundogan', 'Foden', 'Savinho', 'Grealish', 'Bobb', 'McAtee'],
+            'liv' => ['Alisson', 'Alexander-Arnold', 'Van Dijk', 'Konate', 'Robertson', 'Endo', 'Mac Allister', 'Szoboszlai', 'Salah', 'Diaz', 'Jota', 'Kelleher', 'Bradley', 'Quansah', 'Tsimikas', 'Gravenberch', 'Jones', 'Elliott', 'Chiesa', 'Gakpo', 'Nunez', 'Danns'],
+            'ars' => ['Raya', 'White', 'Saliba', 'Gabriel', 'Timber', 'Partey', 'Rice', 'Odegaard', 'Saka', 'Martinelli', 'Havertz', 'Neto', 'Tomiyasu', 'Kiwior', 'Zinchenko', 'Jorginho', 'Merino', 'Nwaneri', 'Sterling', 'Trossard', 'Jesus', 'Nketiah'],
+            'bay' => ['Neuer', 'Boey', 'Upamecano', 'Kim', 'Davies', 'Palhinha', 'Kimmich', 'Musiala', 'Olise', 'Gnabry', 'Kane', 'Ulreich', 'Stanisic', 'Dier', 'Guerreiro', 'Pavlovic', 'Laimer', 'Muller', 'Sane', 'Coman', 'Tel', 'Ibrahimovic'],
+            'psg' => ['Donnarumma', 'Hakimi', 'Marquinhos', 'Pacho', 'Mendes', 'Neves', 'Vitinha', 'Zaire-Emery', 'Dembele', 'Barcola', 'Asensio', 'Safonov', 'Zague', 'Skriniar', 'Beraldo', 'Ruiz', 'Doue', 'Lee', 'Kolo Muani', 'Ramos', 'Mbaye', 'Mayulu']
         ];
 
         foreach ($teams as $team) {
@@ -118,9 +120,10 @@ class DatabaseSeeder extends Seeder
     }
 
     private function getPosition($i) {
-        if ($i === 0 || $i === 11) return 'GK';
-        if ($i <= 4 || ($i >= 12 && $i <= 15)) return 'DEF';
-        if ($i <= 7 || ($i >= 16 && $i <= 18)) return 'MID';
-        return 'FWD';
+        $positions = [
+            'GK', 'RB', 'CB', 'CB', 'LB', 'CDM', 'CM', 'CM', 'RW', 'LW', 'ST', // 0-10 (Starters 4-3-3 Shape)
+            'GK', 'RB', 'CB', 'LB', 'CDM', 'CM', 'CAM', 'RW', 'LW', 'ST', 'ST' // 11-21 (Bench depth)
+        ];
+        return $positions[$i] ?? 'RES';
     }
 }

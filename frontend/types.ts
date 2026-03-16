@@ -1,9 +1,8 @@
-
 export interface Player {
   id: string;
   name: string;
   number: number;
-  position: 'GK' | 'DEF' | 'MID' | 'FWD';
+  position: string; // Updated to string since backend pushes exact positions like "CAM" "CDM" "RB"
   rating: number; // 0-100
   offField: boolean;
 }

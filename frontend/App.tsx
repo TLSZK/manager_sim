@@ -312,7 +312,16 @@ const App: React.FC = () => {
         else simulateWeekLogic(null);
     };
 
-    const handleUpdateTeam = (updatedTeam: Team) => setTeams(prev => prev.map(t => t.id === updatedTeam.id ? updatedTeam : t));
+    // IMMEDIATELY SAVE NEW LINEUPS TO DB:
+    const handleUpdateTeam = (updatedTeam: Team) => {
+        const nextTeams = teams.map(t => t.id === updatedTeam.id ? updatedTeam : t);
+        setTeams(nextTeams);
+        if (activeProfile && userTeamId) {
+            saveGame(activeProfile.id, { currentWeek, userTeamId, schedule, teams: nextTeams });
+        }
+    };
+
+    const toggleFastSim = () => { setIsSimulatingFast(prev => !prev); setTargetSimWeek(null); };
 
     useEffect(() => {
         let timer: ReturnType<typeof setTimeout>;
@@ -388,16 +397,20 @@ const App: React.FC = () => {
         } catch (error) { alert("Failed to save season data."); setSimState('ready'); }
     };
 
-    const toggleFastSim = () => { setIsSimulatingFast(prev => !prev); setTargetSimWeek(null); };
-
+    // PERSIST TEAMS BETWEEN SEASONS INSTEAD OF OVERWRITING:
     const handleSeasonTransition = async (stayWithTeam: boolean) => {
         setIsSimulatingFast(false); setIsRecapOpen(false); setSeasonId(crypto.randomUUID());
-        const fetchedTeams = await fetchTeams();
-        const allTeams = [...fetchedTeams.map(t => ({ ...t, isLaLiga: t.tier === 1 })), TBD_TEAM];
-        setTeams(allTeams);
+        
+        // Reset only stats to preserve custom lineups
+        const resetTeams = teams.map(t => ({
+            ...t,
+            stats: { ...INITIAL_STATS, form: [] },
+            uclStats: t.isUCL ? { ...INITIAL_UCL_STATS } : undefined
+        }));
+        setTeams(resetTeams);
 
-        const ligaTeams = allTeams.filter(t => t.tier === 1 && t.id !== 'TBD');
-        const uclTeams = allTeams.filter(t => t.isUCL && t.id !== 'TBD');
+        const ligaTeams = resetTeams.filter(t => t.tier === 1 && t.id !== 'TBD');
+        const uclTeams = resetTeams.filter(t => t.isUCL && t.id !== 'TBD');
 
         const parts = currentSeasonYear.split('/');
         const newSeasonYear = `${parseInt(parts[0] || '2025', 10) + 1}/${parseInt(parts[1] || '26', 10) + 1}`;
@@ -408,7 +421,7 @@ const App: React.FC = () => {
 
         let newUserTeamId = userTeamId;
         if (!stayWithTeam || !userTeamId) { newUserTeamId = null; setUserTeamId(null); setSimState('select_team'); } else { setSimState('ready'); }
-        if (activeProfile && newUserTeamId) saveGame(activeProfile.id, { currentWeek: 1, userTeamId: newUserTeamId, schedule: nextSchedule, teams: allTeams });
+        if (activeProfile && newUserTeamId) saveGame(activeProfile.id, { currentWeek: 1, userTeamId: newUserTeamId, schedule: nextSchedule, teams: resetTeams });
     };
 
     const resultGroups = useMemo(() => {
