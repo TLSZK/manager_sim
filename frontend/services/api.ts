@@ -84,7 +84,7 @@ export const fetchTeams = async (): Promise<Team[]> => {
         ...p, 
         offField: Boolean(p.offField || p.offfield || p.off_field) 
       })),
-      formation: '4-3-3',
+      formation: t.formation || '4-3-3', // Fixed: Now reads from backend, defaults to 4-3-3 if missing
       stats: parsedStats || { ...INITIAL_STATS, form: [] },
       uclStats: isUcl ? (parsedUclStats || { ...INITIAL_UCL_STATS }) : undefined
     };

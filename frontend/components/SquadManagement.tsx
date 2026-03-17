@@ -16,6 +16,12 @@ const SquadManagement: React.FC<SquadManagementProps> = ({ team, onUpdateTeam, o
   
   const [isVertical, setIsVertical] = useState<boolean>(true);
 
+  // Force sync local state anytime the team prop changes (e.g., late backend hydration or team switch)
+  useEffect(() => {
+    setSelectedFormation(team.formation || '4-3-3');
+    setRoster(team.roster || []);
+  }, [team]);
+
   useEffect(() => {
     const checkOrientation = () => setIsVertical(window.innerWidth < 1280);
     checkOrientation();
