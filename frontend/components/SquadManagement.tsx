@@ -42,8 +42,16 @@ const SquadManagement: React.FC<SquadManagementProps> = ({ team, onUpdateTeam, o
       if (playerAIndex === -1 || playerBIndex === -1) return;
 
       const newRoster = [...roster];
-      [newRoster[playerAIndex], newRoster[playerBIndex]] = [newRoster[playerBIndex], newRoster[playerAIndex]];
-      newRoster.forEach((p, index) => { p.offField = index > 10; });
+      const pA = { ...newRoster[playerAIndex] };
+      const pB = { ...newRoster[playerBIndex] };
+
+      // Correctly swap offField status between the two clicked players
+      const tempOffField = pA.offField;
+      pA.offField = pB.offField;
+      pB.offField = tempOffField;
+
+      newRoster[playerAIndex] = pA;
+      newRoster[playerBIndex] = pB;
 
       setRoster(newRoster);
       onUpdateTeam({ ...team, roster: newRoster });
@@ -51,9 +59,40 @@ const SquadManagement: React.FC<SquadManagementProps> = ({ team, onUpdateTeam, o
     }
   };
 
-  const starters = roster.slice(0, 11);
-  const bench = roster.slice(11);
-  const getFormationPos = (index: number) => FORMATIONS[selectedFormation][index] || { x: 50, y: 50, position: '?' };
+  // Smart aligner: filters starters and maps them to the exact formation coordinates
+  const starters = useMemo(() => {
+      const onField = roster.filter(p => !p.offField);
+      const formPositions = FORMATIONS[selectedFormation] || FORMATIONS['4-3-3'];
+      
+      const sortedStarters: Player[] = [];
+      const pool = [...onField];
+      
+      for (const posDef of formPositions) {
+          const expectedPos = posDef.position;
+          
+          let matchIdx = pool.findIndex(p => p.position === expectedPos);
+          
+          if (matchIdx === -1) {
+              matchIdx = pool.findIndex(p => getPositionFit(p.position, expectedPos) === 'okay');
+          }
+          
+          if (matchIdx === -1 && pool.length > 0) {
+              matchIdx = pool.findIndex(p => (p.position === 'GK') === (expectedPos === 'GK'));
+              if (matchIdx === -1) matchIdx = 0; 
+          }
+
+          if (matchIdx !== -1) {
+              sortedStarters.push(pool.splice(matchIdx, 1)[0]);
+          }
+      }
+      
+      return [...sortedStarters, ...pool];
+  }, [roster, selectedFormation]);
+
+  // Sort bench by rating so the highest rated subs are visible first
+  const bench = useMemo(() => roster.filter(p => p.offField).sort((a, b) => b.rating - a.rating), [roster]);
+  
+  const getFormationPos = (index: number) => FORMATIONS[selectedFormation]?.[index] || { x: 50, y: 50, position: '?' };
 
   const outOfPosCount = useMemo(() => {
       return starters.filter((p, i) => getPositionFit(p.position, getFormationPos(i).position) === 'bad').length;
@@ -61,7 +100,6 @@ const SquadManagement: React.FC<SquadManagementProps> = ({ team, onUpdateTeam, o
 
   return (
     <div className="h-[100dvh] bg-slate-900 text-slate-100 flex flex-col overflow-hidden w-full min-w-0">
-      {/* Header */}
       <header className="bg-slate-800 p-2 md:p-4 border-b border-slate-700 flex items-center justify-between shrink-0 z-50 shadow-md">
         <button onClick={onBack} className="flex items-center gap-1 md:gap-2 text-slate-300 hover:text-white transition-colors text-xs md:text-base">
             <ChevronLeft size={18} className="md:w-[20px] md:h-[20px]" /> <span>Back</span>
@@ -70,7 +108,6 @@ const SquadManagement: React.FC<SquadManagementProps> = ({ team, onUpdateTeam, o
         <div className="w-10"></div> 
       </header>
 
-      {/* Warning Banner */}
       {outOfPosCount > 0 && (
           <div className="bg-red-900/50 border-b border-red-700 p-1.5 md:p-3 flex items-center justify-center gap-1.5 md:gap-2 text-red-200 text-[10px] md:text-sm shadow-inner shrink-0 z-40 text-center px-2">
               <AlertTriangle size={14} className="text-red-400 shrink-0 md:w-[16px] md:h-[16px]" />
@@ -78,18 +115,16 @@ const SquadManagement: React.FC<SquadManagementProps> = ({ team, onUpdateTeam, o
           </div>
       )}
 
-      {/* Main Content Area */}
       <div className="flex-1 flex flex-col xl:flex-row overflow-hidden min-w-0">
-        
-        {/* Pitch View */}
         <div className="w-full xl:flex-1 bg-slate-950 p-2 md:p-6 flex flex-col items-center relative shrink-0 overflow-y-auto xl:overflow-hidden min-h-[50vh] xl:min-h-0 min-w-0">
              <div className="w-full max-w-[600px] mb-2 md:mb-4 z-20 flex justify-center">
                 <div className="bg-slate-800/90 p-1.5 md:p-2 rounded-lg border border-slate-700 shadow-lg flex items-center gap-2 md:gap-3">
                     <span className="text-[9px] md:text-[10px] text-slate-400 uppercase font-bold">Formation</span>
                     <select value={selectedFormation} onChange={(e) => handleFormationChange(e.target.value as Formation)} className="bg-slate-900 border border-slate-600 rounded px-1.5 md:px-2 py-0.5 md:py-1 text-[10px] md:text-xs outline-none text-white min-w-[80px] md:min-w-[100px]">
                         <option value="4-3-3">4-3-3 Attack</option>
+                        <option value="4-2-3-1">4-2-3-1 Modern</option>
                         <option value="4-4-2">4-4-2 Flat</option>
-                        <option value="3-5-2">3-5-2</option>
+                        <option value="3-5-2">3-5-2 Wingbacks</option>
                     </select>
                 </div>
              </div>
@@ -149,7 +184,6 @@ const SquadManagement: React.FC<SquadManagementProps> = ({ team, onUpdateTeam, o
              </div>
         </div>
 
-        {/* Roster List */}
         <div className="w-full xl:w-96 bg-slate-800 border-t xl:border-t-0 xl:border-l border-slate-700 flex flex-col shrink-0 min-h-[40vh] xl:min-h-0 xl:h-auto shadow-xl z-10 min-w-0">
             <div className="p-2 md:p-4 border-b border-slate-700 bg-slate-900/50 flex justify-between items-center sticky top-0 z-10 min-w-0">
                 <div className="min-w-0 pr-2">
@@ -180,7 +214,6 @@ const SquadManagement: React.FC<SquadManagementProps> = ({ team, onUpdateTeam, o
                 })}
             </div>
         </div>
-
       </div>
     </div>
   );

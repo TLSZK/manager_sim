@@ -16,7 +16,7 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        // 3. MANAGER HISTORIES (Updated with advanced stats)
+        // 3. MANAGER HISTORIES
         Schema::create('manager_histories', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->foreignUuid('manager_id')->constrained('managers')->onDelete('cascade');
@@ -27,7 +27,6 @@ return new class extends Migration
             $table->integer('position');
             $table->integer('points');
 
-            // Replaced 'wonTrophy' with the detailed career tracking stats
             $table->boolean('wonLiga')->default(false);
             $table->boolean('wonUcl')->default(false);
             $table->integer('wins')->default(0);
@@ -41,7 +40,7 @@ return new class extends Migration
 
         // 4. TEAMS
         Schema::create('teams', function (Blueprint $table) {
-            $table->string('id')->primary(); // 'bar', 'rma'
+            $table->string('id')->primary(); 
             $table->string('name');
             $table->string('shortName');
             $table->string('logoUrl');
@@ -50,6 +49,7 @@ return new class extends Migration
             $table->integer('strength');
             $table->integer('tier');
             $table->boolean('isUCL')->default(false);
+            $table->string('formation')->default('4-3-3'); // Added to fix frontend layout default!
             $table->json('stats')->nullable();
             $table->json('uclStats')->nullable();
             $table->timestamps();

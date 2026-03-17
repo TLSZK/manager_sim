@@ -40,10 +40,6 @@ export const getPenalizedRating = (playerRating: number, playerPos: string, slot
     return Math.max(1, playerRating - 15);
 };
 
-// Coordinate System:
-// x=0 is Goalkeeper box, x=100 is Opponent Goal box
-// y=15 is TOP OF SCREEN (Left side of Pitch, e.g. LB, LW)
-// y=85 is BOTTOM OF SCREEN (Right side of Pitch, e.g. RB, RW)
 export const FORMATIONS: Record<Formation, { position: string, x: number, y: number }[]> = {
   '4-3-3': [ 
     { position: 'GK', x: 5, y: 50 }, 
@@ -83,6 +79,19 @@ export const FORMATIONS: Record<Formation, { position: string, x: number, y: num
     { position: 'LM', x: 40, y: 15 }, 
     { position: 'ST', x: 75, y: 65 }, 
     { position: 'ST', x: 75, y: 35 } 
+  ],
+  '4-2-3-1': [
+    { position: 'GK', x: 5, y: 50 },
+    { position: 'RB', x: 20, y: 85 },
+    { position: 'CB', x: 18, y: 62 },
+    { position: 'CB', x: 18, y: 38 },
+    { position: 'LB', x: 20, y: 15 },
+    { position: 'CDM', x: 35, y: 65 },
+    { position: 'CM', x: 35, y: 35 },
+    { position: 'CAM', x: 55, y: 50 },
+    { position: 'RW', x: 75, y: 85 },
+    { position: 'LW', x: 75, y: 15 },
+    { position: 'ST', x: 80, y: 50 }
   ]
 };
 

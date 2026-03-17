@@ -2,12 +2,12 @@ export interface Player {
   id: string;
   name: string;
   number: number;
-  position: string; // Updated to string since backend pushes exact positions like "CAM" "CDM" "RB"
+  position: string;
   rating: number; // 0-100
   offField: boolean;
 }
 
-export type Formation = '4-3-3' | '4-4-2' | '3-5-2';
+export type Formation = '4-3-3' | '4-4-2' | '3-5-2' | '4-2-3-1';
 
 export interface Team {
   id: string;
@@ -18,7 +18,7 @@ export interface Team {
   secondaryColor: string;
   logoUrl?: string;
 
-  // Roster & Tactics (Frontend specific, often generated after fetch)
+  // Roster & Tactics
   roster?: Player[];
   formation?: Formation;
 
@@ -58,8 +58,8 @@ export type Stage = 'Regular Season' | 'League Phase' | 'Playoffs' | 'Round of 1
 
 export interface Match {
   id: string;
-  week: number; // Simulation Step Index
-  date: Date; // Specific calendar date
+  week: number;
+  date: Date;
   homeTeamId: string;
   awayTeamId: string;
   homeScore: number | null;
@@ -68,9 +68,9 @@ export interface Match {
   competition: Competition;
   stage: Stage;
   isLeg2?: boolean;
-  aggHomeScore?: number; // Snapshot of agg score after game
+  aggHomeScore?: number;
   aggAwayScore?: number;
-  placeholder?: string; // e.g. "Winner PO1" for future rounds
+  placeholder?: string;
   homePenalties?: number;
   awayPenalties?: number;
 }
@@ -81,7 +81,7 @@ export interface SeasonSummary {
   position: number;
   points: number;
   wonLeague: boolean;
-  uclResult?: string; // e.g., "Semi-finalist"
+  uclResult?: string;
   message: string;
 }
 
