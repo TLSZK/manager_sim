@@ -6,6 +6,40 @@ export const UCL_LOGO_URL = "https://images.fotmob.com/image_resources/logo/leag
 export const INITIAL_STATS = { played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, gd: 0, points: 0, form: [] };
 export const INITIAL_UCL_STATS = { played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, gd: 0, points: 0, rank: 0 };
 
+export const getPositionFit = (playerPos: string, slotPos: string) => {
+    if (playerPos === slotPos) return 'good';
+    if (playerPos === 'GK' || slotPos === 'GK') return 'bad';
+
+    const compatibleMap: Record<string, string[]> = {
+        'CB': ['LB', 'RB', 'CDM'],
+        'LB': ['LWB', 'CB', 'LM'],
+        'RB': ['RWB', 'CB', 'RM'],
+        'LWB': ['LB', 'LM'],
+        'RWB': ['RB', 'RM'],
+        'CDM': ['CM', 'CB'],
+        'CM': ['CDM', 'CAM', 'RM', 'LM'],
+        'CAM': ['CM', 'CF', 'ST', 'RW', 'LW'],
+        'RM': ['RW', 'RWB', 'CM'],
+        'LM': ['LW', 'LWB', 'CM'],
+        'RW': ['RM', 'ST', 'CAM'],
+        'LW': ['LM', 'ST', 'CAM'],
+        'ST': ['CF', 'RW', 'LW', 'CAM'],
+        'CF': ['ST', 'CAM']
+    };
+
+    if (compatibleMap[playerPos]?.includes(slotPos)) {
+        return 'okay'; 
+    }
+    return 'bad';
+};
+
+export const getPenalizedRating = (playerRating: number, playerPos: string, slotPos: string) => {
+    const fit = getPositionFit(playerPos, slotPos);
+    if (fit === 'good') return playerRating;
+    if (fit === 'okay') return Math.max(1, playerRating - 5);
+    return Math.max(1, playerRating - 15);
+};
+
 // Coordinate System:
 // x=0 is Goalkeeper box, x=100 is Opponent Goal box
 // y=15 is TOP OF SCREEN (Left side of Pitch, e.g. LB, LW)

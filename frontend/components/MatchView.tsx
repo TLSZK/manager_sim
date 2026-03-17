@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Team, Player } from '../types';
-import { FORMATIONS } from '../constants';
+import { FORMATIONS, getPenalizedRating } from '../constants';
 import { FastForward, Play, Pause, RotateCcw, PieChart } from 'lucide-react';
 
 interface MatchViewProps {
@@ -110,11 +110,11 @@ class Agent extends GameEntity {
     basePos: Vector;
     isHome: boolean;
 
-    constructor(p: Player, teamId: string, role: string, isHome: boolean, bx: number, by: number) {
+    constructor(p: Player, teamId: string, role: string, isHome: boolean, bx: number, by: number, effectiveRating: number) {
         super(bx, by);
         this.id = p.id;
         this.number = p.number;
-        this.rating = p.rating;
+        this.rating = effectiveRating;
         this.teamId = teamId;
         this.role = role;
         this.isHome = isHome;
@@ -170,9 +170,10 @@ class GameEngine {
     initPlayers() {
         const createAgents = (team: Team, isHome: boolean) => {
             const formation = FORMATIONS[team.formation || '4-3-3'];
-            return team.roster.filter(p => !p.offField).map((p, i) => {
+            return team.roster!.filter(p => !p.offField).map((p, i) => {
                 const pos = formation[i] || { x: 50, y: 50, position: 'MID' };
-                return new Agent(p, team.id, pos.position, isHome, isHome ? pos.x : 100 - pos.x, pos.y);
+                const effectiveRating = getPenalizedRating(p.rating, p.position, pos.position);
+                return new Agent(p, team.id, pos.position, isHome, isHome ? pos.x : 100 - pos.x, pos.y, effectiveRating);
             });
         };
         this.players = [...createAgents(this.homeTeam, true), ...createAgents(this.awayTeam, false)];
@@ -422,7 +423,23 @@ class GameEngine {
     skipToEnd() {
         const remaining = 90 - this.minute;
         if (remaining <= 0) return;
-        const diff = (this.homeTeam.strength + 5) - this.awayTeam.strength;
+        
+        const getTeamStrength = (team: Team) => {
+            if (!team.roster || team.roster.length === 0) return team.strength;
+            const onFieldPlayers = team.roster.filter(p => !p.offField);
+            if (onFieldPlayers.length === 0) return team.strength;
+            
+            const formation = FORMATIONS[team.formation || '4-3-3'];
+            return onFieldPlayers.reduce((sum, p, index) => {
+                const slotPos = formation[index]?.position || 'MID';
+                return sum + getPenalizedRating(p.rating, p.position, slotPos);
+            }, 0) / onFieldPlayers.length;
+        };
+
+        const homeStr = getTeamStrength(this.homeTeam);
+        const awayStr = getTeamStrength(this.awayTeam);
+        
+        const diff = (homeStr + 5) - awayStr;
         const hProb = 0.015 + (diff * 0.0006);
         const aProb = 0.015 - (diff * 0.0006);
         

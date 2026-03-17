@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Team, Player, Formation } from '../types';
-import { FORMATIONS } from '../constants';
+import { FORMATIONS, getPositionFit, getPenalizedRating } from '../constants';
 import { ChevronLeft, Shirt, Users, ArrowRightLeft, AlertTriangle } from 'lucide-react';
 
 interface SquadManagementProps {
@@ -8,33 +8,6 @@ interface SquadManagementProps {
   onUpdateTeam: (updatedTeam: Team) => void;
   onBack: () => void;
 }
-
-const getPositionFit = (playerPos: string, slotPos: string) => {
-    if (playerPos === slotPos) return 'good';
-    if (playerPos === 'GK' || slotPos === 'GK') return 'bad';
-
-    const compatibleMap: Record<string, string[]> = {
-        'CB': ['LB', 'RB', 'CDM'],
-        'LB': ['LWB', 'CB', 'LM'],
-        'RB': ['RWB', 'CB', 'RM'],
-        'LWB': ['LB', 'LM'],
-        'RWB': ['RB', 'RM'],
-        'CDM': ['CM', 'CB'],
-        'CM': ['CDM', 'CAM', 'RM', 'LM'],
-        'CAM': ['CM', 'CF', 'ST', 'RW', 'LW'],
-        'RM': ['RW', 'RWB', 'CM'],
-        'LM': ['LW', 'LWB', 'CM'],
-        'RW': ['RM', 'ST', 'CAM'],
-        'LW': ['LM', 'ST', 'CAM'],
-        'ST': ['CF', 'RW', 'LW', 'CAM'],
-        'CF': ['ST', 'CAM']
-    };
-
-    if (compatibleMap[playerPos]?.includes(slotPos)) {
-        return 'okay'; 
-    }
-    return 'bad';
-};
 
 const SquadManagement: React.FC<SquadManagementProps> = ({ team, onUpdateTeam, onBack }) => {
   const [selectedFormation, setSelectedFormation] = useState<Formation>(team.formation || '4-3-3');
@@ -145,6 +118,7 @@ const SquadManagement: React.FC<SquadManagementProps> = ({ team, onUpdateTeam, o
                      const pos = getFormationPos(index);
                      const isSelected = selectedPlayerId === player.id;
                      const fit = getPositionFit(player.position, pos.position);
+                     const effectiveRating = getPenalizedRating(player.rating, player.position, pos.position);
                      
                      let style: React.CSSProperties = isVertical 
                         ? { left: `${pos.y}%`, top: `${100 - pos.x}%` }
@@ -163,8 +137,9 @@ const SquadManagement: React.FC<SquadManagementProps> = ({ team, onUpdateTeam, o
                                 {player.name}
                             </div>
                             
-                            <div className={`text-[6px] sm:text-[7px] md:text-[9px] font-bold drop-shadow-md px-1 rounded flex items-center gap-0.5 sm:gap-1 mt-0.5 ${fit === 'bad' ? 'bg-red-600/90 text-white' : fit === 'okay' ? 'bg-yellow-500/90 text-black' : 'bg-black/40 text-white'}`}>
-                                <span className={fit === 'good' ? 'text-yellow-400' : 'inherit'}>{player.rating}</span>
+                            <div className={`text-[6px] sm:text-[7px] md:text-[9px] font-bold drop-shadow-md px-1 rounded flex items-center justify-center gap-0.5 sm:gap-1 mt-0.5 ${fit === 'bad' ? 'bg-red-600/90 text-white' : fit === 'okay' ? 'bg-yellow-500/90 text-black' : 'bg-black/40 text-white'}`}>
+                                <span className={fit === 'good' ? 'text-yellow-400' : 'inherit'}>{effectiveRating}</span>
+                                {fit !== 'good' && <span className="line-through text-[5px] sm:text-[6px] md:text-[7px] opacity-70">({player.rating})</span>}
                                 <span>{player.position}</span>
                                 {fit !== 'good' && <span className="opacity-80">({pos.position})</span>}
                             </div>

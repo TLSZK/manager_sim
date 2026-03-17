@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import confetti from 'canvas-confetti';
-import { generateMasterSchedule, INITIAL_STATS, INITIAL_UCL_STATS, LIGA_LOGO_URL, UCL_LOGO_URL, getCompetitionWeeks } from './constants';
+import { generateMasterSchedule, INITIAL_STATS, INITIAL_UCL_STATS, LIGA_LOGO_URL, UCL_LOGO_URL, getCompetitionWeeks, FORMATIONS, getPenalizedRating } from './constants';
 import { Team, Match, SimulationState, SeasonSummary, Competition, ManagerProfile as ManagerProfileType } from './types';
 import TeamSelector from './components/TeamSelector';
 import LeagueTable from './components/LeagueTable';
@@ -187,33 +187,59 @@ const App: React.FC = () => {
     const calculateMatchResult = useCallback((match: Match, home: Team, away: Team): Match => {
         if (home.id === 'TBD' || away.id === 'TBD') return match;
         
-        let homeStr = home.strength;
-        let awayStr = away.strength;
-        if (match.stage !== 'Final') homeStr += 5;
+        const getTeamStrength = (team: Team) => {
+            if (!team.roster || team.roster.length === 0) return team.strength;
+            const onFieldPlayers = team.roster.filter(p => !p.offField);
+            if (onFieldPlayers.length === 0) return team.strength;
+            
+            const formation = FORMATIONS[team.formation || '4-3-3'];
+            return onFieldPlayers.reduce((sum, p, index) => {
+                const slotPos = formation[index]?.position || 'MID';
+                return sum + getPenalizedRating(p.rating, p.position, slotPos);
+            }, 0) / onFieldPlayers.length;
+        };
         
-        const diff = homeStr - awayStr;
-        let homeProb = 0.38 + (diff * 0.015);
-        let drawProb = 0.26 - (Math.abs(diff) * 0.005);
+        let homeStr = getTeamStrength(home);
+        let awayStr = getTeamStrength(away);
         
-        if (!['League Phase', 'Regular Season', 'Playoffs', 'Final'].includes(match.stage || '')) {
-            drawProb *= 0.8;
+        // Small home advantage as a multiplier so it scales
+        if (match.stage !== 'Final') {
+            homeStr *= 1.03; 
         }
         
-        homeProb = Math.max(0.1, Math.min(0.85, homeProb)); 
-        drawProb = Math.max(0.1, drawProb);
-        const rand = Math.random();
+        // Calculate Expected Goals (xG) using exponential scaling
+        // This makes huge rating differences (e.g., 99 vs 70) result in absolute dominations
+        const strRatio = homeStr / awayStr;
         
-        let homeGoals = 0, awayGoals = 0;
-        if (rand < homeProb) { 
-            homeGoals = Math.floor(Math.random() * 4) + 1; 
-            awayGoals = Math.floor(Math.random() * homeGoals); 
-        } else if (rand < homeProb + drawProb) { 
-            homeGoals = Math.floor(Math.random() * 4); 
-            awayGoals = homeGoals; 
-        } else { 
-            awayGoals = Math.floor(Math.random() * 4) + 1; 
-            homeGoals = Math.floor(Math.random() * awayGoals); 
+        // 4.5 exponent ensures the gap is punishing and heavily reduces flukes for god-squads
+        let homeXG = 1.45 * Math.pow(strRatio, 4.5);
+        let awayXG = 1.15 * Math.pow(1 / strRatio, 4.5);
+
+        // Tense/Defensive logic for finals
+        if (match.stage === 'Final') {
+            homeXG *= 0.8;
+            awayXG *= 0.8;
         }
+
+        // Add a minimal floor to xG to account for rare lucky chances
+        homeXG = Math.max(0.05, homeXG);
+        awayXG = Math.max(0.05, awayXG);
+
+        // Poisson distribution generator for unlimited, realistic goal generation
+        const getPoissonRandom = (lambda: number) => {
+            if (lambda > 30) return Math.round(lambda); // Prevent extreme loops if a team is completely broken
+            let L = Math.exp(-lambda);
+            let k = 0;
+            let p = 1;
+            do {
+                k++;
+                p *= Math.random();
+            } while (p > L && k < 40); // Fail-safe limit
+            return k - 1;
+        };
+
+        const homeGoals = getPoissonRandom(homeXG);
+        const awayGoals = getPoissonRandom(awayXG);
         
         return { ...match, homeScore: homeGoals, awayScore: awayGoals, played: true };
     }, []);
