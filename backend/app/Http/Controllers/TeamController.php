@@ -9,7 +9,10 @@ class TeamController extends Controller
 {
     public function index()
     {
-        // Team::all() automatically loads the players because of protected $with = ['roster']; in the Team model
-        return response()->json(['data' => Team::all()]);
+        // Team::all() automatically loads the players because of 
+        // protected $with = ['roster']; in the Team model
+        return response()->json([
+            'data' => Team::all()
+        ]);
     }
 }

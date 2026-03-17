@@ -15,7 +15,10 @@ export const getBoardFeedback = async (
   try {
     const response = await fetch(`${API_BASE_URL}/ai/feedback`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json', 
+        'Accept': 'application/json' 
+      },
       body: JSON.stringify({
         teamName: team.name,
         position,
@@ -64,8 +67,9 @@ export const getBoardFeedback = async (
       Do NOT include placeholders. Sign it as "The Board".
     `;
 
+    // FIX: Using a real, stable model instead of hallucinated 'gemini-3'
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-2.5-flash', 
       contents: prompt,
     });
 
