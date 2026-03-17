@@ -3,9 +3,10 @@ import { UserCheck } from 'lucide-react';
 
 interface SetupModalProps {
   onSave: (name: string) => void;
+  onCancel?: () => void;
 }
 
-const SetupModal: React.FC<SetupModalProps> = ({ onSave }) => {
+const SetupModal: React.FC<SetupModalProps> = ({ onSave, onCancel }) => {
   const [name, setName] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -26,8 +27,8 @@ const SetupModal: React.FC<SetupModalProps> = ({ onSave }) => {
           <p className="text-slate-400">Before we begin the 2025/26 La Liga season, please register your name with the league.</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="mb-2">
             <label className="block text-sm font-bold text-slate-300 mb-2 uppercase tracking-wider">Manager Name</label>
             <input 
               type="text" 
@@ -38,13 +39,24 @@ const SetupModal: React.FC<SetupModalProps> = ({ onSave }) => {
               autoFocus
             />
           </div>
-          <button 
-            type="submit"
-            disabled={!name.trim()}
-            className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-bold py-4 rounded-xl transition-all active:scale-95 shadow-lg"
-          >
-            Start Career
-          </button>
+          <div className="flex gap-3">
+            {onCancel && (
+              <button 
+                type="button"
+                onClick={onCancel}
+                className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-3.5 rounded-xl transition-all active:scale-95 shadow-sm"
+              >
+                Cancel
+              </button>
+            )}
+            <button 
+              type="submit"
+              disabled={!name.trim()}
+              className="flex-[2] bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700/50 disabled:text-slate-500 text-white font-bold py-3.5 rounded-xl transition-all active:scale-95 shadow-lg"
+            >
+              Start Career
+            </button>
+          </div>
         </form>
       </div>
     </div>

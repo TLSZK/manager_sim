@@ -31,7 +31,16 @@ async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promi
     throw new Error(errData.message || `API Request failed: ${response.statusText}`);
   }
   
-  const json = await response.json();
+  if (response.status === 204) {
+    return {} as T;
+  }
+
+  const text = await response.text();
+  if (!text) {
+    return {} as T;
+  }
+
+  const json = JSON.parse(text);
   return json.data !== undefined ? json.data : json;
 }
 

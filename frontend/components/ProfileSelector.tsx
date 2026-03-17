@@ -4,6 +4,7 @@ import { fetchProfiles, createProfile, deleteProfile, fetchCurrentUser, updateAc
 import { User, Plus, Trash2, Trophy, Calendar, LogOut, AlertTriangle, ChevronDown, Edit2, X } from 'lucide-react';
 import SetupModal from './SetupModal';
 import ProfileIcon from './ProfileIcon';
+import logoUrl from '../pictures/logo.png';
 
 interface ProfileSelectorProps {
   onSelectProfile: (profile: ManagerProfile) => void;
@@ -58,10 +59,15 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onSelectProfile, onLo
   const confirmDelete = async () => {
     if (profileToDelete) {
       setIsDeleting(true);
-      await deleteProfile(profileToDelete);
-      await loadData();
-      setIsDeleting(false);
-      setProfileToDelete(null);
+      try {
+        await deleteProfile(profileToDelete);
+        await loadData();
+      } catch (e) {
+        console.error("Failed to delete profile", e);
+      } finally {
+        setIsDeleting(false);
+        setProfileToDelete(null);
+      }
     }
   };
 
@@ -76,7 +82,7 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onSelectProfile, onLo
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 p-4 md:p-8 flex flex-col relative">
-      {isCreating && <SetupModal onSave={handleCreate} />}
+      {isCreating && <SetupModal onSave={handleCreate} onCancel={() => setIsCreating(false)} />}
 
       {/* Account Edit Modal */}
       {isEditingAccount && (
@@ -128,8 +134,8 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onSelectProfile, onLo
       )}
 
       {/* Header with Dashboard */}
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-3">
+      <div className="flex justify-between items-center mb-8 border-b border-slate-800 pb-4">
+        <h1 className="text-xl md:text-2xl font-bold flex items-center gap-3 text-slate-200">
           <User className="text-blue-500 hidden md:block" /> Manager Profiles
         </h1>
 
@@ -173,12 +179,21 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onSelectProfile, onLo
         </div>
       </div>
 
+      {/* Main Center Logo positioned above the manager profiles grid */}
+      <div className="flex justify-center items-center w-full mt-2 mb-10 md:mt-4 md:mb-12 animate-in fade-in slide-in-from-top-4 duration-500">
+        <img 
+          src={logoUrl} 
+          alt="Game Logo" 
+          className="h-36 sm:h-48 md:h-60 lg:h-70 object-contain drop-shadow-[0_10px_15px_rgba(0,0,0,0.5)] hover:scale-105 transition-transform duration-500" 
+        />
+      </div>
+
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
           <button
             onClick={() => setIsCreating(true)}
             className="group flex flex-col items-center justify-center p-8 bg-slate-800/50 border-2 border-dashed border-slate-700 rounded-2xl hover:border-blue-500 hover:bg-slate-800 transition-all min-h-[200px]"
