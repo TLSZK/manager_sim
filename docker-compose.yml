@@ -4,12 +4,11 @@ services:
     restart: always
     environment:
       MYSQL_DATABASE: manager_sim
-      MYSQL_ROOT_PASSWORD: your_secure_password
+      MYSQL_ROOT_PASSWORD: production_root_password
       MYSQL_USER: manager_user
-      MYSQL_PASSWORD: your_secure_password
+      MYSQL_PASSWORD: production_app_password
     volumes:
       - db_data:/var/lib/mysql
-    # No ports exposed here for security
 
   backend:
     build:
@@ -23,7 +22,7 @@ services:
       DB_HOST: db
       DB_DATABASE: manager_sim
       DB_USERNAME: manager_user
-      DB_PASSWORD: your_secure_password
+      DB_PASSWORD: production_app_password
     ports:
       - "8000:80"
     depends_on:
