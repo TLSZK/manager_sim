@@ -10,11 +10,13 @@ class ManagerController extends Controller
     // GET /api/managers
     public function index(Request $request)
     {
-        // FIX: Eager load the 'histories' relationship so achievements are saved and sent to the frontend
         return response()->json([
-            'data' => $request->user()->managers()->with(['histories' => function ($query) {
-                $query->orderBy('created_at', 'desc');
-            }])->get()
+            'data' => $request->user()->managers()->with([
+                'histories' => function ($query) {
+                    $query->orderBy('created_at', 'desc');
+                },
+                'savedGames' // Ensure the frontend receives the current state of their save
+            ])->get()
         ]);
     }
 

@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { ManagerProfile } from '../types';
 import { fetchProfiles, createProfile, deleteProfile, fetchCurrentUser, updateAccountName } from '../services/api';
-import { User, Plus, Trash2, Trophy, Calendar, LogOut, AlertTriangle, ChevronDown, Edit2, X } from 'lucide-react';
+import { User, Plus, Trash2, Trophy, Calendar, LogOut, AlertTriangle, ChevronDown, Edit2, X, Shield } from 'lucide-react';
 import SetupModal from './SetupModal';
-import ProfileIcon from './ProfileIcon';
 import logoUrl from '../pictures/logo.png';
 
 interface ProfileSelectorProps {
@@ -207,6 +206,10 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onSelectProfile, onLo
           {profiles.map(profile => {
             const trophies = profile.history.reduce((acc, h) => acc + (h.wonLiga ? 1 : 0) + (h.wonUcl ? 1 : 0), 0);
             const seasons = profile.history.length;
+            
+            // Extract the current team from the eager-loaded savedGames relationship
+            const savedGame = (profile as any).savedGames?.[0] || (profile as any).saved_games?.[0];
+            const currentTeamName = savedGame?.team_name || savedGame?.teamName || savedGame?.team?.name || 'Free Agent';
 
             return (
               <div
@@ -224,6 +227,12 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onSelectProfile, onLo
                   </div>
 
                   <h3 className="text-xl font-bold text-white mb-1">{profile.name}</h3>
+                  
+                  <div className="flex items-center gap-1.5 mb-1 text-sm font-medium text-blue-400">
+                    <Shield size={14} />
+                    <span>{currentTeamName}</span>
+                  </div>
+
                   <p className="text-xs text-slate-500 mb-6">Created {new Date(profile.createdAt).toLocaleDateString()}</p>
 
                   <div className="flex gap-4">

@@ -94,27 +94,57 @@ export const fetchTeams = async (): Promise<Team[]> => {
 export const fetchProfiles = async (): Promise<ManagerProfile[]> => {
   const profiles = await apiRequest<any[]>('/managers');
   
-  return profiles.map(p => ({
-    id: p.id, 
-    name: p.name,
-    history: (p.histories || p.history || []).map((h: any) => ({
-      id: h.id,
-      seasonYear: h.seasonYear,
-      teamId: h.teamId,
-      teamName: h.teamName,
-      position: h.position,
-      points: h.points,
-      wonLiga: Boolean(h.wonLiga || h.wonTrophy),
-      wonUcl: Boolean(h.wonUcl),
-      wins: h.wins || 0,
-      draws: h.draws || 0,
-      losses: h.losses || 0,
-      biggestWin: h.biggestWin || 'N/A',
-      biggestLoss: h.biggestLoss || 'N/A',
-      timestamp: new Date(h.created_at || Date.now()).getTime()
-    })),
-    createdAt: new Date(p.created_at || p.createdAt).getTime()
-  }));
+  return profiles.map(p => {
+    // 1. Determine current team name from the attached saved game
+    let currentTeamName = 'Free Agent';
+    const savedGame = (p.saved_games && p.saved_games[0]) || (p.savedGames && p.savedGames[0]);
+
+    if (savedGame) {
+      currentTeamName = savedGame.team_name || savedGame.teamName || 'Free Agent';
+
+      // 2. If no direct name is stored, look it up in the teams_snapshot
+      if (currentTeamName === 'Free Agent' && (savedGame.user_team_id || savedGame.userTeamId) && savedGame.teams_snapshot) {
+        try {
+          const snapshot = typeof savedGame.teams_snapshot === 'string' 
+            ? JSON.parse(savedGame.teams_snapshot) 
+            : savedGame.teams_snapshot;
+          
+          const teamId = savedGame.user_team_id || savedGame.userTeamId;
+          const userTeam = snapshot.find((t: any) => t.id === teamId);
+          
+          if (userTeam && userTeam.name) {
+            currentTeamName = userTeam.name;
+          }
+        } catch (e) {
+          console.error("Failed to parse teams_snapshot for team lookup.");
+        }
+      }
+    }
+
+    // 3. Map and return the profile while injecting the savedGames context back in
+    return {
+      id: p.id, 
+      name: p.name,
+      history: (p.histories || p.history || []).map((h: any) => ({
+        id: h.id,
+        seasonYear: h.seasonYear,
+        teamId: h.teamId,
+        teamName: h.teamName,
+        position: h.position,
+        points: h.points,
+        wonLiga: Boolean(h.wonLiga || h.wonTrophy),
+        wonUcl: Boolean(h.wonUcl),
+        wins: h.wins || 0,
+        draws: h.draws || 0,
+        losses: h.losses || 0,
+        biggestWin: h.biggestWin || 'N/A',
+        biggestLoss: h.biggestLoss || 'N/A',
+        timestamp: new Date(h.created_at || Date.now()).getTime()
+      })),
+      createdAt: new Date(p.created_at || p.createdAt).getTime(),
+      savedGames: [{ team_name: currentTeamName }]
+    } as unknown as ManagerProfile;
+  });
 };
 
 export const createProfile = async (name: string): Promise<ManagerProfile> => {
@@ -168,8 +198,8 @@ export const fetchSavedGame = async (managerId: string): Promise<GameSaveData | 
     if (!data) return null;
     
     return { 
-      currentWeek: data.currentWeek, 
-      userTeamId: data.userTeamId, 
+      currentWeek: data.currentWeek || data.current_week, 
+      userTeamId: data.userTeamId || data.user_team_id, 
       schedule: data.schedule.map((m: any) => ({ ...m, date: new Date(m.date) })), 
       teams: data.teams_snapshot 
     };
