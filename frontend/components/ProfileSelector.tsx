@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ManagerProfile } from '../types';
-import { fetchProfiles, createProfile, deleteProfile, fetchCurrentUser, updateAccountName } from '../services/api';
+import { ManagerProfile, Team } from '../types';
+import { fetchProfiles, createProfile, deleteProfile, fetchCurrentUser, updateAccountName, fetchTeams } from '../services/api';
 import { User, Plus, Trash2, Trophy, Calendar, LogOut, AlertTriangle, ChevronDown, Edit2, X, Shield } from 'lucide-react';
 import SetupModal from './SetupModal';
 import logoUrl from '../pictures/logo.png';
@@ -10,8 +10,27 @@ interface ProfileSelectorProps {
   onLogout: () => void;
 }
 
+// Sub-component to gracefully handle missing or broken team logos
+const TeamBadge: React.FC<{ logo?: string; name: string }> = ({ logo, name }) => {
+  const [imgError, setImgError] = useState(false);
+
+  if (logo && !imgError && name !== 'Free Agent') {
+    return (
+      <img 
+        src={logo} 
+        alt={name} 
+        className="w-4 h-4 object-contain" 
+        onError={() => setImgError(true)} 
+      />
+    );
+  }
+
+  return <Shield size={14} />;
+};
+
 const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onSelectProfile, onLogout }) => {
   const [profiles, setProfiles] = useState<ManagerProfile[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
   const [userAccount, setUserAccount] = useState<{ name: string, email: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
@@ -30,12 +49,15 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onSelectProfile, onLo
   const loadData = async () => {
     setLoading(true);
     try {
-      const [userData, profilesData] = await Promise.all([
+      // Fetch the master team list alongside everything else
+      const [userData, profilesData, teamsData] = await Promise.all([
         fetchCurrentUser(),
-        fetchProfiles()
+        fetchProfiles(),
+        fetchTeams()
       ]);
       setUserAccount(userData);
       setNewAccountName(userData.name);
+      setTeams(teamsData);
       setProfiles(profilesData.sort((a, b) => b.createdAt - a.createdAt));
     } catch (e) {
       console.error("Failed to load dashboard data", e);
@@ -210,6 +232,10 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onSelectProfile, onLo
             // Extract the current team from the eager-loaded savedGames relationship
             const savedGame = (profile as any).savedGames?.[0] || (profile as any).saved_games?.[0];
             const currentTeamName = savedGame?.team_name || savedGame?.teamName || savedGame?.team?.name || 'Free Agent';
+            
+            // Front-end lookup: Find the matching team from the master list fetched via fetchTeams()
+            const matchingTeam = teams.find(t => t.name === currentTeamName);
+            const verifiedLogoUrl = matchingTeam?.logoUrl;
 
             return (
               <div
@@ -229,7 +255,7 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onSelectProfile, onLo
                   <h3 className="text-xl font-bold text-white mb-1">{profile.name}</h3>
                   
                   <div className="flex items-center gap-1.5 mb-1 text-sm font-medium text-blue-400">
-                    <Shield size={14} />
+                    <TeamBadge logo={verifiedLogoUrl} name={currentTeamName} />
                     <span>{currentTeamName}</span>
                   </div>
 
