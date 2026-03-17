@@ -23,7 +23,7 @@ const KnockoutBracket = ({ schedule, teams, userTeamId }: { schedule: Match[], t
     const stages = ['Playoffs', 'Round of 16', 'Quarter-finals', 'Semi-finals', 'Final'];
 
     return (
-        <div className="w-full h-full bg-[#0f172a] overflow-auto">
+        <div className="w-full h-full bg-[#0f172a] overflow-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-700 [&::-webkit-scrollbar-thumb]:rounded-full">
             <div className="flex h-[800px] min-w-max p-4 md:p-8 gap-8 md:gap-12 select-none relative">
                 {stages.map((stageName, colIdx) => {
                     const stageMatches = schedule.filter(m => m.stage === stageName);
@@ -44,105 +44,128 @@ const KnockoutBracket = ({ schedule, teams, userTeamId }: { schedule: Match[], t
                     });
 
                     return (
-                        <div key={stageName} className="flex flex-col h-full w-[240px] md:w-[280px] shrink-0 relative z-10">
-                            <h3 className="absolute -top-2 md:-top-4 left-0 right-0 text-center text-slate-400 font-medium text-xs md:text-sm tracking-wide">{stageName}</h3>
+                        <div key={stageName} className="flex flex-col h-full w-[240px] md:w-[280px] shrink-0 relative z-10 justify-around">
+                            {sortedPairs.map((pair, idx) => {
+                                const l1 = pair.find(m => !m.isLeg2);
+                                const l2 = pair.find(m => m.isLeg2);
+                                if (!l1) return null;
 
-                            <div className="absolute top-4 md:top-2 right-2 md:right-3 flex gap-1 text-[8px] md:text-[9px] text-slate-500 font-bold uppercase z-20">
-                                {stageName !== 'Final' && <span className="w-4 md:w-5 text-center">L1</span>}
-                                {stageName !== 'Final' && <span className="w-4 md:w-5 text-center">L2</span>}
-                                <span className="w-[30px] md:w-[40px] text-right pr-1">Agg</span>
-                            </div>
+                                const teamA = teams.find(t => t.id === l1.homeTeamId);
+                                const teamB = teams.find(t => t.id === l1.awayTeamId);
 
-                            <div className="flex flex-col h-full pt-8 pb-4">
-                                {sortedPairs.map((pair, idx) => {
-                                    const l1 = pair.find(m => !m.isLeg2);
-                                    const l2 = pair.find(m => m.isLeg2);
-                                    if (!l1) return null;
+                                const isUserInvolved = teamA?.id === userTeamId || teamB?.id === userTeamId;
 
-                                    const teamA = teams.find(t => t.id === l1.homeTeamId);
-                                    const teamB = teams.find(t => t.id === l1.awayTeamId);
+                                const aL1 = l1.played ? l1.homeScore : '-';
+                                const bL1 = l1.played ? l1.awayScore : '-';
+                                const aL2 = l2 ? (l2.played ? l2.awayScore : '-') : null; 
+                                const bL2 = l2 ? (l2.played ? l2.homeScore : '-') : null;
 
-                                    const isUserInvolved = teamA?.id === userTeamId || teamB?.id === userTeamId;
+                                const aAgg = (l1.played && l2?.played) ? (l1.homeScore! + l2.awayScore!) : (l1.played && !l2 ? l1.homeScore : '-');
+                                const bAgg = (l1.played && l2?.played) ? (l1.awayScore! + l2.homeScore!) : (l1.played && !l2 ? l1.awayScore : '-');
 
-                                    const aL1 = l1.played ? l1.homeScore : '-';
-                                    const bL1 = l1.played ? l1.awayScore : '-';
-                                    const aL2 = l2 ? (l2.played ? l2.awayScore : '-') : null; 
-                                    const bL2 = l2 ? (l2.played ? l2.homeScore : '-') : null;
+                                const aPen = stageName === 'Final' ? l1.homePenalties : l2?.awayPenalties;
+                                const bPen = stageName === 'Final' ? l1.awayPenalties : l2?.homePenalties;
 
-                                    const aAgg = (l1.played && l2?.played) ? (l1.homeScore! + l2.awayScore!) : (l1.played && !l2 ? l1.homeScore : '-');
-                                    const bAgg = (l1.played && l2?.played) ? (l1.awayScore! + l2.homeScore!) : (l1.played && !l2 ? l1.awayScore : '-');
+                                let winnerA = false, winnerB = false;
+                                if (l1.played && (!l2 || l2.played)) {
+                                    const finalA = aAgg !== '-' ? (aAgg as number) : 0;
+                                    const finalB = bAgg !== '-' ? (bAgg as number) : 0;
 
-                                    const aPen = stageName === 'Final' ? l1.homePenalties : l2?.awayPenalties;
-                                    const bPen = stageName === 'Final' ? l1.awayPenalties : l2?.homePenalties;
-
-                                    let winnerA = false, winnerB = false;
-                                    if (l1.played && (!l2 || l2.played)) {
-                                        const finalA = aAgg !== '-' ? (aAgg as number) : 0;
-                                        const finalB = bAgg !== '-' ? (bAgg as number) : 0;
-
-                                        if (finalA > finalB) winnerA = true;
-                                        else if (finalB > finalA) winnerB = true;
-                                        else if (aPen !== undefined && bPen !== undefined) {
-                                            if (aPen > bPen) winnerA = true;
-                                            if (bPen > aPen) winnerB = true;
-                                        }
+                                    if (finalA > finalB) winnerA = true;
+                                    else if (finalB > finalA) winnerB = true;
+                                    else if (aPen !== undefined && bPen !== undefined) {
+                                        if (aPen > bPen) winnerA = true;
+                                        if (bPen > aPen) winnerB = true;
                                     }
+                                }
 
-                                    return (
-                                        <div key={idx} className="flex-1 flex flex-col justify-center relative">
-                                            <div className={`bg-[#1e293b] rounded-lg p-2 md:p-3 flex flex-col gap-2 md:gap-2.5 relative z-10 border ${isUserInvolved ? 'border-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.2)]' : 'border-slate-700/50'}`}>
-                                                
-                                                <div className="flex items-center justify-between min-w-0">
-                                                    <div className={`flex items-center gap-1.5 md:gap-2 min-w-0 ${winnerA ? 'text-white font-bold' : (l1.played ? 'text-slate-300' : 'text-slate-400')}`}>
-                                                        {teamA?.logoUrl ? <img src={teamA.logoUrl} className="w-4 h-4 md:w-5 md:h-5 object-contain shrink-0" /> : <div className="w-4 h-4 md:w-5 md:h-5 bg-slate-700 rounded-full shrink-0"></div>}
-                                                        <span className="text-[11px] md:text-[13px] truncate w-[80px] md:w-[120px]">{teamA?.name || l1.placeholder || 'TBD'}</span>
+                                return (
+                                    <div key={idx} className="flex-1 flex flex-col justify-center relative animate-in fade-in zoom-in-95 duration-500 fill-mode-both" style={{ animationDelay: `${(colIdx * 150) + (idx * 50)}ms` }}>
+                                        <div className={`bg-[#1e293b] rounded-lg p-2 md:p-3 flex flex-col gap-2 md:gap-2.5 relative z-10 border ${isUserInvolved ? 'border-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.2)]' : 'border-slate-700/50'}`}>
+                                            
+                                            {/* Header Section Placed inside the match card perfectly above the matches */}
+                                            <div className="flex justify-between items-center border-b border-slate-700/50 pb-1.5 mb-0.5">
+                                                <span className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-wider">{stageName}</span>
+                                                {stageName !== 'Final' && (
+                                                    <div className="flex gap-1 text-[8px] md:text-[9px] text-slate-500 font-bold uppercase">
+                                                        <span className="w-4 md:w-5 text-center">L1</span>
+                                                        <span className="w-4 md:w-5 text-center">L2</span>
+                                                        <span className="w-[30px] md:w-[40px] text-right pr-1">Agg</span>
                                                     </div>
-                                                    <div className="flex gap-0.5 md:gap-1 font-mono text-[10px] md:text-[12px] font-medium items-center shrink-0">
-                                                        {stageName !== 'Final' && <div className={`w-4 md:w-5 h-5 md:h-6 flex items-center justify-center rounded-[3px] ${getLegColor(aL1, bL1)}`}>{aL1}</div>}
-                                                        {l2 && <div className={`w-4 md:w-5 h-5 md:h-6 flex items-center justify-center rounded-[3px] ${getLegColor(aL2, bL2)}`}>{aL2}</div>}
-                                                        <div className={`flex items-center justify-end w-[30px] md:w-[40px] ml-1 pr-1 ${stageName !== 'Final' ? 'bg-[#0f172a]' : ''} rounded-[3px] h-5 md:h-6`}>
-                                                            {aPen !== undefined && <span className="text-[9px] md:text-[10px] text-yellow-500 font-bold mr-0.5 md:mr-1 leading-none">({aPen})</span>}
-                                                            <span className={`text-center ${winnerA ? 'text-white font-bold' : (l1.played ? 'text-slate-400' : 'text-slate-600')}`}>{stageName !== 'Final' ? aAgg : aL1}</span>
-                                                        </div>
-                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="flex items-center justify-between min-w-0">
+                                                <div className={`flex items-center gap-1.5 md:gap-2 min-w-0 ${winnerA ? 'text-white font-bold' : (l1.played ? 'text-slate-300' : 'text-slate-400')}`}>
+                                                    {teamA?.logoUrl ? <img src={teamA.logoUrl} className="w-4 h-4 md:w-5 md:h-5 object-contain shrink-0" /> : <div className="w-4 h-4 md:w-5 md:h-5 bg-slate-700 rounded-full shrink-0"></div>}
+                                                    <span className="text-[11px] md:text-[13px] truncate w-[80px] md:w-[120px]">{teamA?.name || l1.placeholder || 'TBD'}</span>
                                                 </div>
-
-                                                <div className="flex items-center justify-between min-w-0">
-                                                    <div className={`flex items-center gap-1.5 md:gap-2 min-w-0 ${winnerB ? 'text-white font-bold' : (l1.played ? 'text-slate-300' : 'text-slate-400')}`}>
-                                                        {teamB?.logoUrl ? <img src={teamB.logoUrl} className="w-4 h-4 md:w-5 md:h-5 object-contain shrink-0" /> : <div className="w-4 h-4 md:w-5 md:h-5 bg-slate-700 rounded-full shrink-0"></div>}
-                                                        <span className="text-[11px] md:text-[13px] truncate w-[80px] md:w-[120px]">{teamB?.name || l2?.placeholder || 'TBD'}</span>
-                                                    </div>
-                                                    <div className="flex gap-0.5 md:gap-1 font-mono text-[10px] md:text-[12px] font-medium items-center shrink-0">
-                                                        {stageName !== 'Final' && <div className={`w-4 md:w-5 h-5 md:h-6 flex items-center justify-center rounded-[3px] ${getLegColor(bL1, aL1)}`}>{bL1}</div>}
-                                                        {l2 && <div className={`w-4 md:w-5 h-5 md:h-6 flex items-center justify-center rounded-[3px] ${getLegColor(bL2, aL2)}`}>{bL2}</div>}
-                                                        <div className={`flex items-center justify-end w-[30px] md:w-[40px] ml-1 pr-1 ${stageName !== 'Final' ? 'bg-[#0f172a]' : ''} rounded-[3px] h-5 md:h-6`}>
-                                                            {bPen !== undefined && <span className="text-[9px] md:text-[10px] text-yellow-500 font-bold mr-0.5 md:mr-1 leading-none">({bPen})</span>}
-                                                            <span className={`text-center ${winnerB ? 'text-white font-bold' : (l1.played ? 'text-slate-400' : 'text-slate-600')}`}>{stageName !== 'Final' ? bAgg : bL1}</span>
+                                                
+                                                <div className="flex gap-0.5 md:gap-1 font-mono text-[10px] md:text-[12px] font-medium items-center shrink-0">
+                                                    {stageName !== 'Final' ? (
+                                                        <>
+                                                            <div className={`w-4 md:w-5 h-5 md:h-6 flex items-center justify-center rounded-[3px] ${getLegColor(aL1, bL1)}`}>{aL1}</div>
+                                                            {l2 && <div className={`w-4 md:w-5 h-5 md:h-6 flex items-center justify-center rounded-[3px] ${getLegColor(aL2, bL2)}`}>{aL2}</div>}
+                                                            <div className={`flex items-center justify-end w-[30px] md:w-[40px] ml-1 pr-1 bg-[#0f172a] rounded-[3px] h-5 md:h-6`}>
+                                                                {aPen !== undefined && <span className="text-[9px] md:text-[10px] text-yellow-500 font-bold mr-0.5 md:mr-1 leading-none">({aPen})</span>}
+                                                                <span className={`text-center ${winnerA ? 'text-white font-bold' : (l1.played ? 'text-slate-400' : 'text-slate-600')}`}>{aAgg}</span>
+                                                            </div>
+                                                        </>
+                                                    ) : (
+                                                        <div className={`flex items-center justify-center w-8 md:w-10 h-5 md:h-6 rounded-[3px] ${getLegColor(aL1, bL1)}`}>
+                                                            {aPen !== undefined && <span className="text-[9px] md:text-[10px] text-yellow-500 font-bold mr-0.5 md:mr-1 leading-none">({aPen})</span>}
+                                                            <span className={l1.played ? 'text-white' : 'text-slate-400'}>{aL1}</span>
                                                         </div>
-                                                    </div>
+                                                    )}
                                                 </div>
                                             </div>
 
-                                            {stageName !== 'Final' && (
-                                                <>
-                                                    {stageName === 'Playoffs' ? (
-                                                        <div className="absolute top-1/2 -right-4 md:-right-6 w-4 md:w-6 h-[2px] bg-[#334155] z-0 pointer-events-none -translate-y-1/2" />
+                                            <div className="flex items-center justify-between min-w-0">
+                                                <div className={`flex items-center gap-1.5 md:gap-2 min-w-0 ${winnerB ? 'text-white font-bold' : (l1.played ? 'text-slate-300' : 'text-slate-400')}`}>
+                                                    {teamB?.logoUrl ? <img src={teamB.logoUrl} className="w-4 h-4 md:w-5 md:h-5 object-contain shrink-0" /> : <div className="w-4 h-4 md:w-5 md:h-5 bg-slate-700 rounded-full shrink-0"></div>}
+                                                    <span className="text-[11px] md:text-[13px] truncate w-[80px] md:w-[120px]">{teamB?.name || l2?.placeholder || 'TBD'}</span>
+                                                </div>
+                                                
+                                                <div className="flex gap-0.5 md:gap-1 font-mono text-[10px] md:text-[12px] font-medium items-center shrink-0">
+                                                    {stageName !== 'Final' ? (
+                                                        <>
+                                                            <div className={`w-4 md:w-5 h-5 md:h-6 flex items-center justify-center rounded-[3px] ${getLegColor(bL1, aL1)}`}>{bL1}</div>
+                                                            {l2 && <div className={`w-4 md:w-5 h-5 md:h-6 flex items-center justify-center rounded-[3px] ${getLegColor(bL2, aL2)}`}>{bL2}</div>}
+                                                            <div className={`flex items-center justify-end w-[30px] md:w-[40px] ml-1 pr-1 bg-[#0f172a] rounded-[3px] h-5 md:h-6`}>
+                                                                {bPen !== undefined && <span className="text-[9px] md:text-[10px] text-yellow-500 font-bold mr-0.5 md:mr-1 leading-none">({bPen})</span>}
+                                                                <span className={`text-center ${winnerB ? 'text-white font-bold' : (l1.played ? 'text-slate-400' : 'text-slate-600')}`}>{bAgg}</span>
+                                                            </div>
+                                                        </>
                                                     ) : (
-                                                        idx % 2 === 0 ? (
-                                                            <div className="absolute top-1/2 -right-4 md:-right-6 w-4 md:w-6 h-1/2 border-t-2 border-r-2 border-[#334155] rounded-tr-xl z-0 pointer-events-none" />
-                                                        ) : (
-                                                            <div className="absolute bottom-1/2 -right-4 md:-right-6 w-4 md:w-6 h-1/2 border-b-2 border-r-2 border-[#334155] rounded-br-xl z-0 pointer-events-none" />
-                                                        )
+                                                        <div className={`flex items-center justify-center w-8 md:w-10 h-5 md:h-6 rounded-[3px] ${getLegColor(bL1, aL1)}`}>
+                                                            {bPen !== undefined && <span className="text-[9px] md:text-[10px] text-yellow-500 font-bold mr-0.5 md:mr-1 leading-none">({bPen})</span>}
+                                                            <span className={l1.played ? 'text-white' : 'text-slate-400'}>{bL1}</span>
+                                                        </div>
                                                     )}
-                                                </>
-                                            )}
-                                            {colIdx > 0 && (
-                                                <div className="absolute top-1/2 -left-4 md:-left-6 w-4 md:w-6 h-[2px] bg-[#334155] z-0 pointer-events-none -translate-y-1/2" />
-                                            )}
+                                                </div>
+                                            </div>
                                         </div>
-                                    );
-                                })}
-                            </div>
+
+                                        {/* Connectors attached dynamically to perfectly centered position */}
+                                        {stageName !== 'Final' && (
+                                            <>
+                                                {stageName === 'Playoffs' ? (
+                                                    <div className="absolute top-1/2 -right-4 md:-right-6 w-4 md:w-6 h-[2px] bg-[#334155] z-0 pointer-events-none -translate-y-1/2" />
+                                                ) : (
+                                                    idx % 2 === 0 ? (
+                                                        <div className="absolute top-1/2 -right-4 md:-right-6 w-4 md:w-6 h-1/2 border-t-2 border-r-2 border-[#334155] rounded-tr-xl z-0 pointer-events-none" />
+                                                    ) : (
+                                                        <div className="absolute bottom-1/2 -right-4 md:-right-6 w-4 md:w-6 h-1/2 border-b-2 border-r-2 border-[#334155] rounded-br-xl z-0 pointer-events-none" />
+                                                    )
+                                                )}
+                                            </>
+                                        )}
+                                        {colIdx > 0 && (
+                                            <div className="absolute top-1/2 -left-4 md:-left-6 w-4 md:w-6 h-[2px] bg-[#334155] z-0 pointer-events-none -translate-y-1/2" />
+                                        )}
+                                    </div>
+                                );
+                            })}
                         </div>
                     );
                 })}
@@ -192,7 +215,7 @@ const LeagueTable: React.FC<LeagueTableProps> = ({ teams, userTeamId, activeTab,
                 {activeTab === 'Champions League' && uclView === 'Knockout' ? (
                     <KnockoutBracket schedule={schedule} teams={teams} userTeamId={userTeamId} />
                 ) : (
-                    <div className="w-full h-full overflow-x-auto">
+                    <div className="w-full h-full overflow-x-auto [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-700 [&::-webkit-scrollbar-thumb]:rounded-full">
                         <table className="w-full min-w-[450px] text-xs md:text-sm text-left table-auto">
                             <thead className="bg-[#0f172a] text-slate-400 uppercase text-[10px] md:text-xs sticky top-0 z-10 shadow-sm">
                                 <tr><th className="px-2 md:px-3 py-2 md:py-3 w-8 md:w-10 text-center">#</th><th className="px-2 md:px-3 py-2 md:py-3">Club</th><th className="px-1 py-2 md:py-3 text-center">MP</th><th className="px-1 py-2 md:py-3 text-center">W</th><th className="px-1 py-2 md:py-3 text-center">D</th><th className="px-1 py-2 md:py-3 text-center">L</th><th className="px-1 py-2 md:py-3 text-center hidden sm:table-cell">GF</th><th className="px-1 py-2 md:py-3 text-center hidden sm:table-cell">GA</th><th className="px-1 py-2 md:py-3 text-center">GD</th><th className="px-2 md:px-3 py-2 md:py-3 text-center font-bold text-slate-200">Pts</th></tr>
@@ -205,7 +228,7 @@ const LeagueTable: React.FC<LeagueTableProps> = ({ teams, userTeamId, activeTab,
                                     if (activeTab === 'La Liga') { if (pos === 1) posClass = "text-yellow-400 font-bold"; else if (pos <= 4) posClass = "text-blue-400"; else if (pos >= 18) posClass = "text-red-400"; }
                                     else { if (pos <= 8) posClass = "text-green-400 font-bold"; else if (pos <= 24) posClass = "text-blue-400"; else posClass = "text-red-400"; }
                                     return (
-                                        <tr key={team.id} className={`${team.id === userTeamId ? 'bg-indigo-900/40' : 'hover:bg-slate-700/30'} transition-colors`}>
+                                        <tr key={team.id} className={`${team.id === userTeamId ? 'bg-indigo-900/40' : 'hover:bg-slate-700/30'} transition-colors animate-in fade-in slide-in-from-bottom-2 duration-500 fill-mode-both`} style={{ animationDelay: `${index * 30}ms` }}>
                                             <td className={`px-2 md:px-3 py-2 md:py-3 text-center text-[10px] md:text-xs ${posClass}`}>{pos}</td>
                                             <td className="px-2 md:px-3 py-2 md:py-3 font-medium text-slate-200 flex items-center gap-1.5 md:gap-2 min-w-[100px] md:min-w-[120px] sm:min-w-0">{team.logoUrl ? <img src={team.logoUrl} className="w-4 h-4 md:w-5 md:h-5 object-contain shrink-0" /> : <div className="w-4 h-4 md:w-5 md:h-5 rounded-full flex items-center justify-center text-[8px] font-bold shrink-0" style={{ backgroundColor: team.primaryColor, color: team.secondaryColor }}>{team.shortName[0]}</div>}<span className="truncate text-xs md:text-sm">{team.name}</span></td>
                                             <td className="px-1 py-2 md:py-3 text-center text-slate-400">{stats.played}</td>

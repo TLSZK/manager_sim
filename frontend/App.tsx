@@ -1280,7 +1280,7 @@ const App: React.FC = () => {
                         )}
                     </div>
                     
-                    <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl border border-slate-700 overflow-hidden flex-1 min-h-[300px] flex flex-col w-full min-w-0 shadow-lg">
+                    <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl border border-slate-700 overflow-hidden flex flex-col w-full min-w-0 shadow-lg">
                         <div className="p-3 sm:p-4 bg-slate-900/50 border-b border-slate-700 space-y-2 sm:space-y-3">
                             <div className="relative">
                                 <select 
@@ -1324,7 +1324,7 @@ const App: React.FC = () => {
                             </div>
                         </div>
                         
-                        <div className="flex-1 overflow-y-auto max-h-[400px] divide-y divide-slate-700/50 min-w-0">
+                        <div className="flex-1 overflow-y-auto divide-y divide-slate-700/50 min-w-0 pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-600 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-slate-500">
                             {currentResultGroup?.matches.length ? currentResultGroup.matches.map((match, idx) => { 
                                 const h = teams.find(t => t.id === match.homeTeamId);
                                 const a = teams.find(t => t.id === match.awayTeamId); 
