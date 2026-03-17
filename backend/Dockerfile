@@ -1,10 +1,11 @@
 FROM php:8.2-apache
 
-# Install system dependencies required by Laravel
+# Install system dependencies required by Laravel 11
 RUN apt-get update && apt-get install -y \
     libpng-dev \
     libonig-dev \
     libxml2-dev \
+    libzip-dev \
     zip \
     unzip \
     curl
@@ -13,7 +14,8 @@ RUN apt-get update && apt-get install -y \
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions
-RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd
+# Added 'zip' and 'xml' which are often required by Laravel packages
+RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd xml zip
 
 # Enable Apache mod_rewrite for Laravel routing
 RUN a2enmod rewrite
@@ -24,10 +26,12 @@ WORKDIR /var/www/html
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# Copy the existing application directory contents
+# Copy the application files
 COPY . .
 
 # Install PHP dependencies
+# Using --ignore-platform-reqs can bypass strict version checks if necessary,
+# but the extensions added above should solve the exit code 2.
 RUN composer install --no-interaction --optimize-autoloader --no-dev
 
 # Update Apache DocumentRoot to point to Laravel's public directory
