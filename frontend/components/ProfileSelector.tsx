@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ManagerProfile, Team } from '../types';
 import { fetchProfiles, createProfile, deleteProfile, fetchCurrentUser, updateAccountName, fetchTeams } from '../services/api';
-import { User, Plus, Trash2, Trophy, Calendar, LogOut, AlertTriangle, ChevronDown, Edit2, X, Shield } from 'lucide-react';
+import { User, Plus, Trash2, Trophy, Calendar, LogOut, AlertTriangle, ChevronDown, Edit2, X } from 'lucide-react';
 import SetupModal from './SetupModal';
 import logoUrl from '../pictures/logo.png';
 
@@ -9,24 +9,6 @@ interface ProfileSelectorProps {
   onSelectProfile: (profile: ManagerProfile) => void;
   onLogout: () => void;
 }
-
-// Sub-component to gracefully handle missing or broken team logos
-const TeamBadge: React.FC<{ logo?: string; name: string }> = ({ logo, name }) => {
-  const [imgError, setImgError] = useState(false);
-
-  if (logo && !imgError && name !== 'Free Agent') {
-    return (
-      <img 
-        src={logo} 
-        alt={name} 
-        className="w-4 h-4 object-contain" 
-        onError={() => setImgError(true)} 
-      />
-    );
-  }
-
-  return <Shield size={14} />;
-};
 
 const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onSelectProfile, onLogout }) => {
   const [profiles, setProfiles] = useState<ManagerProfile[]>([]);
@@ -242,9 +224,21 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onSelectProfile, onLo
                 key={profile.id}
                 className="relative bg-slate-800 border border-slate-700 rounded-2xl transition-all shadow-lg hover:shadow-xl hover:shadow-blue-900/10 group hover:border-blue-500 overflow-hidden"
               >
+                {/* Background Team Logo */}
+                {verifiedLogoUrl && (
+                  <div className="absolute right-[-20px] bottom-[-20px] w-40 h-40 opacity-10 pointer-events-none transition-transform duration-500 group-hover:scale-110 group-hover:opacity-20 z-0">
+                    <img
+                      src={verifiedLogoUrl}
+                      alt={currentTeamName}
+                      className="w-full h-full object-contain filter drop-shadow-lg"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  </div>
+                )}
+
                 <div
                   onClick={() => onSelectProfile(profile)}
-                  className="p-6 cursor-pointer h-full select-none"
+                  className="p-6 cursor-pointer h-full select-none relative z-10"
                 >
                   <div className="flex justify-between items-start mb-4">
                     <div className="w-14 h-14 bg-gradient-to-br from-slate-700 to-slate-600 rounded-full flex items-center justify-center text-xl font-bold text-white shadow-lg">
@@ -255,7 +249,6 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onSelectProfile, onLo
                   <h3 className="text-xl font-bold text-white mb-1">{profile.name}</h3>
                   
                   <div className="flex items-center gap-1.5 mb-1 text-sm font-medium text-blue-400">
-                    <TeamBadge logo={verifiedLogoUrl} name={currentTeamName} />
                     <span>{currentTeamName}</span>
                   </div>
 
