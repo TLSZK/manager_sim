@@ -18,7 +18,7 @@ export interface MatchStats {
 }
 
 const HALF_DURATION_REAL_SEC = 18;
-const MAX_SPEED = 45.0;
+const MAX_SPEED = 100.0;
 const MAX_FORCE = 150.0;
 const FRICTION = 0.92;
 const BALL_FRICTION = 0.98;
