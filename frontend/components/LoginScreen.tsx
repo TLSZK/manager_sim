@@ -50,10 +50,16 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
 
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background ambient glow */}
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-        <div className="absolute top-[-15%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[150px]" />
-        <div className="absolute bottom-[-15%] right-[-10%] w-[50%] h-[50%] bg-indigo-600/10 rounded-full blur-[150px]" />
+      {/* Background ambient glow - OPTIMIZED FOR SAFARI/MOBILE */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none transform-gpu">
+        <div 
+          className="absolute top-[-25%] left-[-20%] w-[80%] h-[80%] rounded-full opacity-60" 
+          style={{ background: 'radial-gradient(circle, rgba(37, 99, 235, 0.15) 0%, transparent 60%)' }}
+        />
+        <div 
+          className="absolute bottom-[-25%] right-[-20%] w-[80%] h-[80%] rounded-full opacity-60" 
+          style={{ background: 'radial-gradient(circle, rgba(79, 70, 229, 0.15) 0%, transparent 60%)' }}
+        />
         {/* Subtle grid pattern overlay */}
         <div 
           className="absolute inset-0 opacity-[0.02]" 
