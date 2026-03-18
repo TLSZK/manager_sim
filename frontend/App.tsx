@@ -203,7 +203,8 @@ const App: React.FC = () => {
         });
 
         while (tempWeek < targetWeek && tempWeek <= maxWeek) {
-            if (tempWeek % 4 === 0) {
+            // FIX 1: Reduced yield frequency from % 4 to % 10
+            if (tempWeek % 10 === 0) {
                 await new Promise(resolve => setTimeout(resolve, 0));
             }
 
@@ -237,7 +238,12 @@ const App: React.FC = () => {
                 tempSchedule = tempSchedule.map(m => simulatedResults.find(r => r.id === m.id) || m);
                 
                 tempTeams = applyMatchResultsToTeams(tempTeams, simulatedResults);
-                tempSchedule = resolveUCLKnockouts(tempSchedule, tempTeams, currentSeasonYear);
+
+                // FIX 2: Only call UCL resolution if there were UCL matches played this iteration
+                const hadUCLAction = simulatedResults.some(m => m.competition === 'Champions League' && m.played);
+                if (hadUCLAction) {
+                    tempSchedule = resolveUCLKnockouts(tempSchedule, tempTeams, currentSeasonYear);
+                }
             }
 
             if (userMatchThisWeek) {
@@ -598,10 +604,10 @@ const App: React.FC = () => {
                                     const scoreColor = isDraw ? 'text-yellow-400 border-yellow-700/50' : 'text-white border-slate-700';
                                     
                                     return (
+                                        // FIX 4: Removed staggered animations and delay classes
                                         <div 
                                             key={m.id} 
-                                            className={`flex items-center justify-between p-2 sm:p-3 rounded-lg border animate-in slide-in-from-bottom-2 fade-in duration-300 fill-mode-both ${isUserMatch ? 'bg-blue-900/30 border-blue-500/50' : 'bg-slate-800 border-slate-700'}`}
-                                            style={{ animationDelay: `${idx * 40}ms` }}
+                                            className={`flex items-center justify-between p-2 sm:p-3 rounded-lg border ${isUserMatch ? 'bg-blue-900/30 border-blue-500/50' : 'bg-slate-800 border-slate-700'}`}
                                         >
                                             <div className="text-[10px] sm:text-xs text-slate-400 w-8 sm:w-10 font-mono shrink-0">{dateStr}</div>
                                             
@@ -1038,10 +1044,10 @@ const App: React.FC = () => {
                                 if (!h || !a) return null; 
                                 
                                 return (
+                                    // FIX 3: Removed staggered animations and delay classes
                                     <div 
                                         key={match.id} 
-                                        className={`group hover:bg-slate-700/60 transition-all duration-200 hover:scale-[1.01] p-2 sm:p-3 flex justify-between items-center text-[10px] sm:text-sm min-w-0 cursor-default animate-in slide-in-from-right-4 fade-in fill-mode-both ${(h.id === userTeamId || a.id === userTeamId) ? (match.competition === 'Champions League' ? 'bg-blue-900/20 border-l-2 border-blue-500' : 'bg-indigo-900/20 border-l-2 border-indigo-500') : 'bg-transparent'}`}
-                                        style={{ animationDelay: `${idx * 30}ms` }}
+                                        className={`group hover:bg-slate-700/60 transition-all duration-200 hover:scale-[1.01] p-2 sm:p-3 flex justify-between items-center text-[10px] sm:text-sm min-w-0 cursor-default ${(h.id === userTeamId || a.id === userTeamId) ? (match.competition === 'Champions League' ? 'bg-blue-900/20 border-l-2 border-blue-500' : 'bg-indigo-900/20 border-l-2 border-indigo-500') : 'bg-transparent'}`}
                                     >
                                         <div className="flex-1 text-right font-medium text-slate-300 flex items-center justify-end gap-1.5 sm:gap-2 min-w-0">
                                             <span className={`truncate ${h.id === userTeamId ? 'text-white font-bold' : ''}`}>
