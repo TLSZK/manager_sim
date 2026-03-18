@@ -7,8 +7,9 @@ COPY . .
 # Pass build-time env vars to Vite
 ARG VITE_API_URL
 ARG VITE_GEMINI_API_KEY
-ENV VITE_API_URL=$VITE_API_URL
-ENV VITE_GEMINI_API_KEY=$VITE_GEMINI_API_KEY
+
+# Overwrite .env so build args take precedence over the committed .env file
+RUN printf "VITE_API_URL=%s\nVITE_GEMINI_API_KEY=%s\n" "$VITE_API_URL" "$VITE_GEMINI_API_KEY" > .env
 
 RUN npm run build
 

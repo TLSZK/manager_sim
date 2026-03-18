@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { PastSeason, Match, Team } from '../types';
 import { Trophy, X, Calendar, Medal, Edit2, Check, User } from 'lucide-react';
-import { SkeletonStatBox, SkeletonHistoryItem } from './Skeleton';
 
 interface ManagerProfileProps {
   isOpen: boolean;
