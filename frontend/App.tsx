@@ -14,7 +14,6 @@ import LoginScreen from './components/LoginScreen';
 import ProfileSelector from './components/ProfileSelector';
 import { FullPageLoader, MatchResultSkeleton } from './components/Skeletons';
 import { Play, FastForward, Trophy, Calendar, CheckCircle, ChevronLeft, ChevronRight, Shirt, CalendarDays, ArrowRight, ChevronDown, Users, User, Info, Globe } from 'lucide-react';
-import { getBoardFeedback } from './services/geminiService';
 import { fetchTeams, saveSeasonResult, updateProfileName, fetchSavedGame, saveGame } from './services/api';
 import { getTeamStrength, calculateMatchResult, resolveUCLKnockouts, applyMatchResultsToTeams } from './utils/simulationEngine';
 
@@ -395,12 +394,8 @@ const App: React.FC = () => {
             });
 
             setActiveProfile(prev => prev ? ({ ...prev, history: [newRecord, ...prev.history] }) : null);
-            setSeasonSummary({ position: userPos, points: userTeam.stats.points, wonLeague: userPos === 1, uclResult: uclResultString, message: "Waiting for board evaluation..." });
+            setSeasonSummary({ position: userPos, points: userTeam.stats.points, wonLeague: userPos === 1, uclResult: uclResultString, message: "Season concluded." });
             setIsRecapOpen(true);
-
-            getBoardFeedback(userTeam, userPos, sorted.length, uclResultString).then(feedback => {
-                setSeasonSummary(prev => prev ? { ...prev, message: feedback } : null);
-            });
         } catch (error) {
             alert("Failed to save season data.");
             setSimState('ready');
