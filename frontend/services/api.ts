@@ -3,7 +3,17 @@ import { INITIAL_STATS, INITIAL_UCL_STATS } from '../constants';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
 
-export const clearAuth = () => {
+export const clearAuth = async () => {
+  try {
+    // Notify the backend to clear the HttpOnly cookie since JS cannot access or delete it
+    await fetch(`${API_BASE_URL}/logout`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Accept': 'application/json' }
+    });
+  } catch (e) {
+    console.error("Logout failed", e);
+  }
   localStorage.removeItem('auth_token');
 };
 
@@ -12,18 +22,16 @@ async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promi
     'Content-Type': 'application/json', 
     'Accept': 'application/json' 
   };
-  
-  const token = localStorage.getItem('auth_token');
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
 
+  // The actual JWT is no longer pulled from localStorage. 
+  // It is securely transmitted via the HttpOnly cookie enabled by credentials: 'include'.
   const response = await fetch(`${API_BASE_URL}${endpoint}`, { 
     ...options, 
     headers: { 
       ...headers, 
       ...(options.headers as Record<string, string>) 
-    }
+    },
+    credentials: 'include' 
   });
 
   if (!response.ok) {
@@ -49,21 +57,25 @@ async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promi
 }
 
 export const loginAccount = async (email: string, password: string): Promise<string> => {
-  const res = await apiRequest<{ token: string }>('/login', { 
+  await apiRequest('/login', { 
     method: 'POST', 
     body: JSON.stringify({ email, password }) 
   });
-  localStorage.setItem('auth_token', res.token);
-  return res.token;
+  
+  // Store a dummy flag so App.tsx knows we are logged in, 
+  // while the actual JWT is protected against XSS in the HttpOnly cookie.
+  localStorage.setItem('auth_token', 'true'); 
+  return 'true';
 };
 
 export const registerAccount = async (name: string, email: string, password: string): Promise<string> => {
-  const res = await apiRequest<{ token: string }>('/register', { 
+  await apiRequest('/register', { 
     method: 'POST', 
     body: JSON.stringify({ name, email, password }) 
   });
-  localStorage.setItem('auth_token', res.token);
-  return res.token;
+  
+  localStorage.setItem('auth_token', 'true'); 
+  return 'true';
 };
 
 export const fetchTeams = async (): Promise<Team[]> => {

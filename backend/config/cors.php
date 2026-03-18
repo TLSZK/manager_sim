@@ -19,7 +19,9 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => ['*'],
+    // In most local dev instances, mirroring all origins with credentials is fine. 
+    // In production, specify your exact frontend URL e.g. ['https://yourdomain.com']
+    'allowed_origins' => ['*'], 
 
     'allowed_origins_patterns' => [],
 
@@ -29,6 +31,7 @@ return [
 
     'max_age' => 0,
 
-    'supports_credentials' => false,
+    // This MUST be true for the browser to accept and send the HttpOnly cookie.
+    'supports_credentials' => true,
 
 ];
