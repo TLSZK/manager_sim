@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import confetti from 'canvas-confetti';
-import { generateMasterSchedule, INITIAL_STATS, INITIAL_UCL_STATS, LIGA_LOGO_URL, UCL_LOGO_URL, getCompetitionWeeks, FORMATIONS, getPenalizedRating } from './constants';
+import { generateMasterSchedule, INITIAL_STATS, INITIAL_UCL_STATS, LIGA_LOGO_URL, UCL_LOGO_URL, getCompetitionWeeks } from './constants';
 import { Team, Match, SimulationState, SeasonSummary, Competition, ManagerProfile as ManagerProfileType } from './types';
 import TeamSelector from './components/TeamSelector';
 import LeagueTable from './components/LeagueTable';
@@ -12,9 +12,10 @@ import SeasonRecapModal from './components/SeasonRecapModal';
 import ContractModal from './components/ContractModal';
 import LoginScreen from './components/LoginScreen';
 import ProfileSelector from './components/ProfileSelector';
-import { Play, FastForward, Trophy, Calendar, CheckCircle, ChevronLeft, ChevronRight, Shirt, Briefcase, Search, Globe, CalendarDays, ArrowRight, ChevronDown, Users, User, Info } from 'lucide-react';
+import { Play, FastForward, Trophy, Calendar, CheckCircle, ChevronLeft, ChevronRight, Shirt, CalendarDays, ArrowRight, ChevronDown, Users, User, Info, Globe } from 'lucide-react';
 import { getBoardFeedback } from './services/geminiService';
-import { fetchTeams, saveSeasonResult, updateProfileName, fetchSavedGame, saveGame, fetchCurrentUser } from './services/api';
+import { fetchTeams, saveSeasonResult, updateProfileName, fetchSavedGame, saveGame } from './services/api';
+import { getTeamStrength, calculateMatchResult, resolveUCLKnockouts, applyMatchResultsToTeams } from './utils/simulationEngine';
 
 const TBD_TEAM: Team = { 
     id: 'TBD', 
@@ -33,7 +34,6 @@ const App: React.FC = () => {
     const [isAuthenticated, setIsAuthenticated] = useState<boolean>(!!localStorage.getItem('auth_token'));
     const [activeProfile, setActiveProfile] = useState<ManagerProfileType | null>(null);
     const [showAccountMenu, setShowAccountMenu] = useState(false);
-    const [userAccount, setUserAccount] = useState<{ name: string, email: string } | null>(null);
 
     const [teams, setTeams] = useState<Team[]>([]);
     const [schedule, setSchedule] = useState<Match[]>([]);
@@ -66,12 +66,6 @@ const App: React.FC = () => {
         if (!currentSeasonYear) return 300;
         return getCompetitionWeeks(currentSeasonYear).days.length;
     }, [currentSeasonYear]);
-
-    useEffect(() => { 
-        if (isAuthenticated) {
-            fetchCurrentUser().then(data => setUserAccount(data)); 
-        }
-    }, [isAuthenticated]);
 
     useEffect(() => {
         if (userTeamId) {
@@ -179,272 +173,12 @@ const App: React.FC = () => {
         setCurrentWeek(1); 
     };
 
-    const calculateMatchResult = useCallback((match: Match, home: Team, away: Team): Match => {
-        if (home.id === 'TBD' || away.id === 'TBD') return match;
-        
-        const getTeamStrength = (team: Team) => {
-            if (!team.roster || team.roster.length === 0) return team.strength;
-            const onFieldPlayers = team.roster.filter(p => !p.offField);
-            if (onFieldPlayers.length === 0) return team.strength;
-            
-            const formation = FORMATIONS[team.formation || '4-3-3'];
-            return onFieldPlayers.reduce((sum, p, index) => {
-                const slotPos = formation[index]?.position || 'MID';
-                return sum + getPenalizedRating(p.rating, p.position, slotPos);
-            }, 0) / onFieldPlayers.length;
-        };
-        
-        let homeStr = getTeamStrength(home);
-        let awayStr = getTeamStrength(away);
-        
-        if (match.stage !== 'Final') {
-            homeStr *= 1.03; 
-        }
-        
-        const strRatio = homeStr / awayStr;
-        let homeXG = 1.45 * Math.pow(strRatio, 4.5);
-        let awayXG = 1.15 * Math.pow(1 / strRatio, 4.5);
-
-        if (match.stage === 'Final') {
-            homeXG *= 0.8;
-            awayXG *= 0.8;
-        }
-
-        homeXG = Math.max(0.05, homeXG);
-        awayXG = Math.max(0.05, awayXG);
-
-        const getPoissonRandom = (lambda: number) => {
-            if (lambda > 30) return Math.round(lambda); 
-            let L = Math.exp(-lambda);
-            let k = 0;
-            let p = 1;
-            do {
-                k++;
-                p *= Math.random();
-            } while (p > L && k < 40); 
-            return k - 1;
-        };
-
-        const homeGoals = getPoissonRandom(homeXG);
-        const awayGoals = getPoissonRandom(awayXG);
-        
-        return { ...match, homeScore: homeGoals, awayScore: awayGoals, played: true };
-    }, []);
-
-    const getPenaltyResult = useCallback(() => { 
-        const possibleScores = [[5, 4], [5, 3], [4, 3], [4, 2], [3, 1], [3, 2], [6, 5]]; 
-        const score = possibleScores[Math.floor(Math.random() * possibleScores.length)]; 
-        const homeWins = Math.random() > 0.5; 
-        return homeWins ? { home: score[0], away: score[1] } : { home: score[1], away: score[0] }; 
-    }, []);
-
-    const resolveUCLKnockouts = useCallback((currentSchedule: Match[], teamsState: Team[]): Match[] => {
-        let updatedSchedule = [...currentSchedule];
-        
-        const isPhaseComplete = (stage: string) => { 
-            const matches = updatedSchedule.filter(m => m.stage === stage); 
-            return matches.length > 0 && matches.every(m => m.played); 
-        };
-        
-        const hasNextStageGenerated = (stage: string) => updatedSchedule.some(m => m.stage === stage);
-
-        if (isPhaseComplete('League Phase') && !hasNextStageGenerated('Playoffs')) {
-            const uclTeams = teamsState
-                .filter(t => t.isUCL && t.id !== 'TBD')
-                .sort((a, b) => { 
-                    if (b.uclStats!.points !== a.uclStats!.points) return b.uclStats!.points - a.uclStats!.points; 
-                    if (b.uclStats!.gd !== a.uclStats!.gd) return b.uclStats!.gd - a.uclStats!.gd; 
-                    return b.uclStats!.gf - a.uclStats!.gf; 
-                });
-                
-            const topSeeds = uclTeams.slice(0, 8);
-            const { uclBase, days } = getCompetitionWeeks(currentSeasonYear);
-            const KNOCKOUT_WEEKS = uclBase.slice(8, 17);
-            
-            const getUclDate = (baseWeekIndex: number) => {
-                const bw = KNOCKOUT_WEEKS[baseWeekIndex];
-                const offset = [-1, 0][Math.floor(Math.random() * 2)];
-                const actualWeek = Math.max(1, Math.min(days.length, bw + offset));
-                return { 
-                    week: actualWeek, 
-                    date: new Date(`${days.find(d => d.week === actualWeek)?.date || days[0].date}T12:00:00Z`) 
-                };
-            };
-
-            const wPO1 = getUclDate(0), wPO2 = getUclDate(1);
-            const wR16_1 = getUclDate(2), wR16_2 = getUclDate(3);
-            const wQF1 = getUclDate(4), wQF2 = getUclDate(5);
-            const wSF1 = getUclDate(6), wSF2 = getUclDate(7);
-            const wF = getUclDate(8);
-
-            const playoffsMatches: Match[] = [];
-            const r16Matches: Match[] = [];
-            const qfMatches: Match[] = [];
-            const sfMatches: Match[] = [];
-
-            for (let i = 0; i < 8; i++) {
-                const seedHigh = uclTeams[8 + i];
-                const seedLow = uclTeams[23 - i];
-                
-                if (seedHigh && seedLow) {
-                    playoffsMatches.push({ 
-                        id: `UCL-PO-L1-${i}`, week: wPO1.week, homeTeamId: seedLow.id, awayTeamId: seedHigh.id, date: wPO1.date, 
-                        homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Playoffs', isLeg2: false 
-                    });
-                    playoffsMatches.push({ 
-                        id: `UCL-PO-L2-${i}`, week: wPO2.week, homeTeamId: seedHigh.id, awayTeamId: seedLow.id, date: wPO2.date, 
-                        homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Playoffs', isLeg2: true 
-                    });
-                }
-            }
-            
-            [...topSeeds].sort(() => Math.random() - 0.5).forEach((seed, idx) => {
-                const placeholderText = `Winner: ${uclTeams[8 + idx]?.shortName} / ${uclTeams[23 - idx]?.shortName}`;
-                r16Matches.push({ 
-                    id: `UCL-R16-L1-${idx}`, week: wR16_1.week, homeTeamId: 'TBD', awayTeamId: seed.id, date: wR16_1.date, 
-                    homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Round of 16', isLeg2: false, placeholder: placeholderText 
-                });
-                r16Matches.push({ 
-                    id: `UCL-R16-L2-${idx}`, week: wR16_2.week, homeTeamId: seed.id, awayTeamId: 'TBD', date: wR16_2.date, 
-                    homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Round of 16', isLeg2: true, placeholder: placeholderText 
-                });
-            });
-            
-            for (let i = 0; i < 4; i++) { 
-                qfMatches.push({ 
-                    id: `UCL-QF-L1-${i}`, week: wQF1.week, homeTeamId: 'TBD', awayTeamId: 'TBD', date: wQF1.date, 
-                    homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Quarter-finals', isLeg2: false 
-                }); 
-                qfMatches.push({ 
-                    id: `UCL-QF-L2-${i}`, week: wQF2.week, homeTeamId: 'TBD', awayTeamId: 'TBD', date: wQF2.date, 
-                    homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Quarter-finals', isLeg2: true 
-                }); 
-            }
-            
-            for (let i = 0; i < 2; i++) { 
-                sfMatches.push({ 
-                    id: `UCL-SF-L1-${i}`, week: wSF1.week, homeTeamId: 'TBD', awayTeamId: 'TBD', date: wSF1.date, 
-                    homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Semi-finals', isLeg2: false 
-                }); 
-                sfMatches.push({ 
-                    id: `UCL-SF-L2-${i}`, week: wSF2.week, homeTeamId: 'TBD', awayTeamId: 'TBD', date: wSF2.date, 
-                    homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Semi-finals', isLeg2: true 
-                }); 
-            }
-
-            updatedSchedule.push(
-                ...playoffsMatches, 
-                ...r16Matches, 
-                ...qfMatches, 
-                ...sfMatches, 
-                { id: `UCL-FINAL`, week: wF.week, homeTeamId: 'TBD', awayTeamId: 'TBD', date: wF.date, homeScore: null, awayScore: null, played: false, competition: 'Champions League', stage: 'Final', isLeg2: false }
-            );
-        }
-
-        const processStageWinners = (currentStage: string) => {
-            if (!isPhaseComplete(currentStage)) return null;
-            
-            const stageMatches = updatedSchedule.filter(m => m.stage === currentStage);
-            const winners: string[] = [];
-            const pairs: Record<string, Match[]> = {};
-            
-            stageMatches.forEach(m => { 
-                const idx = m.id.split('-').pop(); 
-                if (idx) { 
-                    pairs[idx] = pairs[idx] || []; 
-                    pairs[idx].push(m); 
-                } 
-            });
-
-            Object.keys(pairs).sort((a, b) => parseInt(a) - parseInt(b)).forEach(key => {
-                if (currentStage === 'Final') {
-                    const m = pairs[key][0];
-                    if (m.homeScore === m.awayScore && m.homePenalties === undefined) { 
-                        const pens = getPenaltyResult(); 
-                        const idx = updatedSchedule.findIndex(match => match.id === m.id); 
-                        updatedSchedule[idx] = { ...updatedSchedule[idx], homePenalties: pens.home, awayPenalties: pens.away }; 
-                    }
-                    return;
-                }
-                
-                const l1 = pairs[key].find(m => !m.isLeg2);
-                const l2 = pairs[key].find(m => m.isLeg2);
-                
-                if (l1 && l2 && l1.played && l2.played) {
-                    const aggHome = l2.homeScore! + l1.awayScore!;
-                    const aggAway = l2.awayScore! + l1.homeScore!;
-                    let winnerId = aggHome > aggAway ? l2.homeTeamId : l2.awayTeamId;
-                    
-                    if (aggHome === aggAway) {
-                        let hp = l2.homePenalties;
-                        let ap = l2.awayPenalties;
-                        
-                        if (hp === undefined || ap === undefined) { 
-                            const pens = getPenaltyResult(); 
-                            hp = pens.home; 
-                            ap = pens.away; 
-                            const idx = updatedSchedule.findIndex(match => match.id === l2.id); 
-                            updatedSchedule[idx] = { ...updatedSchedule[idx], homePenalties: hp, awayPenalties: ap }; 
-                        }
-                        winnerId = hp! > ap! ? l2.homeTeamId : l2.awayTeamId;
-                    }
-                    winners.push(winnerId);
-                }
-            });
-            return winners;
-        };
-
-        const mapWinners = (stageComp: string, targetStage: string, pairFactor: number) => {
-            if (isPhaseComplete(stageComp) && updatedSchedule.some(m => m.stage === targetStage && (m.homeTeamId === 'TBD' || m.awayTeamId === 'TBD'))) {
-                const winners = processStageWinners(stageComp);
-                if (winners) {
-                    updatedSchedule = updatedSchedule.map(m => {
-                        if (m.stage === targetStage) {
-                            const idx = parseInt(m.id.split('-').pop() || '');
-                            if (pairFactor === 0) { 
-                                const winnerId = winners[idx]; 
-                                if (winnerId) {
-                                    return !m.isLeg2 ? { ...m, homeTeamId: winnerId, placeholder: undefined } : { ...m, awayTeamId: winnerId, placeholder: undefined }; 
-                                }
-                            } else { 
-                                const t1 = winners[idx * 2];
-                                const t2 = winners[idx * 2 + 1]; 
-                                if (t1 && t2) {
-                                    return { ...m, homeTeamId: m.isLeg2 ? t2 : t1, awayTeamId: m.isLeg2 ? t1 : t2 }; 
-                                }
-                            }
-                        }
-                        return m;
-                    });
-                }
-            }
-        };
-
-        mapWinners('Playoffs', 'Round of 16', 0); 
-        mapWinners('Round of 16', 'Quarter-finals', 1);
-        mapWinners('Quarter-finals', 'Semi-finals', 1);
-
-        if (isPhaseComplete('Semi-finals') && updatedSchedule.some(m => m.stage === 'Final' && m.homeTeamId === 'TBD')) {
-            const winners = processStageWinners('Semi-finals');
-            if (winners && winners.length === 2) {
-                updatedSchedule = updatedSchedule.map(m => m.stage === 'Final' ? { ...m, homeTeamId: winners[0], awayTeamId: winners[1] } : m);
-            }
-        }
-        
-        if (isPhaseComplete('Final')) {
-            processStageWinners('Final');
-        }
-        return updatedSchedule;
-    }, [currentSeasonYear, getPenaltyResult]);
-
     const performAutoSave = async (newTeams: Team[], newSchedule: Match[], newWeek: number) => {
         if (activeProfile && userTeamId) {
             saveGame(activeProfile.id, { currentWeek: newWeek, userTeamId: userTeamId, schedule: newSchedule, teams: newTeams });
         }
     };
 
-    // Fix: Re-architected as an async function that yields to the UI thread
-    // This prevents the browser from freezing during heavy simulations
     const runSimulation = useCallback(async (targetWeek: number, userResult: { matchId: string, homeScore: number, awayScore: number } | null = null, stopAtUserMatch: boolean = true, showSummary: boolean = false) => {
         if (currentWeek > maxWeek || isSimulating) return;
         setIsSimulating(true);
@@ -457,8 +191,12 @@ const App: React.FC = () => {
         let finalLastSimMatchId = lastSimulatedMatchId;
         let newlyPlayedMatches: Match[] = [];
 
+        const teamStrengths: Record<string, number> = {};
+        tempTeams.forEach(t => {
+            teamStrengths[t.id] = getTeamStrength(t);
+        });
+
         while (tempWeek < targetWeek && tempWeek <= maxWeek) {
-            // Yield to the main thread every 4 weeks to keep the UI responsive
             if (tempWeek % 4 === 0) {
                 await new Promise(resolve => setTimeout(resolve, 0));
             }
@@ -475,9 +213,12 @@ const App: React.FC = () => {
                     if (userResult && match.id === userResult.matchId) {
                         return { ...match, homeScore: userResult.homeScore, awayScore: userResult.awayScore, played: true };
                     }
-                    const home = tempTeams.find(t => t.id === match.homeTeamId);
-                    const away = tempTeams.find(t => t.id === match.awayTeamId);
-                    return (!home || !away || home.id === 'TBD' || away.id === 'TBD') ? match : calculateMatchResult(match, home, away);
+                    if (match.homeTeamId === 'TBD' || match.awayTeamId === 'TBD') return match;
+
+                    const homeStr = teamStrengths[match.homeTeamId] || 50;
+                    const awayStr = teamStrengths[match.awayTeamId] || 50;
+                    
+                    return calculateMatchResult(match, homeStr, awayStr);
                 });
 
                 simulatedResults.forEach(m => {
@@ -489,64 +230,8 @@ const App: React.FC = () => {
 
                 tempSchedule = tempSchedule.map(m => simulatedResults.find(r => r.id === m.id) || m);
                 
-                const nextTempTeams = [...tempTeams];
-                simulatedResults.forEach(match => {
-                    if (!match.played) return;
-                    
-                    const homeIdx = nextTempTeams.findIndex(t => t.id === match.homeTeamId);
-                    const awayIdx = nextTempTeams.findIndex(t => t.id === match.awayTeamId);
-                    
-                    if (homeIdx === -1 || awayIdx === -1) return;
-                    
-                    const home = { ...nextTempTeams[homeIdx] };
-                    const away = { ...nextTempTeams[awayIdx] };
-                    
-                    const updateStatObj = (stats: any, hS: number, aS: number) => {
-                        stats.played += 1; 
-                        stats.gf += hS; 
-                        stats.ga += aS; 
-                        stats.gd = stats.gf - stats.ga;
-                        if (hS > aS) { 
-                            stats.won++; 
-                            stats.points += 3; 
-                        } else if (hS < aS) { 
-                            stats.lost++; 
-                        } else { 
-                            stats.drawn++; 
-                            stats.points += 1; 
-                        }
-                    };
-
-                    if (match.competition === 'La Liga') {
-                        home.stats = { ...home.stats, form: [...home.stats.form] }; 
-                        away.stats = { ...away.stats, form: [...away.stats.form] };
-                        
-                        updateStatObj(home.stats, match.homeScore!, match.awayScore!);
-                        
-                        const hRes = match.homeScore! > match.awayScore! ? 'W' : match.homeScore! === match.awayScore! ? 'D' : 'L';
-                        const aRes = match.homeScore! < match.awayScore! ? 'W' : match.homeScore! === match.awayScore! ? 'D' : 'L';
-                        
-                        home.stats.form = [hRes as any, ...home.stats.form].slice(0, 5); 
-                        away.stats.form = [aRes as any, ...away.stats.form].slice(0, 5);
-                        
-                        updateStatObj(away.stats, match.awayScore!, match.homeScore!);
-                    } else if (match.competition === 'Champions League' && match.stage === 'League Phase') {
-                        if (home.uclStats) { 
-                            home.uclStats = { ...home.uclStats }; 
-                            updateStatObj(home.uclStats, match.homeScore!, match.awayScore!); 
-                        }
-                        if (away.uclStats) { 
-                            away.uclStats = { ...away.uclStats }; 
-                            updateStatObj(away.uclStats, match.awayScore!, match.homeScore!); 
-                        }
-                    }
-                    
-                    nextTempTeams[homeIdx] = home; 
-                    nextTempTeams[awayIdx] = away;
-                });
-
-                tempTeams = nextTempTeams;
-                tempSchedule = resolveUCLKnockouts(tempSchedule, tempTeams);
+                tempTeams = applyMatchResultsToTeams(tempTeams, simulatedResults);
+                tempSchedule = resolveUCLKnockouts(tempSchedule, tempTeams, currentSeasonYear);
             }
 
             if (userMatchThisWeek) {
@@ -575,7 +260,7 @@ const App: React.FC = () => {
         
         setIsSimulating(false);
 
-    }, [teams, schedule, currentWeek, userTeamId, maxWeek, resolveUCLKnockouts, lastSimulatedMatchId, calculateMatchResult, isSimulating]);
+    }, [teams, schedule, currentWeek, userTeamId, maxWeek, currentSeasonYear, lastSimulatedMatchId, isSimulating]);
 
 
     const handlePlayVisualMatch = () => setSimState('playing_match');
@@ -700,8 +385,6 @@ const App: React.FC = () => {
             setIsRecapOpen(true);
             
             getBoardFeedback(userTeam, userPos, sorted.length, uclResultString).then(feedback => { 
-                // Fix: React's functional update pattern safely avoids race conditions here. 
-                // If the user already proceeded to the next season, seasonSummary will be null.
                 setSeasonSummary(prev => prev ? { ...prev, message: feedback } : null); 
             });
         } catch (error) { 
