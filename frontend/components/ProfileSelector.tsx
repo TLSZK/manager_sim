@@ -3,6 +3,7 @@ import { ManagerProfile, Team } from '../types';
 import { fetchProfiles, createProfile, deleteProfile, fetchCurrentUser, updateAccountName, fetchTeams } from '../services/api';
 import { User, Plus, Trash2, Trophy, Calendar, LogOut, AlertTriangle, ChevronDown, Edit2, X } from 'lucide-react';
 import SetupModal from './SetupModal';
+import { ProfileCardSkeleton } from './Skeletons';
 import logoUrl from '../pictures/logo.png';
 
 interface ProfileSelectorProps {
@@ -31,7 +32,6 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onSelectProfile, onLo
   const loadData = async () => {
     setLoading(true);
     try {
-      // Fetch the master team list alongside everything else
       const [userData, profilesData, teamsData] = await Promise.all([
         fetchCurrentUser(),
         fetchProfiles(),
@@ -136,13 +136,12 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onSelectProfile, onLo
         </div>
       )}
 
-      {/* Header with Dashboard */}
+      {/* Header */}
       <div className="flex justify-between items-center mb-8 border-b border-slate-800 pb-4">
         <h1 className="text-xl md:text-2xl font-bold flex items-center gap-3 text-slate-200">
           <User className="text-blue-500 hidden md:block" /> Manager Profiles
         </h1>
 
-        {/* Account Profile Header Menu */}
         <div className="relative">
           <button
             onClick={() => setShowAccountMenu(!showAccountMenu)}
@@ -182,7 +181,7 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onSelectProfile, onLo
         </div>
       </div>
 
-      {/* Main Center Logo positioned above the manager profiles grid */}
+      {/* Logo */}
       <div className="flex justify-center items-center w-full mt-2 mb-10 md:mt-4 md:mb-12 animate-in fade-in slide-in-from-top-4 duration-500">
         <img 
           src={logoUrl} 
@@ -191,40 +190,42 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onSelectProfile, onLo
         />
       </div>
 
-      {loading ? (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
-          <button
-            onClick={() => setIsCreating(true)}
-            className="group flex flex-col items-center justify-center p-8 bg-slate-800/50 border-2 border-dashed border-slate-700 rounded-2xl hover:border-blue-500 hover:bg-slate-800 transition-all min-h-[200px]"
-          >
-            <div className="w-16 h-16 bg-blue-600/20 text-blue-500 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-              <Plus size={32} />
-            </div>
-            <span className="font-bold text-lg text-slate-300 group-hover:text-white">Create New Manager</span>
-          </button>
+      {/* ─── Profile Grid with Skeleton Loading ─── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
+        {/* Create Button - always visible */}
+        <button
+          onClick={() => setIsCreating(true)}
+          className="group flex flex-col items-center justify-center p-8 bg-slate-800/50 border-2 border-dashed border-slate-700 rounded-2xl hover:border-blue-500 hover:bg-slate-800 transition-all min-h-[200px]"
+        >
+          <div className="w-16 h-16 bg-blue-600/20 text-blue-500 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+            <Plus size={32} />
+          </div>
+          <span className="font-bold text-lg text-slate-300 group-hover:text-white">Create New Manager</span>
+        </button>
 
-          {profiles.map(profile => {
+        {loading ? (
+          /* ── Skeleton Loading Cards ── */
+          Array.from({ length: 3 }).map((_, i) => (
+            <ProfileCardSkeleton key={`skeleton-${i}`} index={i} />
+          ))
+        ) : (
+          /* ── Actual Profile Cards ── */
+          profiles.map((profile, idx) => {
             const trophies = profile.history.reduce((acc, h) => acc + (h.wonLiga ? 1 : 0) + (h.wonUcl ? 1 : 0), 0);
             const seasons = profile.history.length;
             
-            // Extract the current team from the eager-loaded savedGames relationship
             const savedGame = (profile as any).savedGames?.[0] || (profile as any).saved_games?.[0];
             const currentTeamName = savedGame?.team_name || savedGame?.teamName || savedGame?.team?.name || 'Free Agent';
             
-            // Front-end lookup: Find the matching team from the master list fetched via fetchTeams()
             const matchingTeam = teams.find(t => t.name === currentTeamName);
             const verifiedLogoUrl = matchingTeam?.logoUrl;
 
             return (
               <div
                 key={profile.id}
-                className="relative bg-slate-800 border border-slate-700 rounded-2xl transition-all shadow-lg hover:shadow-xl hover:shadow-blue-900/10 group hover:border-blue-500 overflow-hidden"
+                className="relative bg-slate-800 border border-slate-700 rounded-2xl transition-all shadow-lg hover:shadow-xl hover:shadow-blue-900/10 group hover:border-blue-500 overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-500 fill-mode-both"
+                style={{ animationDelay: `${idx * 80}ms` }}
               >
-                {/* Background Team Logo */}
                 {verifiedLogoUrl && (
                   <div className="absolute right-[-20px] bottom-[-20px] w-40 h-40 opacity-10 pointer-events-none transition-transform duration-500 group-hover:scale-110 group-hover:opacity-20 z-0">
                     <img
@@ -276,9 +277,9 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onSelectProfile, onLo
                 </div>
               </div>
             );
-          })}
-        </div>
-      )}
+          })
+        )}
+      </div>
     </div>
   );
 };

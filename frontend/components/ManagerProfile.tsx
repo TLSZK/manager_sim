@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { PastSeason, Match, Team } from '../types';
 import { Trophy, X, Calendar, Medal, Edit2, Check, User } from 'lucide-react';
+import { SkeletonStatBox, SkeletonHistoryItem } from './Skeleton';
 
 interface ManagerProfileProps {
   isOpen: boolean;
@@ -73,7 +74,7 @@ const ManagerProfile: React.FC<ManagerProfileProps> = ({
       const conceded = isHome ? m.awayScore! : m.homeScore!;
       const oppId = isHome ? m.awayTeamId : m.homeTeamId;
       const oppTeam = teams.find(t => t.id === oppId);
-      const oppName = oppTeam ? oppTeam.name : oppId; // Uses Full Name
+      const oppName = oppTeam ? oppTeam.name : oppId;
 
       if (scored > conceded) {
         totalWins++;
@@ -101,9 +102,9 @@ const ManagerProfile: React.FC<ManagerProfileProps> = ({
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-slate-800 rounded-xl sm:rounded-2xl border border-slate-600 shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[95vh] min-w-0">
+      <div className="bg-slate-800 rounded-xl sm:rounded-2xl border border-slate-600 shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[95vh] min-w-0 animate-in zoom-in-95 duration-300">
 
-        {/* Header - Fixed at Top */}
+        {/* Header */}
         <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-3 sm:p-4 md:p-6 flex justify-between items-start border-b border-slate-700 shrink-0 min-w-0">
           <div className="flex gap-2 sm:gap-3 md:gap-4 items-center flex-1 min-w-0">
             <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-16 md:h-16 rounded-full bg-blue-600 flex items-center justify-center text-white ring-2 md:ring-4 ring-slate-700 shadow-lg shrink-0">
@@ -136,28 +137,28 @@ const ManagerProfile: React.FC<ManagerProfileProps> = ({
           </div>
         </div>
 
-        {/* Scrollable Body Container - Dark background stays all the way to the bottom */}
+        {/* Scrollable Body */}
         <div className="flex-1 overflow-y-auto bg-slate-900 flex flex-col custom-scrollbar min-w-0">
           
           <div className="bg-slate-800/50 shrink-0">
             {/* Trophies & Core Stats Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 md:gap-4 p-3 md:p-6">
-              <div className="bg-slate-900/50 p-2 sm:p-3 md:p-4 rounded-xl border border-slate-700/50 flex flex-col items-center shadow-inner text-center">
+              <div className="bg-slate-900/50 p-2 sm:p-3 md:p-4 rounded-xl border border-slate-700/50 flex flex-col items-center shadow-inner text-center animate-in fade-in duration-300 fill-mode-both" style={{ animationDelay: '50ms' }}>
                 <div className="text-blue-400 mb-0.5 md:mb-1"><Trophy size={20} className="md:w-[24px] md:h-[24px]" /></div>
                 <div className="text-xl md:text-2xl font-bold text-white leading-tight">{uclTrophies}</div>
                 <div className="text-[9px] md:text-xs uppercase tracking-wider text-slate-500 font-bold mt-1 truncate w-full px-1">UCL</div>
               </div>
-              <div className="bg-slate-900/50 p-2 sm:p-3 md:p-4 rounded-xl border border-slate-700/50 flex flex-col items-center shadow-inner text-center">
+              <div className="bg-slate-900/50 p-2 sm:p-3 md:p-4 rounded-xl border border-slate-700/50 flex flex-col items-center shadow-inner text-center animate-in fade-in duration-300 fill-mode-both" style={{ animationDelay: '100ms' }}>
                 <div className="text-[#FF2B44] mb-0.5 md:mb-1"><Trophy size={20} className="md:w-[24px] md:h-[24px]" /></div>
                 <div className="text-xl md:text-2xl font-bold text-white leading-tight">{ligaTrophies}</div>
                 <div className="text-[9px] md:text-xs uppercase tracking-wider text-slate-500 font-bold mt-1 truncate w-full px-1">La Liga</div>
               </div>
-              <div className="bg-slate-900/50 p-2 sm:p-3 md:p-4 rounded-xl border border-slate-700/50 flex flex-col items-center shadow-inner text-center">
+              <div className="bg-slate-900/50 p-2 sm:p-3 md:p-4 rounded-xl border border-slate-700/50 flex flex-col items-center shadow-inner text-center animate-in fade-in duration-300 fill-mode-both" style={{ animationDelay: '150ms' }}>
                 <div className="text-slate-400 mb-0.5 md:mb-1"><Calendar size={20} className="md:w-[24px] md:h-[24px]" /></div>
                 <div className="text-xl md:text-2xl font-bold text-white leading-tight">{history.length}</div>
                 <div className="text-[9px] md:text-xs uppercase tracking-wider text-slate-500 font-bold mt-1 truncate w-full px-1">Seasons</div>
               </div>
-              <div className="bg-slate-900/50 p-2 sm:p-3 md:p-4 rounded-xl border border-slate-700/50 flex flex-col items-center shadow-inner text-center">
+              <div className="bg-slate-900/50 p-2 sm:p-3 md:p-4 rounded-xl border border-slate-700/50 flex flex-col items-center shadow-inner text-center animate-in fade-in duration-300 fill-mode-both" style={{ animationDelay: '200ms' }}>
                 <div className="text-emerald-500 mb-0.5 md:mb-1"><Medal size={20} className="md:w-[24px] md:h-[24px]" /></div>
                 <div className="text-xl md:text-2xl font-bold text-white leading-tight">{avgPos}</div>
                 <div className="text-[9px] md:text-xs uppercase tracking-wider text-slate-500 font-bold mt-1 truncate w-full px-1">Avg Pos</div>
@@ -207,8 +208,12 @@ const ManagerProfile: React.FC<ManagerProfileProps> = ({
               <div className="text-center py-4 md:py-6 text-xs md:text-sm text-slate-600 italic border-2 border-dashed border-slate-800 rounded-xl my-auto">No seasons completed yet.</div>
             ) : (
               <div className="space-y-2 md:space-y-3 pb-2">
-                {history.map((season) => (
-                  <div key={season.id} className="flex items-center justify-between p-3 md:p-4 bg-slate-800 rounded-lg border border-slate-700 hover:border-slate-500 transition-colors shadow-sm min-w-0">
+                {history.map((season, idx) => (
+                  <div
+                    key={season.id}
+                    className="flex items-center justify-between p-3 md:p-4 bg-slate-800 rounded-lg border border-slate-700 hover:border-slate-500 transition-colors shadow-sm min-w-0 animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-both"
+                    style={{ animationDelay: `${idx * 60}ms` }}
+                  >
                     <div className="flex items-center gap-2 md:gap-4 min-w-0">
                       <div className={`w-8 h-8 md:w-10 md:h-10 rounded-lg flex items-center justify-center text-sm md:text-base font-bold shrink-0 ${(season.wonLiga || season.wonUcl) ? 'bg-yellow-500 text-slate-900 shadow-[0_0_10px_rgba(234,179,8,0.3)]' : 'bg-slate-700 text-slate-300'}`}>
                         {(season.wonLiga || season.wonUcl) ? <Trophy size={16} className="md:w-[18px] md:h-[18px]" /> : <span>#{season.position}</span>}

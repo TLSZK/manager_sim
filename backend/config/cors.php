@@ -19,9 +19,7 @@ return [
 
     'allowed_methods' => ['*'],
 
-    // In most local dev instances, mirroring all origins with credentials is fine. 
-    // In production, specify your exact frontend URL e.g. ['https://yourdomain.com']
-    'allowed_origins' => ['*'], 
+    'allowed_origins' => [env('CORS_ALLOWED_ORIGINS', 'http://localhost:3000')],
 
     'allowed_origins_patterns' => [],
 

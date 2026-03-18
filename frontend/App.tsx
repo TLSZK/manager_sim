@@ -12,7 +12,8 @@ import SeasonRecapModal from './components/SeasonRecapModal';
 import ContractModal from './components/ContractModal';
 import LoginScreen from './components/LoginScreen';
 import ProfileSelector from './components/ProfileSelector';
-import { Play, FastForward, Trophy, Calendar, CheckCircle, ChevronLeft, ChevronRight, Shirt, CalendarDays, ArrowRight, ChevronDown, Users, User, Info, Globe, Loader2 } from 'lucide-react';
+import { FullPageLoader, MatchResultSkeleton } from './components/Skeletons';
+import { Play, FastForward, Trophy, Calendar, CheckCircle, ChevronLeft, ChevronRight, Shirt, CalendarDays, ArrowRight, ChevronDown, Users, User, Info, Globe } from 'lucide-react';
 import { getBoardFeedback } from './services/geminiService';
 import { fetchTeams, saveSeasonResult, updateProfileName, fetchSavedGame, saveGame } from './services/api';
 import { getTeamStrength, calculateMatchResult, resolveUCLKnockouts, applyMatchResultsToTeams } from './utils/simulationEngine';
@@ -35,7 +36,6 @@ const App: React.FC = () => {
     const [activeProfile, setActiveProfile] = useState<ManagerProfileType | null>(null);
     const [showAccountMenu, setShowAccountMenu] = useState(false);
 
-    // Explicit Full-Screen Loading State
     const [isAppLoading, setIsAppLoading] = useState(false);
 
     const [teams, setTeams] = useState<Team[]>([]);
@@ -93,7 +93,7 @@ const App: React.FC = () => {
         lastInitializedProfileId.current = activeProfile.id;
 
         const initGame = async () => {
-            setIsAppLoading(true); // Trigger explicit loading UI block
+            setIsAppLoading(true);
             try {
                 const savedGame = await fetchSavedGame(activeProfile.id);
 
@@ -134,7 +134,7 @@ const App: React.FC = () => {
             } catch (err) { 
                 alert("Error connecting to database. Please check your connection."); 
             } finally {
-                setIsAppLoading(false); // Remove explicit loading UI block
+                setIsAppLoading(false);
             }
         };
         initGame();
@@ -508,22 +508,18 @@ const App: React.FC = () => {
     const lastSimHome = useMemo(() => lastSimMatch ? teams.find(t => t.id === lastSimMatch.homeTeamId) : undefined, [lastSimMatch, teams]);
     const lastSimAway = useMemo(() => lastSimMatch ? teams.find(t => t.id === lastSimMatch.awayTeamId) : undefined, [lastSimMatch, teams]);
 
-    // Global Pre-Routing Flow
+    // ─── Global Pre-Routing Flow ───
     if (!isAuthenticated) return <LoginScreen onLogin={handleLogin} />;
     
     if (!activeProfile) return <ProfileSelector onSelectProfile={handleSelectProfile} onLogout={handleLogout} />;
     
-    // Explicit Full Screen Loading Barrier
+    // ─── Full Page Loading with polished loader ───
     if (isAppLoading) {
         return (
-            <div className="min-h-screen w-full bg-slate-950 flex flex-col items-center justify-center text-slate-100 animate-in fade-in duration-500 z-50">
-                <div className="relative flex items-center justify-center mb-8">
-                    <div className="absolute inset-0 bg-blue-500/20 blur-xl rounded-full animate-pulse"></div>
-                    <Loader2 className="w-16 h-16 text-blue-500 animate-spin relative z-10" />
-                </div>
-                <h2 className="text-2xl sm:text-3xl font-black tracking-tight mb-2">Initializing Career Environment</h2>
-                <p className="text-slate-400 font-mono text-xs sm:text-sm animate-pulse tracking-wide uppercase">Synchronizing databases & schedules...</p>
-            </div>
+            <FullPageLoader
+                title="Initializing Career"
+                subtitle="Synchronizing databases & schedules..."
+            />
         );
     }
 
@@ -537,6 +533,9 @@ const App: React.FC = () => {
     if (simState === 'playing_match' && userMatch && userHome && userAway) { 
         return <MatchView homeTeam={userHome} awayTeam={userAway} userTeamId={userTeamId} onMatchComplete={handleMatchComplete} competition={userMatch.competition} stage={userMatch.stage} />; 
     }
+
+    // Helper to check if results are still loading (no played matches yet)
+    const hasNoResults = resultGroups.length === 0;
 
     return (
         <div className={`min-h-screen w-full overflow-x-hidden text-slate-100 p-2 sm:p-3 md:p-8 transition-colors duration-500 ${isUCLWeek ? 'bg-slate-950' : 'bg-slate-900'}`}>
@@ -979,6 +978,7 @@ const App: React.FC = () => {
                         )}
                     </div>
                     
+                    {/* Results Panel with Skeleton Loading */}
                     <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl border border-slate-700 overflow-hidden flex flex-col w-full min-w-0 shadow-lg">
                         <div className="p-3 sm:p-4 bg-slate-900/50 border-b border-slate-700 space-y-2 sm:space-y-3">
                             <div className="relative">
@@ -1011,7 +1011,7 @@ const App: React.FC = () => {
                                     <ChevronLeft size={14} className="sm:w-[16px] sm:h-[16px]" />
                                 </button>
                                 <h3 className="font-bold text-[10px] sm:text-xs uppercase truncate px-2 text-slate-200 tracking-wider">
-                                    {currentResultGroup?.label || 'No Matches'}
+                                    {currentResultGroup?.label || (hasNoResults ? 'No Matches Yet' : 'No Matches')}
                                 </h3>
                                 <button 
                                     onClick={() => setResultsIndex((prev: number) => Math.min(resultGroups.length - 1, prev + 1))} 
@@ -1024,7 +1024,14 @@ const App: React.FC = () => {
                         </div>
                         
                         <div className="flex-1 overflow-y-auto divide-y divide-slate-700/50 min-w-0 pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-600 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-slate-500">
-                            {currentResultGroup?.matches.length ? currentResultGroup.matches.map((match, idx) => { 
+                            {hasNoResults ? (
+                                /* ── Skeleton Results ── */
+                                <div className="divide-y divide-slate-700/50">
+                                    {Array.from({ length: 5 }).map((_, i) => (
+                                        <MatchResultSkeleton key={`res-skel-${i}`} index={i} />
+                                    ))}
+                                </div>
+                            ) : currentResultGroup?.matches.length ? currentResultGroup.matches.map((match, idx) => { 
                                 const h = teams.find(t => t.id === match.homeTeamId);
                                 const a = teams.find(t => t.id === match.awayTeamId); 
                                 

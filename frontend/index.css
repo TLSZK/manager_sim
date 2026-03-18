@@ -1,0 +1,72 @@
+/* ── Skeleton Shimmer Animation ─────────────────────────────────── */
+.skeleton-shimmer {
+  background: linear-gradient(
+    110deg,
+    rgba(51, 65, 85, 0.5) 0%,
+    rgba(51, 65, 85, 0.5) 40%,
+    rgba(71, 85, 105, 0.6) 50%,
+    rgba(51, 65, 85, 0.5) 60%,
+    rgba(51, 65, 85, 0.5) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.8s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* ── Progress bar shimmer for loading screens ──────────────────── */
+@keyframes shimmer-progress {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(60%);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+/* ── Custom Scrollbar ──────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 8px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 8px;
+}
+
+/* ── Fill mode utility ─────────────────────────────────────────── */
+.fill-mode-both {
+  animation-fill-mode: both;
+}

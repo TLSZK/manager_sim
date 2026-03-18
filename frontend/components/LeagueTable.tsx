@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Team, Match, Competition } from '../types';
 import { Trophy, Globe, List, GitBranch } from 'lucide-react';
 import { LIGA_LOGO_URL, UCL_LOGO_URL } from '../constants';
+import { TableRowSkeleton } from './Skeletons';
 
 interface LeagueTableProps {
     teams: Team[];
@@ -83,7 +84,6 @@ const KnockoutBracket = ({ schedule, teams, userTeamId }: { schedule: Match[], t
                                     <div key={idx} className="flex-1 flex flex-col justify-center relative animate-in fade-in zoom-in-95 duration-500 fill-mode-both" style={{ animationDelay: `${(colIdx * 150) + (idx * 50)}ms` }}>
                                         <div className={`bg-[#1e293b] rounded-lg p-2 md:p-3 flex flex-col gap-2 md:gap-2.5 relative z-10 border ${isUserInvolved ? 'border-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.2)]' : 'border-slate-700/50'}`}>
                                             
-                                            {/* Header Section Placed inside the match card perfectly above the matches */}
                                             <div className="flex justify-between items-center border-b border-slate-700/50 pb-1.5 mb-0.5">
                                                 <span className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-wider">{stageName}</span>
                                                 {stageName !== 'Final' && (
@@ -146,7 +146,6 @@ const KnockoutBracket = ({ schedule, teams, userTeamId }: { schedule: Match[], t
                                             </div>
                                         </div>
 
-                                        {/* Connectors attached dynamically to perfectly centered position */}
                                         {stageName !== 'Final' && (
                                             <>
                                                 {stageName === 'Playoffs' ? (
@@ -197,6 +196,8 @@ const LeagueTable: React.FC<LeagueTableProps> = ({ teams, userTeamId, activeTab,
         return a.name.localeCompare(b.name);
     });
 
+    const isTableLoading = displayTeams.length === 0;
+
     return (
         <div className="bg-[#1e293b] rounded-xl border border-slate-700 shadow-xl flex flex-col w-full h-[500px] md:h-[600px] lg:h-[720px] overflow-hidden min-w-0">
             <div className="bg-[#0f172a]/50 flex border-b border-slate-700 shrink-0">
@@ -218,30 +219,48 @@ const LeagueTable: React.FC<LeagueTableProps> = ({ teams, userTeamId, activeTab,
                     <div className="w-full h-full overflow-x-auto [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-700 [&::-webkit-scrollbar-thumb]:rounded-full">
                         <table className="w-full min-w-[450px] text-xs md:text-sm text-left table-auto">
                             <thead className="bg-[#0f172a] text-slate-400 uppercase text-[10px] md:text-xs sticky top-0 z-10 shadow-sm">
-                                <tr><th className="px-2 md:px-3 py-2 md:py-3 w-8 md:w-10 text-center">#</th><th className="px-2 md:px-3 py-2 md:py-3">Club</th><th className="px-1 py-2 md:py-3 text-center">MP</th><th className="px-1 py-2 md:py-3 text-center">W</th><th className="px-1 py-2 md:py-3 text-center">D</th><th className="px-1 py-2 md:py-3 text-center">L</th><th className="px-1 py-2 md:py-3 text-center hidden sm:table-cell">GF</th><th className="px-1 py-2 md:py-3 text-center hidden sm:table-cell">GA</th><th className="px-1 py-2 md:py-3 text-center">GD</th><th className="px-2 md:px-3 py-2 md:py-3 text-center font-bold text-slate-200">Pts</th></tr>
+                                <tr>
+                                    <th className="px-2 md:px-3 py-2 md:py-3 w-8 md:w-10 text-center">#</th>
+                                    <th className="px-2 md:px-3 py-2 md:py-3">Club</th>
+                                    <th className="px-1 py-2 md:py-3 text-center">MP</th>
+                                    <th className="px-1 py-2 md:py-3 text-center">W</th>
+                                    <th className="px-1 py-2 md:py-3 text-center">D</th>
+                                    <th className="px-1 py-2 md:py-3 text-center">L</th>
+                                    <th className="px-1 py-2 md:py-3 text-center hidden sm:table-cell">GF</th>
+                                    <th className="px-1 py-2 md:py-3 text-center hidden sm:table-cell">GA</th>
+                                    <th className="px-1 py-2 md:py-3 text-center">GD</th>
+                                    <th className="px-2 md:px-3 py-2 md:py-3 text-center font-bold text-slate-200">Pts</th>
+                                </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-700/50 bg-[#1e293b]">
-                                {sortedTeams.map((team, index) => {
-                                    const stats = activeTab === 'La Liga' ? team.stats : team.uclStats!, pos = index + 1;
-                                    if (!stats) return null;
-                                    let posClass = "text-slate-400";
-                                    if (activeTab === 'La Liga') { if (pos === 1) posClass = "text-yellow-400 font-bold"; else if (pos <= 4) posClass = "text-blue-400"; else if (pos >= 18) posClass = "text-red-400"; }
-                                    else { if (pos <= 8) posClass = "text-green-400 font-bold"; else if (pos <= 24) posClass = "text-blue-400"; else posClass = "text-red-400"; }
-                                    return (
-                                        <tr key={team.id} className={`${team.id === userTeamId ? 'bg-indigo-900/40' : 'hover:bg-slate-700/30'} transition-colors animate-in fade-in slide-in-from-bottom-2 duration-500 fill-mode-both`} style={{ animationDelay: `${index * 30}ms` }}>
-                                            <td className={`px-2 md:px-3 py-2 md:py-3 text-center text-[10px] md:text-xs ${posClass}`}>{pos}</td>
-                                            <td className="px-2 md:px-3 py-2 md:py-3 font-medium text-slate-200 flex items-center gap-1.5 md:gap-2 min-w-[100px] md:min-w-[120px] sm:min-w-0">{team.logoUrl ? <img src={team.logoUrl} className="w-4 h-4 md:w-5 md:h-5 object-contain shrink-0" /> : <div className="w-4 h-4 md:w-5 md:h-5 rounded-full flex items-center justify-center text-[8px] font-bold shrink-0" style={{ backgroundColor: team.primaryColor, color: team.secondaryColor }}>{team.shortName[0]}</div>}<span className="truncate text-xs md:text-sm">{team.name}</span></td>
-                                            <td className="px-1 py-2 md:py-3 text-center text-slate-400">{stats.played}</td>
-                                            <td className="px-1 py-2 md:py-3 text-center text-slate-300">{stats.won}</td>
-                                            <td className="px-1 py-2 md:py-3 text-center text-slate-300">{stats.drawn}</td>
-                                            <td className="px-1 py-2 md:py-3 text-center text-slate-300">{stats.lost}</td>
-                                            <td className="px-1 py-2 md:py-3 text-center text-slate-400 hidden sm:table-cell">{stats.gf}</td>
-                                            <td className="px-1 py-2 md:py-3 text-center text-slate-400 hidden sm:table-cell">{stats.ga}</td>
-                                            <td className="px-1 py-2 md:py-3 text-center text-slate-300 font-medium">{stats.gd > 0 ? `+${stats.gd}` : stats.gd}</td>
-                                            <td className="px-2 md:px-3 py-2 md:py-3 text-center font-bold text-slate-100">{stats.points}</td>
-                                        </tr>
-                                    );
-                                })}
+                                {isTableLoading ? (
+                                    /* ── Skeleton Rows ── */
+                                    Array.from({ length: activeTab === 'La Liga' ? 20 : 16 }).map((_, i) => (
+                                        <TableRowSkeleton key={`skel-${i}`} index={i} />
+                                    ))
+                                ) : (
+                                    sortedTeams.map((team, index) => {
+                                        const stats = activeTab === 'La Liga' ? team.stats : team.uclStats!, pos = index + 1;
+                                        if (!stats) return null;
+                                        let posClass = "text-slate-400";
+                                        if (activeTab === 'La Liga') { if (pos === 1) posClass = "text-yellow-400 font-bold"; else if (pos <= 4) posClass = "text-blue-400"; else if (pos >= 18) posClass = "text-red-400"; }
+                                        else { if (pos <= 8) posClass = "text-green-400 font-bold"; else if (pos <= 24) posClass = "text-blue-400"; else posClass = "text-red-400"; }
+                                        return (
+                                            <tr key={team.id} className={`${team.id === userTeamId ? 'bg-indigo-900/40' : 'hover:bg-slate-700/30'} transition-colors animate-in fade-in slide-in-from-bottom-2 duration-500 fill-mode-both`} style={{ animationDelay: `${index * 30}ms` }}>
+                                                <td className={`px-2 md:px-3 py-2 md:py-3 text-center text-[10px] md:text-xs ${posClass}`}>{pos}</td>
+                                                <td className="px-2 md:px-3 py-2 md:py-3 font-medium text-slate-200 flex items-center gap-1.5 md:gap-2 min-w-[100px] md:min-w-[120px] sm:min-w-0">{team.logoUrl ? <img src={team.logoUrl} className="w-4 h-4 md:w-5 md:h-5 object-contain shrink-0" /> : <div className="w-4 h-4 md:w-5 md:h-5 rounded-full flex items-center justify-center text-[8px] font-bold shrink-0" style={{ backgroundColor: team.primaryColor, color: team.secondaryColor }}>{team.shortName[0]}</div>}<span className="truncate text-xs md:text-sm">{team.name}</span></td>
+                                                <td className="px-1 py-2 md:py-3 text-center text-slate-400">{stats.played}</td>
+                                                <td className="px-1 py-2 md:py-3 text-center text-slate-300">{stats.won}</td>
+                                                <td className="px-1 py-2 md:py-3 text-center text-slate-300">{stats.drawn}</td>
+                                                <td className="px-1 py-2 md:py-3 text-center text-slate-300">{stats.lost}</td>
+                                                <td className="px-1 py-2 md:py-3 text-center text-slate-400 hidden sm:table-cell">{stats.gf}</td>
+                                                <td className="px-1 py-2 md:py-3 text-center text-slate-400 hidden sm:table-cell">{stats.ga}</td>
+                                                <td className="px-1 py-2 md:py-3 text-center text-slate-300 font-medium">{stats.gd > 0 ? `+${stats.gd}` : stats.gd}</td>
+                                                <td className="px-2 md:px-3 py-2 md:py-3 text-center font-bold text-slate-100">{stats.points}</td>
+                                            </tr>
+                                        );
+                                    })
+                                )}
                             </tbody>
                         </table>
                     </div>

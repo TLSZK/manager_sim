@@ -4,11 +4,16 @@ services:
     restart: always
     environment:
       MYSQL_DATABASE: manager_sim
-      MYSQL_ROOT_PASSWORD: production_root_password
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-production_root_password}
       MYSQL_USER: manager_user
-      MYSQL_PASSWORD: production_app_password
+      MYSQL_PASSWORD: ${DB_PASSWORD:-production_app_password}
     volumes:
       - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-production_root_password}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   backend:
     build:
@@ -19,14 +24,20 @@ services:
       APP_ENV: production
       APP_DEBUG: "false"
       APP_URL: http://161.97.86.96:8000
+      APP_KEY: ${APP_KEY}
       DB_HOST: db
       DB_DATABASE: manager_sim
       DB_USERNAME: manager_user
-      DB_PASSWORD: production_app_password
+      DB_PASSWORD: ${DB_PASSWORD:-production_app_password}
+      SANCTUM_STATEFUL_DOMAINS: "161.97.86.96"
+      SESSION_DOMAIN: "161.97.86.96"
+      CORS_ALLOWED_ORIGINS: "http://161.97.86.96"
+      LOG_LEVEL: error
     ports:
       - "8000:80"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   frontend:
     build:
@@ -34,9 +45,10 @@ services:
       dockerfile: Dockerfile
       args:
         - VITE_API_URL=http://161.97.86.96:8000/api
+        - VITE_GEMINI_API_KEY=${VITE_GEMINI_API_KEY}
     restart: always
     ports:
-      - "3000:80"
+      - "80:80"
     depends_on:
       - backend
 
