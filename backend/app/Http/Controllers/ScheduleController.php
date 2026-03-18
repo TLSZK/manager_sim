@@ -7,10 +7,10 @@ use Illuminate\Support\Carbon;
 
 class ScheduleController extends Controller
 {
-    public function generateSchedule($teams)
+    public function generateSchedule($teams, $seasonStart = '2026-08-15')
     {
         $schedule = [];
-        $startDate = Carbon::create(2026, 8, 15); // Example season start
+        $startDate = Carbon::parse($seasonStart);
         $currentDate = $startDate->copy();
 
         // Generate League (Weekends)
@@ -71,8 +71,60 @@ class ScheduleController extends Controller
     
     private function createRoundRobin($teams)
     {
-        // Standard Round Robin implementation stub assuming it returns pairs
-        // Needs to be fully implemented based on your app's requirements
-        return []; 
+        // Extract IDs for mapping
+        $teamIds = array_map(fn($t) => is_array($t) ? ($t['id'] ?? null) : $t->id, $teams);
+        $teamIds = array_filter($teamIds);
+        
+        if (count($teamIds) % 2 !== 0) {
+            array_push($teamIds, 'BYE');
+        }
+
+        $numTeams = count($teamIds);
+        $rounds = [];
+        $numRounds = $numTeams - 1;
+        $halfSize = $numTeams / 2;
+
+        $tempTeams = $teamIds;
+        array_shift($tempTeams); // Keep the first team fixed
+
+        // Generate First Half of Season
+        for ($round = 0; $round < $numRounds; $round++) {
+            $roundMatches = [];
+            $teamIdx = $round % ($numTeams - 1);
+
+            if ($tempTeams[$teamIdx] !== 'BYE' && $teamIds[0] !== 'BYE') {
+                if ($round % 2 === 0) {
+                    $roundMatches[] = ['home' => $teamIds[0], 'away' => $tempTeams[$teamIdx]];
+                } else {
+                    $roundMatches[] = ['home' => $tempTeams[$teamIdx], 'away' => $teamIds[0]];
+                }
+            }
+
+            for ($i = 1; $i < $halfSize; $i++) {
+                $firstTeam = ($round + $i) % ($numTeams - 1);
+                $secondTeam = ($round + $numTeams - 1 - $i) % ($numTeams - 1);
+
+                if ($tempTeams[$firstTeam] !== 'BYE' && $tempTeams[$secondTeam] !== 'BYE') {
+                    if ($i % 2 === 0) {
+                        $roundMatches[] = ['home' => $tempTeams[$firstTeam], 'away' => $tempTeams[$secondTeam]];
+                    } else {
+                        $roundMatches[] = ['home' => $tempTeams[$secondTeam], 'away' => $tempTeams[$firstTeam]];
+                    }
+                }
+            }
+            $rounds[] = $roundMatches;
+        }
+
+        // Generate Second Half of Season (Reverse Fixtures)
+        $reverseRounds = [];
+        foreach ($rounds as $round) {
+            $reverseRound = [];
+            foreach ($round as $match) {
+                $reverseRound[] = ['home' => $match['away'], 'away' => $match['home']];
+            }
+            $reverseRounds[] = $reverseRound;
+        }
+
+        return array_merge($rounds, $reverseRounds);
     }
 }

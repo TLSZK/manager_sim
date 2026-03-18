@@ -3,13 +3,17 @@ import { INITIAL_STATS, INITIAL_UCL_STATS } from '../constants';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
 
+export const clearAuth = () => {
+  localStorage.removeItem('auth_token');
+};
+
 async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const token = localStorage.getItem('auth_token');
   const headers: Record<string, string> = { 
     'Content-Type': 'application/json', 
     'Accept': 'application/json' 
   };
   
+  const token = localStorage.getItem('auth_token');
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
@@ -19,12 +23,12 @@ async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promi
     headers: { 
       ...headers, 
       ...(options.headers as Record<string, string>) 
-    } 
+    }
   });
 
   if (!response.ok) {
     if (response.status === 401 && !endpoint.includes('/login')) {
-      localStorage.removeItem('auth_token'); 
+      localStorage.removeItem('auth_token');
       window.location.reload();
     }
     const errData = await response.json().catch(() => ({}));
@@ -49,7 +53,7 @@ export const loginAccount = async (email: string, password: string): Promise<str
     method: 'POST', 
     body: JSON.stringify({ email, password }) 
   });
-  localStorage.setItem('auth_token', res.token); 
+  localStorage.setItem('auth_token', res.token);
   return res.token;
 };
 
@@ -58,7 +62,7 @@ export const registerAccount = async (name: string, email: string, password: str
     method: 'POST', 
     body: JSON.stringify({ name, email, password }) 
   });
-  localStorage.setItem('auth_token', res.token); 
+  localStorage.setItem('auth_token', res.token);
   return res.token;
 };
 
@@ -84,7 +88,7 @@ export const fetchTeams = async (): Promise<Team[]> => {
         ...p, 
         offField: Boolean(p.offField || p.offfield || p.off_field) 
       })),
-      formation: t.formation || '4-3-3', // Fixed: Now reads from backend, defaults to 4-3-3 if missing
+      formation: t.formation || '4-3-3',
       stats: parsedStats || { ...INITIAL_STATS, form: [] },
       uclStats: isUcl ? (parsedUclStats || { ...INITIAL_UCL_STATS }) : undefined
     };
@@ -95,14 +99,12 @@ export const fetchProfiles = async (): Promise<ManagerProfile[]> => {
   const profiles = await apiRequest<any[]>('/managers');
   
   return profiles.map(p => {
-    // 1. Determine current team name from the attached saved game
     let currentTeamName = 'Free Agent';
     const savedGame = (p.saved_games && p.saved_games[0]) || (p.savedGames && p.savedGames[0]);
 
     if (savedGame) {
       currentTeamName = savedGame.team_name || savedGame.teamName || 'Free Agent';
 
-      // 2. If no direct name is stored, look it up in the teams_snapshot
       if (currentTeamName === 'Free Agent' && (savedGame.user_team_id || savedGame.userTeamId) && savedGame.teams_snapshot) {
         try {
           const snapshot = typeof savedGame.teams_snapshot === 'string' 
@@ -121,7 +123,6 @@ export const fetchProfiles = async (): Promise<ManagerProfile[]> => {
       }
     }
 
-    // 3. Map and return the profile while injecting the savedGames context back in
     return {
       id: p.id, 
       name: p.name,

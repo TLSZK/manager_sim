@@ -55,22 +55,17 @@ const App: React.FC = () => {
     const [isSimSummaryOpen, setIsSimSummaryOpen] = useState(false);
     const [simSummaryMatches, setSimSummaryMatches] = useState<Match[]>([]);
     const [simSummaryFilter, setSimSummaryFilter] = useState<'all' | 'mine'>('mine');
+    const [isSimulating, setIsSimulating] = useState(false);
 
     const [currentSeasonYear, setCurrentSeasonYear] = useState<string>("2025/26");
     const [lastSimulatedMatchId, setLastSimulatedMatchId] = useState<string | null>(null);
 
-    const [seasonId, setSeasonId] = useState<string>(() => crypto.randomUUID());
-    const seasonIdRef = useRef(seasonId);
     const lastInitializedProfileId = useRef<string | null>(null);
 
     const maxWeek = useMemo(() => {
         if (!currentSeasonYear) return 300;
         return getCompetitionWeeks(currentSeasonYear).days.length;
     }, [currentSeasonYear]);
-
-    useEffect(() => { 
-        seasonIdRef.current = seasonId; 
-    }, [seasonId]);
 
     useEffect(() => { 
         if (isAuthenticated) {
@@ -202,39 +197,31 @@ const App: React.FC = () => {
         let homeStr = getTeamStrength(home);
         let awayStr = getTeamStrength(away);
         
-        // Small home advantage as a multiplier so it scales
         if (match.stage !== 'Final') {
             homeStr *= 1.03; 
         }
         
-        // Calculate Expected Goals (xG) using exponential scaling
-        // This makes huge rating differences (e.g., 99 vs 70) result in absolute dominations
         const strRatio = homeStr / awayStr;
-        
-        // 4.5 exponent ensures the gap is punishing and heavily reduces flukes for god-squads
         let homeXG = 1.45 * Math.pow(strRatio, 4.5);
         let awayXG = 1.15 * Math.pow(1 / strRatio, 4.5);
 
-        // Tense/Defensive logic for finals
         if (match.stage === 'Final') {
             homeXG *= 0.8;
             awayXG *= 0.8;
         }
 
-        // Add a minimal floor to xG to account for rare lucky chances
         homeXG = Math.max(0.05, homeXG);
         awayXG = Math.max(0.05, awayXG);
 
-        // Poisson distribution generator for unlimited, realistic goal generation
         const getPoissonRandom = (lambda: number) => {
-            if (lambda > 30) return Math.round(lambda); // Prevent extreme loops if a team is completely broken
+            if (lambda > 30) return Math.round(lambda); 
             let L = Math.exp(-lambda);
             let k = 0;
             let p = 1;
             do {
                 k++;
                 p *= Math.random();
-            } while (p > L && k < 40); // Fail-safe limit
+            } while (p > L && k < 40); 
             return k - 1;
         };
 
@@ -456,8 +443,11 @@ const App: React.FC = () => {
         }
     };
 
-    const runSimulation = useCallback((targetWeek: number, userResult: { matchId: string, homeScore: number, awayScore: number } | null = null, stopAtUserMatch: boolean = true, showSummary: boolean = false) => {
-        if (currentWeek > maxWeek) return;
+    // Fix: Re-architected as an async function that yields to the UI thread
+    // This prevents the browser from freezing during heavy simulations
+    const runSimulation = useCallback(async (targetWeek: number, userResult: { matchId: string, homeScore: number, awayScore: number } | null = null, stopAtUserMatch: boolean = true, showSummary: boolean = false) => {
+        if (currentWeek > maxWeek || isSimulating) return;
+        setIsSimulating(true);
         
         let tempTeams = [...teams];
         let tempSchedule = [...schedule];
@@ -468,6 +458,11 @@ const App: React.FC = () => {
         let newlyPlayedMatches: Match[] = [];
 
         while (tempWeek < targetWeek && tempWeek <= maxWeek) {
+            // Yield to the main thread every 4 weeks to keep the UI responsive
+            if (tempWeek % 4 === 0) {
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
+
             const matchesToPlay = tempSchedule.filter(m => m.week === tempWeek && !m.played);
             const userMatchThisWeek = matchesToPlay.find(m => m.homeTeamId === userTeamId || m.awayTeamId === userTeamId);
             
@@ -577,8 +572,10 @@ const App: React.FC = () => {
             setSimSummaryMatches(newlyPlayedMatches);
             setIsSimSummaryOpen(true);
         }
+        
+        setIsSimulating(false);
 
-    }, [teams, schedule, currentWeek, userTeamId, maxWeek, resolveUCLKnockouts, lastSimulatedMatchId, calculateMatchResult]);
+    }, [teams, schedule, currentWeek, userTeamId, maxWeek, resolveUCLKnockouts, lastSimulatedMatchId, calculateMatchResult, isSimulating]);
 
 
     const handlePlayVisualMatch = () => setSimState('playing_match');
@@ -699,20 +696,19 @@ const App: React.FC = () => {
             });
 
             setActiveProfile(prev => prev ? ({ ...prev, history: [newRecord, ...prev.history] }) : null);
-            const activeSeasonId = seasonId;
             setSeasonSummary({ position: userPos, points: userTeam.stats.points, wonLeague: userPos === 1, uclResult: uclResultString, message: "Waiting for board evaluation..." });
             setIsRecapOpen(true);
             
             getBoardFeedback(userTeam, userPos, sorted.length, uclResultString).then(feedback => { 
-                if (seasonIdRef.current === activeSeasonId) {
-                    setSeasonSummary(prev => prev ? { ...prev, message: feedback } : null); 
-                }
+                // Fix: React's functional update pattern safely avoids race conditions here. 
+                // If the user already proceeded to the next season, seasonSummary will be null.
+                setSeasonSummary(prev => prev ? { ...prev, message: feedback } : null); 
             });
         } catch (error) { 
             alert("Failed to save season data."); 
             setSimState('ready'); 
         }
-    }, [userTeamId, activeProfile, teams, schedule, currentSeasonYear, seasonId]);
+    }, [userTeamId, activeProfile, teams, schedule, currentSeasonYear]);
 
     useEffect(() => {
         if (currentWeek > maxWeek && simState !== 'season_over' && simState !== 'match_recap' && !isSimSummaryOpen) {
@@ -723,7 +719,6 @@ const App: React.FC = () => {
     const handleSeasonTransition = async (stayWithTeam: boolean) => {
         setIsRecapOpen(false); 
         setIsContractModalOpen(false);
-        setSeasonId(crypto.randomUUID());
         
         const resetTeams = teams.map(t => ({
             ...t,
@@ -891,12 +886,10 @@ const App: React.FC = () => {
                                     const dateStr = `${d.getMonth() + 1}/${d.getDate()}`;
                                     const isUserMatch = h?.id === userTeamId || a?.id === userTeamId;
                                     
-                                    // Determine the outcome
                                     const homeWon = (m.homeScore ?? 0) > (m.awayScore ?? 0);
                                     const awayWon = (m.awayScore ?? 0) > (m.homeScore ?? 0);
                                     const isDraw = m.homeScore === m.awayScore && m.homeScore !== null;
                                     
-                                    // Assign conditional colors
                                     const homeColor = homeWon ? 'text-green-400 font-extrabold' : (isDraw ? 'text-yellow-400 font-bold' : 'text-slate-500 font-normal');
                                     const awayColor = awayWon ? 'text-green-400 font-extrabold' : (isDraw ? 'text-yellow-400 font-bold' : 'text-slate-500 font-normal');
                                     const scoreColor = isDraw ? 'text-yellow-400 border-yellow-700/50' : 'text-white border-slate-700';
@@ -962,13 +955,13 @@ const App: React.FC = () => {
                             Are you sure you want to simulate all remaining matches? This will instantly calculate all results until the end of the season. This action cannot be undone.
                         </p>
                         <div className="flex gap-3 sm:gap-4 w-full">
-                            <button onClick={() => setIsSkipSeasonConfirmOpen(false)} className="flex-1 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white font-bold py-2.5 sm:py-3 rounded-xl transition-colors active:scale-95 text-sm sm:text-base outline-none focus:outline-none focus:ring-0">
+                            <button onClick={() => setIsSkipSeasonConfirmOpen(false)} disabled={isSimulating} className="flex-1 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white font-bold py-2.5 sm:py-3 rounded-xl transition-colors active:scale-95 text-sm sm:text-base outline-none focus:outline-none focus:ring-0">
                                 Cancel
                             </button>
                             <button onClick={() => {
                                 setIsSkipSeasonConfirmOpen(false);
                                 runSimulation(maxWeek + 1, null, false, true);
-                            }} className="flex-1 bg-yellow-600 hover:bg-yellow-500 hover:-translate-y-0.5 text-white font-bold py-2.5 sm:py-3 rounded-xl shadow-lg hover:shadow-yellow-500/20 transition-all duration-200 active:scale-95 text-sm sm:text-base outline-none focus:outline-none focus:ring-0">
+                            }} disabled={isSimulating} className="flex-1 bg-yellow-600 hover:bg-yellow-500 hover:-translate-y-0.5 text-white font-bold py-2.5 sm:py-3 rounded-xl shadow-lg hover:shadow-yellow-500/20 transition-all duration-200 active:scale-95 text-sm sm:text-base outline-none focus:outline-none focus:ring-0">
                                 Simulate Season
                             </button>
                         </div>
@@ -1018,7 +1011,6 @@ const App: React.FC = () => {
                 currentSeasonYear={currentSeasonYear} 
             />
 
-            {/* Main Application Header with Z-index Fix */}
             <header className={`relative z-50 flex flex-col md:flex-row justify-between items-center mb-4 md:mb-8 p-3 sm:p-4 gap-3 sm:gap-4 rounded-xl border shadow-lg transition-colors duration-500 animate-in slide-in-from-top-4 fade-in backdrop-blur-md bg-opacity-90 ${isUCLWeek ? 'bg-blue-950 border-blue-900' : 'bg-slate-800 border-slate-700'}`}>
                 <div className="flex items-center gap-3 w-full md:w-auto min-w-0">
                     <div className="flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 shrink-0">
@@ -1127,7 +1119,6 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="flex flex-col gap-4 sm:gap-6 order-1 lg:order-2 w-full min-w-0 animate-in slide-in-from-right-4 fade-in duration-500">
-                    {/* Action Center with subtle gradient background */}
                     <div className={`p-3 sm:p-4 md:p-6 rounded-xl border shadow-xl flex flex-col justify-between transition-colors duration-500 ${isUCLWeek ? 'bg-gradient-to-br from-blue-950 to-[#0b132b] border-blue-900' : 'bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700'}`}>
                         <div>
                             <div className="flex justify-between items-start mb-4">
@@ -1252,29 +1243,33 @@ const App: React.FC = () => {
                                 {userMatch ? (
                                     <button 
                                         onClick={handlePlayVisualMatch} 
-                                        className="flex items-center justify-center gap-1 sm:gap-2 bg-blue-600 hover:bg-blue-500 hover:-translate-y-0.5 text-white font-bold py-2.5 sm:py-3 px-2 sm:px-4 rounded-lg shadow-lg hover:shadow-blue-500/50 transition-all duration-200 text-xs sm:text-sm md:text-base outline-none focus:outline-none focus:ring-0"
+                                        disabled={isSimulating}
+                                        className="flex items-center justify-center gap-1 sm:gap-2 bg-blue-600 hover:bg-blue-500 hover:-translate-y-0.5 text-white font-bold py-2.5 sm:py-3 px-2 sm:px-4 rounded-lg shadow-lg hover:shadow-blue-500/50 transition-all duration-200 text-xs sm:text-sm md:text-base outline-none focus:outline-none focus:ring-0 disabled:opacity-50"
                                     >
                                         <Play size={14} className="sm:w-[18px] sm:h-[18px]" fill="currentColor" /> Play
                                     </button>
                                 ) : (
                                     <button 
                                         onClick={handleSimToNextMatch} 
-                                        className="flex items-center justify-center gap-1 sm:gap-2 bg-indigo-700/80 hover:bg-indigo-600 hover:-translate-y-0.5 text-white font-bold py-2.5 sm:py-3 px-2 sm:px-4 rounded-lg border border-indigo-600 hover:shadow-[0_0_15px_rgba(79,70,229,0.3)] transition-all duration-200 text-xs sm:text-sm md:text-base outline-none focus:outline-none focus:ring-0"
+                                        disabled={isSimulating}
+                                        className="flex items-center justify-center gap-1 sm:gap-2 bg-indigo-700/80 hover:bg-indigo-600 hover:-translate-y-0.5 text-white font-bold py-2.5 sm:py-3 px-2 sm:px-4 rounded-lg border border-indigo-600 hover:shadow-[0_0_15px_rgba(79,70,229,0.3)] transition-all duration-200 text-xs sm:text-sm md:text-base outline-none focus:outline-none focus:ring-0 disabled:opacity-50"
                                     >
-                                        <CalendarDays size={14} className="sm:w-[18px] sm:h-[18px]" /> Sim to Match
+                                        {isSimulating ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <CalendarDays size={14} className="sm:w-[18px] sm:h-[18px]" />} Sim to Match
                                     </button>
                                 )}
                                 <button 
                                     onClick={handleQuickSimWeek} 
-                                    className="flex items-center justify-center gap-1 sm:gap-2 bg-slate-700/80 hover:bg-slate-600 hover:-translate-y-0.5 text-white font-bold py-2.5 sm:py-3 px-2 sm:px-4 rounded-lg border border-slate-600 transition-all duration-200 text-xs sm:text-sm md:text-base outline-none focus:outline-none focus:ring-0"
+                                    disabled={isSimulating}
+                                    className="flex items-center justify-center gap-1 sm:gap-2 bg-slate-700/80 hover:bg-slate-600 hover:-translate-y-0.5 text-white font-bold py-2.5 sm:py-3 px-2 sm:px-4 rounded-lg border border-slate-600 transition-all duration-200 text-xs sm:text-sm md:text-base outline-none focus:outline-none focus:ring-0 disabled:opacity-50"
                                 >
-                                    <FastForward size={14} className="sm:w-[18px] sm:h-[18px]" /> {userMatch ? 'Sim Match' : 'Sim Day'}
+                                    {isSimulating ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <FastForward size={14} className="sm:w-[18px] sm:h-[18px]" />} {userMatch ? 'Sim Match' : 'Sim Day'}
                                 </button>
                                 <button 
                                     onClick={() => setIsSkipSeasonConfirmOpen(true)} 
-                                    className="col-span-2 flex items-center justify-center gap-1 sm:gap-2 font-bold py-2.5 sm:py-3 px-2 sm:px-4 rounded-lg text-xs sm:text-sm md:text-base bg-slate-800/80 hover:bg-slate-700 hover:text-white text-slate-300 border border-slate-600 transition-colors outline-none focus:outline-none focus:ring-0"
+                                    disabled={isSimulating}
+                                    className="col-span-2 flex items-center justify-center gap-1 sm:gap-2 font-bold py-2.5 sm:py-3 px-2 sm:px-4 rounded-lg text-xs sm:text-sm md:text-base bg-slate-800/80 hover:bg-slate-700 hover:text-white text-slate-300 border border-slate-600 transition-colors outline-none focus:outline-none focus:ring-0 disabled:opacity-50"
                                 >
-                                    <FastForward size={14} className="sm:w-[18px] sm:h-[18px]" /> Skip to Season End
+                                    {isSimulating ? <div className="w-4 h-4 border-2 border-slate-300/30 border-t-slate-300 rounded-full animate-spin" /> : <FastForward size={14} className="sm:w-[18px] sm:h-[18px]" />} Skip to Season End
                                 </button>
                             </div>
                         )}

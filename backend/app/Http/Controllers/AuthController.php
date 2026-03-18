@@ -20,7 +20,7 @@ class AuthController extends Controller
         $user = User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
-            'password' => $validated['password']
+            'password' => Hash::make($validated['password'])
         ]);
 
         $token = $user->createToken('auth_token')->plainTextToken;
@@ -40,17 +40,10 @@ class AuthController extends Controller
 
         $user = User::where('email', $request->email)->first();
 
-        // 1. Check if the email exists
-        if (!$user) {
+        // Use a single, generic error message to prevent user enumeration.
+        if (!$user || !Hash::check($request->password, $user->password)) {
             return response()->json([
-                'message' => 'Email not registered. Would you like to create an account?'
-            ], 404);
-        }
-
-        // 2. Check if the password matches
-        if (!Hash::check($request->password, $user->password)) {
-            return response()->json([
-                'message' => 'Incorrect password. Please try again.'
+                'message' => 'Invalid credentials.'
             ], 401);
         }
 

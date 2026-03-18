@@ -15,7 +15,7 @@ class ManagerController extends Controller
                 'histories' => function ($query) {
                     $query->orderBy('created_at', 'desc');
                 },
-                'savedGames' // Ensure the frontend receives the current state of their save
+                'savedGames' 
             ])->get()
         ]);
     }
@@ -29,8 +29,8 @@ class ManagerController extends Controller
 
         $manager = $request->user()->managers()->create($validated);
 
-        // Load empty histories for immediate consistency
-        $manager->load('histories');
+        // Bind an empty collection directly instead of querying the DB for a new entity
+        $manager->setRelation('histories', collect([]));
 
         return response()->json([
             'data' => $manager
@@ -38,9 +38,10 @@ class ManagerController extends Controller
     }
 
     // DELETE /api/managers/{id}
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
-        $manager = Manager::findOrFail($id);
+        // Scoped to the authenticated user to prevent IDOR
+        $manager = $request->user()->managers()->findOrFail($id);
         $manager->delete();
 
         return response()->noContent();
@@ -49,10 +50,13 @@ class ManagerController extends Controller
     // PUT /api/managers/{id}
     public function update(Request $request, $id)
     {
-        $manager = Manager::findOrFail($id);
+        // Scoped to the authenticated user to prevent IDOR
+        $manager = $request->user()->managers()->findOrFail($id);
+        
         $validated = $request->validate([
             'name' => 'required|string|max:255',
         ]);
+        
         $manager->update($validated);
         $manager->load('histories');
 
@@ -64,7 +68,8 @@ class ManagerController extends Controller
     // POST /api/managers/{id}/history
     public function addHistory(Request $request, $id)
     {
-        $manager = Manager::findOrFail($id);
+        // Scoped to the authenticated user to prevent IDOR
+        $manager = $request->user()->managers()->findOrFail($id);
 
         $validated = $request->validate([
             'seasonYear' => 'required|string',

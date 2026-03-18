@@ -479,17 +479,10 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, onMatchComple
     const isHalftimeRef = useRef(isHalftime);
     const onMatchCompleteRef = useRef(onMatchComplete);
 
-    useEffect(() => {
-        isPausedRef.current = isPausedState;
-    }, [isPausedState]);
-
-    useEffect(() => {
-        isHalftimeRef.current = isHalftime;
-    }, [isHalftime]);
-
-    useEffect(() => {
-        onMatchCompleteRef.current = onMatchComplete;
-    }, [onMatchComplete]);
+    // Fix: Update refs synchronously during render, eliminating unnecessary useEffects and 1-frame stale state
+    isPausedRef.current = isPausedState;
+    isHalftimeRef.current = isHalftime;
+    onMatchCompleteRef.current = onMatchComplete;
 
     const draw = useCallback((game: GameEngine) => {
         const cvs = canvasRef.current;
