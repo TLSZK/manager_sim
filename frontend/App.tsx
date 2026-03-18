@@ -12,7 +12,7 @@ import SeasonRecapModal from './components/SeasonRecapModal';
 import ContractModal from './components/ContractModal';
 import LoginScreen from './components/LoginScreen';
 import ProfileSelector from './components/ProfileSelector';
-import { Play, FastForward, Trophy, Calendar, CheckCircle, ChevronLeft, ChevronRight, Shirt, CalendarDays, ArrowRight, ChevronDown, Users, User, Info, Globe } from 'lucide-react';
+import { Play, FastForward, Trophy, Calendar, CheckCircle, ChevronLeft, ChevronRight, Shirt, CalendarDays, ArrowRight, ChevronDown, Users, User, Info, Globe, Loader2 } from 'lucide-react';
 import { getBoardFeedback } from './services/geminiService';
 import { fetchTeams, saveSeasonResult, updateProfileName, fetchSavedGame, saveGame } from './services/api';
 import { getTeamStrength, calculateMatchResult, resolveUCLKnockouts, applyMatchResultsToTeams } from './utils/simulationEngine';
@@ -34,6 +34,9 @@ const App: React.FC = () => {
     const [isAuthenticated, setIsAuthenticated] = useState<boolean>(!!localStorage.getItem('auth_token'));
     const [activeProfile, setActiveProfile] = useState<ManagerProfileType | null>(null);
     const [showAccountMenu, setShowAccountMenu] = useState(false);
+
+    // Explicit Full-Screen Loading State
+    const [isAppLoading, setIsAppLoading] = useState(false);
 
     const [teams, setTeams] = useState<Team[]>([]);
     const [schedule, setSchedule] = useState<Match[]>([]);
@@ -90,23 +93,24 @@ const App: React.FC = () => {
         lastInitializedProfileId.current = activeProfile.id;
 
         const initGame = async () => {
-            const savedGame = await fetchSavedGame(activeProfile.id);
-
-            if (savedGame && savedGame.userTeamId) {
-                if (savedGame.schedule && savedGame.schedule.length > 0) {
-                    const firstDate = new Date(savedGame.schedule[0].date);
-                    const startYear = firstDate.getFullYear();
-                    setCurrentSeasonYear(`${startYear}/${(startYear + 1).toString().slice(2)}`);
-                }
-                setTeams(savedGame.teams); 
-                setSchedule(savedGame.schedule); 
-                setCurrentWeek(savedGame.currentWeek);
-                setUserTeamId(savedGame.userTeamId); 
-                setSimState('ready');
-                return;
-            }
-
+            setIsAppLoading(true); // Trigger explicit loading UI block
             try {
+                const savedGame = await fetchSavedGame(activeProfile.id);
+
+                if (savedGame && savedGame.userTeamId) {
+                    if (savedGame.schedule && savedGame.schedule.length > 0) {
+                        const firstDate = new Date(savedGame.schedule[0].date);
+                        const startYear = firstDate.getFullYear();
+                        setCurrentSeasonYear(`${startYear}/${(startYear + 1).toString().slice(2)}`);
+                    }
+                    setTeams(savedGame.teams); 
+                    setSchedule(savedGame.schedule); 
+                    setCurrentWeek(savedGame.currentWeek);
+                    setUserTeamId(savedGame.userTeamId); 
+                    setSimState('ready');
+                    return;
+                }
+
                 const fetchedTeams = await fetchTeams();
                 const allTeams = [
                     ...fetchedTeams.map(t => ({ 
@@ -129,6 +133,8 @@ const App: React.FC = () => {
                 setUserTeamId(null);
             } catch (err) { 
                 alert("Error connecting to database. Please check your connection."); 
+            } finally {
+                setIsAppLoading(false); // Remove explicit loading UI block
             }
         };
         initGame();
@@ -502,10 +508,25 @@ const App: React.FC = () => {
     const lastSimHome = useMemo(() => lastSimMatch ? teams.find(t => t.id === lastSimMatch.homeTeamId) : undefined, [lastSimMatch, teams]);
     const lastSimAway = useMemo(() => lastSimMatch ? teams.find(t => t.id === lastSimMatch.awayTeamId) : undefined, [lastSimMatch, teams]);
 
+    // Global Pre-Routing Flow
     if (!isAuthenticated) return <LoginScreen onLogin={handleLogin} />;
     
     if (!activeProfile) return <ProfileSelector onSelectProfile={handleSelectProfile} onLogout={handleLogout} />;
     
+    // Explicit Full Screen Loading Barrier
+    if (isAppLoading) {
+        return (
+            <div className="min-h-screen w-full bg-slate-950 flex flex-col items-center justify-center text-slate-100 animate-in fade-in duration-500 z-50">
+                <div className="relative flex items-center justify-center mb-8">
+                    <div className="absolute inset-0 bg-blue-500/20 blur-xl rounded-full animate-pulse"></div>
+                    <Loader2 className="w-16 h-16 text-blue-500 animate-spin relative z-10" />
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-black tracking-tight mb-2">Initializing Career Environment</h2>
+                <p className="text-slate-400 font-mono text-xs sm:text-sm animate-pulse tracking-wide uppercase">Synchronizing databases & schedules...</p>
+            </div>
+        );
+    }
+
     if (!userTeamId) return <TeamSelector teams={teams.filter(t => t.id !== 'TBD')} onSelect={handleSelectTeam} />;
     
     if (simState === 'squad_management') { 
