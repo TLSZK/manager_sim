@@ -25,10 +25,16 @@ services:
       APP_DEBUG: "false"
       APP_URL: http://161.97.86.96:8000
       APP_KEY: ${APP_KEY}
+      DB_CONNECTION: mysql
       DB_HOST: db
+      DB_PORT: 3306
       DB_DATABASE: manager_sim
       DB_USERNAME: manager_user
       DB_PASSWORD: ${DB_PASSWORD:-production_app_password}
+      SESSION_DRIVER: database
+      SESSION_LIFETIME: 120
+      CACHE_STORE: database
+      QUEUE_CONNECTION: database
       SANCTUM_STATEFUL_DOMAINS: "161.97.86.96"
       SESSION_DOMAIN: "161.97.86.96"
       CORS_ALLOWED_ORIGINS: "http://161.97.86.96"
