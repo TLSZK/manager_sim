@@ -621,7 +621,7 @@ const App: React.FC = () => {
                                                         )}
                                                     </div>
 
-                                                    <div className={`px-1.5 sm:px-3 py-1 bg-slate-900 font-mono font-bold rounded mx-1.5 sm:mx-3 border text-xs sm:text-sm shrink-0 min-w-[45px] sm:min-w-[60px] text-center transition-colors duration-300 ${scoreColor}`}>
+                                                    <div className={`px-1.5 sm:px-3 py-1 bg-slate-900 font-mono font-bold rounded mx-1.5 sm:mx-3 border text-xs sm:text-sm shrink-0 min-w-[45px] sm:min-w-[60px] text-center whitespace-nowrap transition-colors duration-300 ${scoreColor}`}>
                                                         {m.homeScore} - {m.awayScore}
                                                     </div>
 
@@ -871,7 +871,7 @@ const App: React.FC = () => {
                                                 )}
                                                 <div className="font-bold text-xs sm:text-sm md:text-lg leading-tight truncate w-full">{lastSimHome.shortName}</div>
                                             </div>
-                                            <div className="text-xl sm:text-2xl md:text-3xl font-mono font-bold text-white bg-slate-800 px-2 sm:px-3 py-1 rounded border border-slate-700 mx-1">
+                                            <div className="text-xl sm:text-2xl md:text-3xl font-mono font-bold text-white bg-slate-800 px-2 sm:px-3 py-1 rounded border border-slate-700 mx-1 shrink-0 whitespace-nowrap">
                                                 {lastSimMatch.homeScore} - {lastSimMatch.awayScore}
                                             </div>
                                             <div className="text-center w-[40%] sm:w-1/3 flex flex-col items-center">
@@ -1070,7 +1070,7 @@ const App: React.FC = () => {
                                                 <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full shrink-0" style={{ backgroundColor: h.primaryColor }}></div>
                                             )}
                                         </div>
-                                        <div className="px-1.5 sm:px-3 font-bold text-white bg-slate-900/80 py-1 rounded mx-1.5 sm:mx-2 border border-slate-700 min-w-[40px] sm:min-w-[45px] text-center text-[10px] sm:text-xs shrink-0 transition-colors group-hover:border-slate-500">
+                                        <div className="px-1.5 sm:px-3 font-bold text-white bg-slate-900/80 py-1 rounded mx-1.5 sm:mx-2 border border-slate-700 min-w-[40px] sm:min-w-[45px] text-center text-[10px] sm:text-xs shrink-0 whitespace-nowrap transition-colors group-hover:border-slate-500">
                                             {match.homeScore} - {match.awayScore}
                                         </div>
                                         <div className="flex-1 text-left font-medium text-slate-300 flex items-center gap-1.5 sm:gap-2 min-w-0">

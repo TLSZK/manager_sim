@@ -93,7 +93,7 @@ const CalendarModal: React.FC<CalendarModalProps> = ({
                                      </div>
                                      <span className={`font-bold truncate max-w-full text-[8px] sm:text-[9px] md:text-xs ${isUCL ? 'text-blue-200' : 'text-emerald-200'}`}>{opponent.shortName}</span>
                                  </div>
-                                 {isPlayed ? (<div className="font-mono font-bold text-white bg-black/40 text-center rounded py-0.5 md:py-1 text-[8px] md:text-xs">{match.homeScore} - {match.awayScore}</div>) : (<div className="text-center text-slate-400 text-[7px] md:text-[10px] uppercase font-bold tracking-wider bg-black/20 rounded py-0.5">{match.week < currentWeek ? 'TBP' : 'VS'}</div>)}
+                                 {isPlayed ? (<div className="font-mono font-bold text-white bg-black/40 text-center rounded py-0.5 md:py-1 text-[8px] md:text-xs whitespace-nowrap">{match.homeScore} - {match.awayScore}</div>) : (<div className="text-center text-slate-400 text-[7px] md:text-[10px] uppercase font-bold tracking-wider bg-black/20 rounded py-0.5">{match.week < currentWeek ? 'TBP' : 'VS'}</div>)}
                                  {canSimTo && (<div className="absolute inset-0 bg-black/80 flex items-center justify-center opacity-0 group-hover/match:opacity-100 transition-opacity"><span className="flex items-center gap-0.5 md:gap-1 text-[8px] md:text-[10px] font-bold text-white uppercase tracking-wider"><PlayCircle size={10} className="md:w-[14px] md:h-[14px]" /> <span className="hidden sm:inline">Sim</span></span></div>)}
                              </div>
                          )}
