@@ -15,7 +15,7 @@ import ProfileSelector from './components/ProfileSelector';
 import { FullPageLoader, MatchResultSkeleton } from './components/Skeletons';
 import { Play, FastForward, Trophy, Calendar, CheckCircle, ChevronLeft, ChevronRight, Shirt, CalendarDays, ArrowRight, ChevronDown, Users, User, Info, Globe } from 'lucide-react';
 import { fetchTeams, saveSeasonResult, updateProfileName, fetchSavedGame, saveGame } from './services/api';
-import { getTeamStrength, calculateMatchResult, resolveUCLKnockouts, applyMatchResultsToTeams } from './utils/simulationEngine';
+import { getTeamStrength, calculateMatchResult, resolveUCLKnockouts, applyMatchResultsToTeams, prepareTeamsForNextSeason } from './utils/simulationEngine';
 
 const TBD_TEAM: Team = {
     id: 'TBD',
@@ -57,7 +57,7 @@ const App: React.FC = () => {
     const [isSimSummaryOpen, setIsSimSummaryOpen] = useState(false);
     const [simSummaryMatches, setSimSummaryMatches] = useState<Match[]>([]);
     const [simSummaryFilter, setSimSummaryFilter] = useState<'all' | 'mine'>('mine');
-    const [summaryLimit, setSummaryLimit] = useState(50); // <--- ADD THIS LINE
+    const [summaryLimit, setSummaryLimit] = useState(50);
     const [isSimulating, setIsSimulating] = useState(false);
 
     const [currentSeasonYear, setCurrentSeasonYear] = useState<string>("2025/26");
@@ -203,7 +203,6 @@ const App: React.FC = () => {
         });
 
         while (tempWeek < targetWeek && tempWeek <= maxWeek) {
-            // FIX 1: Reduced yield frequency from % 4 to % 10
             if (tempWeek % 10 === 0) {
                 await new Promise(resolve => setTimeout(resolve, 0));
             }
@@ -239,7 +238,6 @@ const App: React.FC = () => {
 
                 tempTeams = applyMatchResultsToTeams(tempTeams, simulatedResults);
 
-                // FIX 2: Only call UCL resolution if there were UCL matches played this iteration
                 const hadUCLAction = simulatedResults.some(m => m.competition === 'Champions League' && m.played);
                 if (hadUCLAction) {
                     tempSchedule = resolveUCLKnockouts(tempSchedule, tempTeams, currentSeasonYear);
@@ -267,14 +265,13 @@ const App: React.FC = () => {
 
         if (showSummary && newlyPlayedMatches.length > 0) {
             setSimSummaryMatches(newlyPlayedMatches);
-            setSummaryLimit(50); // <--- ADD THIS LINE
+            setSummaryLimit(50);
             setIsSimSummaryOpen(true);
         }
 
         setIsSimulating(false);
 
     }, [teams, schedule, currentWeek, userTeamId, maxWeek, currentSeasonYear, lastSimulatedMatchId, isSimulating]);
-
 
     const handlePlayVisualMatch = () => setSimState('playing_match');
 
@@ -412,11 +409,9 @@ const App: React.FC = () => {
         setIsRecapOpen(false);
         setIsContractModalOpen(false);
 
-        const resetTeams = teams.map(t => ({
-            ...t,
-            stats: { ...INITIAL_STATS, form: [] },
-            uclStats: t.isUCL ? { ...INITIAL_UCL_STATS } : undefined
-        }));
+        // 1. Calculate new standings, assign isUCL to Top 4, and reset stats.
+        const resetTeams = prepareTeamsForNextSeason(teams);
+        
         setTeams(resetTeams);
 
         const ligaTeams = resetTeams.filter(t => t.tier === 1 && t.id !== 'TBD');
@@ -511,12 +506,10 @@ const App: React.FC = () => {
     const lastSimHome = useMemo(() => lastSimMatch ? teams.find(t => t.id === lastSimMatch.homeTeamId) : undefined, [lastSimMatch, teams]);
     const lastSimAway = useMemo(() => lastSimMatch ? teams.find(t => t.id === lastSimMatch.awayTeamId) : undefined, [lastSimMatch, teams]);
 
-    // ─── Global Pre-Routing Flow ───
     if (!isAuthenticated) return <LoginScreen onLogin={handleLogin} />;
 
     if (!activeProfile) return <ProfileSelector onSelectProfile={handleSelectProfile} onLogout={handleLogout} />;
 
-    // ─── Full Page Loading with polished loader ───
     if (isAppLoading) {
         return (
             <FullPageLoader
@@ -537,7 +530,6 @@ const App: React.FC = () => {
         return <MatchView homeTeam={userHome} awayTeam={userAway} userTeamId={userTeamId} onMatchComplete={handleMatchComplete} competition={userMatch.competition} stage={userMatch.stage} />;
     }
 
-    // Helper to check if results are still loading (no played matches yet)
     const hasNoResults = resultGroups.length === 0;
 
     return (
@@ -995,7 +987,7 @@ const App: React.FC = () => {
                         )}
                     </div>
 
-                    {/* Results Panel with Skeleton Loading */}
+                    {/* Results Panel */}
                     <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl border border-slate-700 overflow-hidden flex flex-col w-full min-w-0 shadow-lg">
                         <div className="p-3 sm:p-4 bg-slate-900/50 border-b border-slate-700 space-y-2 sm:space-y-3">
                             <div className="relative">
@@ -1042,7 +1034,6 @@ const App: React.FC = () => {
 
                         <div className="flex-1 overflow-y-auto divide-y divide-slate-700/50 min-w-0 pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-600 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-slate-500">
                             {hasNoResults ? (
-                                /* ── Skeleton Results ── */
                                 <div className="divide-y divide-slate-700/50">
                                     {Array.from({ length: 5 }).map((_, i) => (
                                         <MatchResultSkeleton key={`res-skel-${i}`} index={i} />
@@ -1055,7 +1046,6 @@ const App: React.FC = () => {
                                 if (!h || !a) return null;
 
                                 return (
-                                    // FIX 3: Removed staggered animations and delay classes
                                     <div
                                         key={match.id}
                                         className={`group hover:bg-slate-700/60 transition-all duration-200 hover:scale-[1.01] p-2 sm:p-3 flex justify-between items-center text-[10px] sm:text-sm min-w-0 cursor-default ${(h.id === userTeamId || a.id === userTeamId) ? (match.competition === 'Champions League' ? 'bg-blue-900/20 border-l-2 border-blue-500' : 'bg-indigo-900/20 border-l-2 border-indigo-500') : 'bg-transparent'}`}
