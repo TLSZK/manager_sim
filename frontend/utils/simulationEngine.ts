@@ -317,3 +317,57 @@ export const resolveUCLKnockouts = (currentSchedule: Match[], teamsState: Team[]
     }
     return updatedSchedule;
 };
+
+// PREPARE TEAMS FOR NEXT SEASON
+export const prepareTeamsForNextSeason = (currentTeams: Team[]): Team[] => {
+    // 1. Filter out only La Liga teams (tier === 1) and sort them by performance
+    const ligaTeams = currentTeams.filter(t => t.tier === 1 && t.id !== 'TBD');
+    const standings = [...ligaTeams].sort((a, b) => {
+        if (b.stats.points !== a.stats.points) return b.stats.points - a.stats.points;
+        if (b.stats.gd !== a.stats.gd) return b.stats.gd - a.stats.gd;
+        return b.stats.gf - a.stats.gf;
+    });
+
+    // 2. Map top 4 IDs 
+    const top4Ids = new Set(standings.slice(0, 4).map(t => t.id));
+
+    // 3. Reset stats and re-assign isUCL boolean accordingly
+    return currentTeams.map(team => {
+        let isQualified = false;
+        
+        if (team.id === 'TBD') {
+            isQualified = false;
+        } else if (team.tier === 1) {
+            isQualified = top4Ids.has(team.id);
+        } else {
+            isQualified = true; // European teams always stay in UCL
+        }
+        
+        return {
+            ...team,
+            isUCL: isQualified,
+            stats: {
+                played: 0,
+                won: 0,
+                drawn: 0,
+                lost: 0,
+                gf: 0,
+                ga: 0,
+                gd: 0,
+                points: 0,
+                form: []
+            },
+            uclStats: isQualified ? {
+                played: 0,
+                won: 0,
+                drawn: 0,
+                lost: 0,
+                gf: 0,
+                ga: 0,
+                gd: 0,
+                points: 0,
+                rank: 0
+            } : undefined
+        };
+    });
+};
