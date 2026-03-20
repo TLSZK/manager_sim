@@ -127,7 +127,7 @@ const SquadManagement: React.FC<SquadManagementProps> = ({ team, onUpdateTeam, o
                 <div className="bg-slate-800/90 p-1.5 md:p-2 rounded-lg border border-slate-700 shadow-lg flex items-center gap-2 md:gap-3">
                     <span className="text-[9px] md:text-[10px] text-slate-400 uppercase font-bold">Formation</span>
                     <select value={selectedFormation} onChange={(e) => handleFormationChange(e.target.value as Formation)} className="bg-slate-900 border border-slate-600 rounded px-1.5 md:px-2 py-0.5 md:py-1 text-[10px] md:text-xs outline-none text-white min-w-[80px] md:min-w-[100px]">
-                        <option value="4-3-3">4-3-3 Attack</option>
+                        <option value="4-3-3">4-3-3 Holding</option>
                         <option value="4-2-3-1">4-2-3-1 Modern</option>
                         <option value="4-4-2">4-4-2 Flat</option>
                         <option value="3-5-2">3-5-2 Wingbacks</option>
