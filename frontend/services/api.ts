@@ -238,18 +238,3 @@ export const updateAccountName = async (name: string): Promise<void> => {
     body: JSON.stringify({ name }) 
   });
 };
-
-export const askGemini = async (prompt: string): Promise<any> => {
-  // We use your existing apiRequest wrapper to ensure auth cookies are sent
-  const response = await apiRequest<any>('/ask-gemini', {
-    method: 'POST',
-    body: JSON.stringify({ prompt })
-  });
-  
-  // Extract the text from the Gemini response structure
-  try {
-    return response.candidates[0].content.parts[0].text;
-  } catch (error) {
-    throw new Error('Unexpected response format from AI');
-  }
-};
