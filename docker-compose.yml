@@ -39,7 +39,6 @@ services:
       SESSION_DOMAIN: "161.97.86.96"
       CORS_ALLOWED_ORIGINS: "http://161.97.86.96"
       LOG_LEVEL: error
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
     ports:
       - "8000:80"
     depends_on:
