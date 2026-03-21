@@ -1,8 +1,8 @@
-
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { SeasonSummary, Team } from '../types';
-import { Trophy, Medal, AlertCircle, Quote, Star, Activity, Globe } from 'lucide-react';
+import { Trophy, Medal, AlertCircle, Quote, Star, Activity, Globe, Loader2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { askGemini } from '../services/api';
 
 interface SeasonRecapModalProps {
     isOpen: boolean;
@@ -12,6 +12,36 @@ interface SeasonRecapModalProps {
 }
 
 const SeasonRecapModal: React.FC<SeasonRecapModalProps> = ({ isOpen, onClose, summary, team }) => {
+    const [aiFeedback, setAiFeedback] = useState<string | null>(null);
+    const [isAILoading, setIsAILoading] = useState<boolean>(false);
+
+    // Fetch AI Board Feedback when the modal opens
+    useEffect(() => {
+        const generateBoardFeedback = async () => {
+            if (!summary || !isOpen) return;
+            
+            setIsAILoading(true);
+            try {
+                const prompt = `Act as the Board of Directors for the football club ${team.name}. The season has concluded. We finished in position ${summary.position} in the league with ${summary.points} points. Our record was ${team.stats.won} wins, ${team.stats.drawn} draws, and ${team.stats.lost} losses. Write a short, realistic, in-character 2-3 sentence performance review addressed to the manager. Do not use formatting or markdown.`;
+                
+                const answer = await askGemini(prompt);
+                setAiFeedback(answer);
+            } catch (error) {
+                console.error("AI Request failed", error);
+                // Fall back to the default message if the API call fails
+                setAiFeedback(null);
+            } finally {
+                setIsAILoading(false);
+            }
+        };
+
+        if (isOpen) {
+            generateBoardFeedback();
+        } else {
+            setAiFeedback(null);
+        }
+    }, [isOpen, summary, team]);
+
     if (!isOpen || !summary) return null;
 
     const isChampion = summary.position === 1;
@@ -19,7 +49,7 @@ const SeasonRecapModal: React.FC<SeasonRecapModalProps> = ({ isOpen, onClose, su
     const isGoodSeason = summary.position <= 4 || isUCLWinner;
 
     // Trigger confetti on mount if it's a good season
-    React.useEffect(() => {
+    useEffect(() => {
         if (isGoodSeason) {
             const duration = 3000;
             const animationEnd = Date.now() + duration;
@@ -144,9 +174,18 @@ const SeasonRecapModal: React.FC<SeasonRecapModalProps> = ({ isOpen, onClose, su
                     <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 relative overflow-hidden">
                         <Quote size={80} className="absolute top-4 right-8 text-slate-700/20" />
                         <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Message from the Board</h3>
-                        <p className="text-xl md:text-2xl font-serif text-slate-200 italic leading-relaxed relative z-10">
-                            "{summary.message}"
+                        
+                        <p className="text-xl md:text-2xl font-serif text-slate-200 italic leading-relaxed relative z-10 min-h-[5rem]">
+                            {isAILoading ? (
+                                <span className="flex items-center gap-3 text-slate-400 text-lg md:text-xl">
+                                    <Loader2 className="animate-spin" size={24} /> 
+                                    Evaluating manager performance...
+                                </span>
+                            ) : (
+                                `"${aiFeedback || summary.message}"`
+                            )}
                         </p>
+                        
                         <div className="mt-6 flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center overflow-hidden">
                                 {team.logoUrl ? <img src={team.logoUrl} className="w-8 h-8 object-contain" /> : <Activity size={20} className="text-slate-400" />}
@@ -163,7 +202,8 @@ const SeasonRecapModal: React.FC<SeasonRecapModalProps> = ({ isOpen, onClose, su
                 <div className="p-6 bg-slate-900 border-t border-slate-800 flex justify-end">
                     <button
                         onClick={onClose}
-                        className="px-8 py-4 bg-white text-slate-900 font-bold rounded-xl hover:bg-slate-200 transition-colors shadow-lg active:scale-95 text-lg"
+                        className="px-8 py-4 bg-white text-slate-900 font-bold rounded-xl hover:bg-slate-200 transition-colors shadow-lg active:scale-95 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={isAILoading}
                     >
                         Continue to Off-Season
                     </button>
