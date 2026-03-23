@@ -517,15 +517,15 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, onMatchComple
             ctx.fillStyle = p.isHome ? homeTeam.primaryColor : awayTeam.primaryColor;
             
             ctx.beginPath();
-            ctx.arc(x, y, 1.5 * scaleX, 0, Math.PI * 2);
+            ctx.arc(x, y, 1.67 * scaleX, 0, Math.PI * 2);
             ctx.fill();
             
-            ctx.strokeStyle = '#fff';
+            ctx.strokeStyle = p.isHome ? homeTeam.secondaryColor : awayTeam.secondaryColor;
             ctx.lineWidth = 1.5;
             ctx.stroke();
             
-            ctx.fillStyle = '#fff';
-            ctx.font = 'bold 10px Arial';
+            ctx.fillStyle = p.isHome ? homeTeam.secondaryColor : awayTeam.secondaryColor;
+            ctx.font = 'bold 16.7px Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(p.number.toString(), x, y);
