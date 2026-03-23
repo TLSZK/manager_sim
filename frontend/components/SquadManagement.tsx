@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Team, Player, Formation } from '../types';
 import { FORMATIONS, getPositionFit, getPenalizedRating } from '../constants';
 import { ChevronLeft, Shirt, Users, ArrowRightLeft, AlertTriangle } from 'lucide-react';
@@ -9,18 +9,66 @@ interface SquadManagementProps {
   onBack: () => void;
 }
 
+// Helper: Smart aligner that only runs on initial load
+const alignRoster = (currentRoster: Player[], formation: Formation): Player[] => {
+    const onField = currentRoster.filter(p => !p.offField);
+    const bench = currentRoster.filter(p => p.offField);
+    const formPositions = FORMATIONS[formation] || FORMATIONS['4-3-3'];
+    
+    const sortedStarters: Player[] = [];
+    const pool = [...onField];
+    
+    for (const posDef of formPositions) {
+        const expectedPos = posDef.position;
+        
+        let matchIdx = pool.findIndex(p => p.position === expectedPos);
+        
+        if (matchIdx === -1) {
+            matchIdx = pool.findIndex(p => getPositionFit(p.position, expectedPos) === 'okay');
+        }
+        
+        if (matchIdx === -1 && pool.length > 0) {
+            matchIdx = pool.findIndex(p => (p.position === 'GK') === (expectedPos === 'GK'));
+            if (matchIdx === -1) matchIdx = 0; 
+        }
+
+        if (matchIdx !== -1) {
+            sortedStarters.push(pool.splice(matchIdx, 1)[0]);
+        }
+    }
+    
+    return [...sortedStarters, ...pool, ...bench];
+};
+
 const SquadManagement: React.FC<SquadManagementProps> = ({ team, onUpdateTeam, onBack }) => {
   const [selectedFormation, setSelectedFormation] = useState<Formation>(team.formation || '4-3-3');
   const [roster, setRoster] = useState<Player[]>(team.roster || []);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   
   const [isVertical, setIsVertical] = useState<boolean>(true);
+  const initializedRef = useRef<string | null>(null);
 
   // Force sync local state anytime the team prop changes (e.g., late backend hydration or team switch)
   useEffect(() => {
-    setSelectedFormation(team.formation || '4-3-3');
-    setRoster(team.roster || []);
-  }, [team]);
+    const initialFormation = team.formation || '4-3-3';
+    setSelectedFormation(initialFormation);
+    
+    const teamIdentifier = team.id || team.name || 'default';
+
+    if (initializedRef.current !== teamIdentifier) {
+        // Only run the aligner algorithm once per team initialization
+        const aligned = alignRoster(team.roster || [], initialFormation);
+        setRoster(aligned);
+        initializedRef.current = teamIdentifier;
+        
+        if (team.roster && team.roster.length > 0) {
+            onUpdateTeam({ ...team, roster: aligned, formation: initialFormation });
+        }
+    } else {
+        // Just sync array changes naturally 
+        setRoster(team.roster || []);
+    }
+  }, [team]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const checkOrientation = () => setIsVertical(window.innerWidth < 1280);
@@ -56,8 +104,9 @@ const SquadManagement: React.FC<SquadManagementProps> = ({ team, onUpdateTeam, o
       pA.offField = pB.offField;
       pB.offField = tempOffField;
 
-      newRoster[playerAIndex] = pA;
-      newRoster[playerBIndex] = pB;
+      // Swap their array positions to freely persist visual spot selections
+      newRoster[playerAIndex] = pB;
+      newRoster[playerBIndex] = pA;
 
       setRoster(newRoster);
       onUpdateTeam({ ...team, roster: newRoster });
@@ -65,35 +114,10 @@ const SquadManagement: React.FC<SquadManagementProps> = ({ team, onUpdateTeam, o
     }
   };
 
-  // Smart aligner: filters starters and maps them to the exact formation coordinates
+  // Simply maintain the array sequence provided by the user's swaps 
   const starters = useMemo(() => {
-      const onField = roster.filter(p => !p.offField);
-      const formPositions = FORMATIONS[selectedFormation] || FORMATIONS['4-3-3'];
-      
-      const sortedStarters: Player[] = [];
-      const pool = [...onField];
-      
-      for (const posDef of formPositions) {
-          const expectedPos = posDef.position;
-          
-          let matchIdx = pool.findIndex(p => p.position === expectedPos);
-          
-          if (matchIdx === -1) {
-              matchIdx = pool.findIndex(p => getPositionFit(p.position, expectedPos) === 'okay');
-          }
-          
-          if (matchIdx === -1 && pool.length > 0) {
-              matchIdx = pool.findIndex(p => (p.position === 'GK') === (expectedPos === 'GK'));
-              if (matchIdx === -1) matchIdx = 0; 
-          }
-
-          if (matchIdx !== -1) {
-              sortedStarters.push(pool.splice(matchIdx, 1)[0]);
-          }
-      }
-      
-      return [...sortedStarters, ...pool];
-  }, [roster, selectedFormation]);
+      return roster.filter(p => !p.offField);
+  }, [roster]);
 
   // Sort bench by rating so the highest rated subs are visible first
   const bench = useMemo(() => roster.filter(p => p.offField).sort((a, b) => b.rating - a.rating), [roster]);
@@ -121,8 +145,11 @@ const SquadManagement: React.FC<SquadManagementProps> = ({ team, onUpdateTeam, o
           </div>
       )}
 
-      <div className="flex-1 flex flex-col xl:flex-row overflow-hidden min-w-0">
-        <div className="w-full xl:flex-1 bg-slate-950 p-2 md:p-6 flex flex-col items-center relative shrink-0 overflow-y-auto xl:overflow-hidden min-h-[50vh] xl:min-h-0 min-w-0">
+      {/* CHANGED: overflow-hidden -> overflow-y-auto on mobile to allow scrolling down to the bench */}
+      <div className="flex-1 flex flex-col xl:flex-row overflow-y-auto xl:overflow-hidden min-w-0 custom-scrollbar">
+        
+        {/* CHANGED: Removed internal overflow-y-auto and min-h so it plays nicely with the parent scroll */}
+        <div className="w-full xl:flex-1 bg-slate-950 p-2 md:p-6 pb-6 flex flex-col items-center relative shrink-0 xl:overflow-hidden min-h-[50vh] xl:min-h-0 min-w-0">
              <div className="w-full max-w-[600px] mb-2 md:mb-4 z-20 flex justify-center">
                 <div className="bg-slate-800/90 p-1.5 md:p-2 rounded-lg border border-slate-700 shadow-lg flex items-center gap-2 md:gap-3">
                     <span className="text-[9px] md:text-[10px] text-slate-400 uppercase font-bold">Formation</span>
@@ -190,15 +217,17 @@ const SquadManagement: React.FC<SquadManagementProps> = ({ team, onUpdateTeam, o
              </div>
         </div>
 
-        <div className="w-full xl:w-96 bg-slate-800 border-t xl:border-t-0 xl:border-l border-slate-700 flex flex-col shrink-0 min-h-[40vh] xl:min-h-0 xl:h-auto shadow-xl z-10 min-w-0">
-            <div className="p-2 md:p-4 border-b border-slate-700 bg-slate-900/50 flex justify-between items-center sticky top-0 z-10 min-w-0">
+        {/* CHANGED: Removed min-h so it fully expands natively on mobile */}
+        <div className="w-full xl:w-96 bg-slate-800 border-t xl:border-t-0 xl:border-l border-slate-700 flex flex-col shrink-0 shadow-xl z-10 min-w-0 xl:h-full">
+            <div className="p-2 md:p-4 border-b border-slate-700 bg-slate-900/50 flex justify-between items-center sticky top-0 z-10 min-w-0 backdrop-blur-sm">
                 <div className="min-w-0 pr-2">
                     <h3 className="font-bold flex items-center gap-1.5 md:gap-2 text-white text-xs md:text-sm truncate"><Users size={14} className="text-blue-400 shrink-0 md:w-[18px] md:h-[18px]" /> Bench & Reserves</h3>
                     <p className="text-[9px] md:text-[10px] text-slate-400 mt-0.5 truncate">Tap player to swap positions</p>
                 </div>
                 {selectedPlayerId && <button onClick={() => setSelectedPlayerId(null)} className="text-[10px] md:text-xs bg-red-500/20 text-red-400 px-2 md:px-3 py-1 md:py-1.5 rounded border border-red-500/30 shrink-0">Cancel</button>}
             </div>
-            <div className="flex-1 p-2 md:p-3 space-y-1.5 md:space-y-2 bg-slate-800 overflow-y-auto custom-scrollbar">
+            {/* CHANGED: overflow-y-auto is now strictly applied on xl breakpoint only. Added pb-6 for clean mobile scroll ending. */}
+            <div className="flex-1 p-2 md:p-3 pb-6 space-y-1.5 md:space-y-2 bg-slate-800 xl:overflow-y-auto custom-scrollbar">
                 {bench.map(player => {
                     const isSelected = selectedPlayerId === player.id;
                     return (
