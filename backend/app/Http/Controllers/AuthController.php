@@ -49,6 +49,9 @@ class AuthController extends Controller
             ], 401);
         }
 
+        // Wipe all existing tokens for this user to ensure only one active session exists
+        $user->tokens()->delete();
+
         $token = $user->createToken('auth_token')->plainTextToken;
         $cookie = cookie('auth_token', $token, 60 * 24 * 30, '/', null, false, true, false, 'Lax');
 
