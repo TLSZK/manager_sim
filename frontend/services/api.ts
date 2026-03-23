@@ -36,8 +36,8 @@ async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promi
 
   if (!response.ok) {
     if (response.status === 401 && !endpoint.includes('/login')) {
-      localStorage.removeItem('auth_token');
-      window.location.reload();
+      // Dispatch the custom event instead of instantly reloading
+      window.dispatchEvent(new CustomEvent('session-expired'));
     }
     const errData = await response.json().catch(() => ({}));
     throw new Error(errData.message || `API Request failed: ${response.statusText}`);

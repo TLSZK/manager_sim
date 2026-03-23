@@ -14,7 +14,7 @@ import LoginScreen from './components/LoginScreen';
 import ProfileSelector from './components/ProfileSelector';
 import { FullPageLoader, MatchResultSkeleton } from './components/Skeletons';
 import { Play, FastForward, Trophy, Calendar, CheckCircle, ChevronLeft, ChevronRight, Shirt, CalendarDays, ArrowRight, ChevronDown, Users, User, Info, Globe } from 'lucide-react';
-import { fetchTeams, saveSeasonResult, updateProfileName, fetchSavedGame, saveGame } from './services/api';
+import { fetchTeams, saveSeasonResult, updateProfileName, fetchSavedGame, saveGame, fetchCurrentUser } from './services/api';
 import { getTeamStrength, calculateMatchResult, resolveUCLKnockouts, applyMatchResultsToTeams, prepareTeamsForNextSeason } from './utils/simulationEngine';
 
 const TBD_TEAM: Team = {
@@ -34,6 +34,7 @@ const App: React.FC = () => {
     const [isAuthenticated, setIsAuthenticated] = useState<boolean>(!!localStorage.getItem('auth_token'));
     const [activeProfile, setActiveProfile] = useState<ManagerProfileType | null>(null);
     const [showAccountMenu, setShowAccountMenu] = useState(false);
+    const [showForceLogoutModal, setShowForceLogoutModal] = useState(false);
 
     const [isAppLoading, setIsAppLoading] = useState(false);
 
@@ -69,6 +70,32 @@ const App: React.FC = () => {
         if (!currentSeasonYear) return 300;
         return getCompetitionWeeks(currentSeasonYear).days.length;
     }, [currentSeasonYear]);
+
+    // Force Logout Effect 
+    useEffect(() => {
+        const handleSessionExpired = () => setShowForceLogoutModal(true);
+        window.addEventListener('session-expired', handleSessionExpired);
+
+        let interval: NodeJS.Timeout;
+        if (isAuthenticated && !showForceLogoutModal) {
+            interval = setInterval(() => {
+                // Silently poll the backend. If token is invalid, api.ts fires 'session-expired'.
+                fetchCurrentUser().catch(() => {});
+            }, 10000); 
+        }
+
+        return () => {
+            window.removeEventListener('session-expired', handleSessionExpired);
+            if (interval) clearInterval(interval);
+        };
+    }, [isAuthenticated, showForceLogoutModal]);
+
+    const handleAcknowledgeLogout = () => {
+        setShowForceLogoutModal(false);
+        localStorage.clear();
+        sessionStorage.clear();
+        window.location.reload(); 
+    };
 
     useEffect(() => {
         if (userTeamId) {
@@ -409,9 +436,7 @@ const App: React.FC = () => {
         setIsRecapOpen(false);
         setIsContractModalOpen(false);
 
-        // 1. Calculate new standings, assign isUCL to Top 4, and reset stats.
         const resetTeams = prepareTeamsForNextSeason(teams);
-        
         setTeams(resetTeams);
 
         const ligaTeams = resetTeams.filter(t => t.tier === 1 && t.id !== 'TBD');
@@ -505,6 +530,30 @@ const App: React.FC = () => {
     const lastSimMatch = useMemo(() => lastSimulatedMatchId ? schedule.find(m => m.id === lastSimulatedMatchId) : undefined, [lastSimulatedMatchId, schedule]);
     const lastSimHome = useMemo(() => lastSimMatch ? teams.find(t => t.id === lastSimMatch.homeTeamId) : undefined, [lastSimMatch, teams]);
     const lastSimAway = useMemo(() => lastSimMatch ? teams.find(t => t.id === lastSimMatch.awayTeamId) : undefined, [lastSimMatch, teams]);
+
+    // Render Logic Layer
+
+    if (showForceLogoutModal) {
+        return (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm animate-in fade-in duration-300">
+                <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-sm p-6 sm:p-8 text-center animate-in zoom-in-95 slide-in-from-bottom-4 duration-300 ease-out">
+                    <div className="mx-auto w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mb-6">
+                        <span className="text-red-500 text-3xl font-bold">!</span>
+                    </div>
+                    <h2 className="text-xl sm:text-2xl font-bold text-white mb-2">Session Terminated</h2>
+                    <p className="text-slate-400 mb-8 text-sm leading-relaxed">
+                        Your account was logged into from another location. You have been disconnected to secure your session.
+                    </p>
+                    <button 
+                        onClick={handleAcknowledgeLogout}
+                        className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-4 rounded-xl shadow-lg hover:shadow-red-500/20 transition-all duration-200 active:scale-95 outline-none focus:outline-none focus:ring-0"
+                    >
+                        Return to Login
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     if (!isAuthenticated) return <LoginScreen onLogin={handleLogin} />;
 
