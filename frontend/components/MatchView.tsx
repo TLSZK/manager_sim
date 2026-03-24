@@ -32,53 +32,53 @@ const getSkillComponents = (rating: number, position: string) => {
 
     // Position modifiers: how much above/below the base rating each attribute is
     const modifiers: Record<string, { pace: number; shooting: number; passing: number; dribbling: number; defending: number; gk: number; positioning: number }> = {
-        GK:  { pace: -20, shooting: -40, passing:  0, dribbling: -25, defending:  5, gk: +25, positioning:  5 },
-        CB:  { pace:  -8, shooting: -18, passing: -2, dribbling: -12, defending: +18, gk: -25, positioning: +5 },
-        LB:  { pace:  +5, shooting: -12, passing: +5, dribbling:  +3, defending: +10, gk: -25, positioning: +3 },
-        RB:  { pace:  +5, shooting: -12, passing: +5, dribbling:  +3, defending: +10, gk: -25, positioning: +3 },
-        LWB: { pace: +10, shooting:  -8, passing: +5, dribbling:  +8, defending:  +5, gk: -25, positioning: +3 },
-        RWB: { pace: +10, shooting:  -8, passing: +5, dribbling:  +8, defending:  +5, gk: -25, positioning: +3 },
-        CDM: { pace:  -5, shooting:  -5, passing: +8, dribbling:  +2, defending: +12, gk: -25, positioning: +5 },
-        CM:  { pace:   0, shooting:  +2, passing:+12, dribbling:  +5, defending:  +2, gk: -25, positioning: +5 },
-        CAM: { pace:  +5, shooting: +10, passing:+12, dribbling: +12, defending: -10, gk: -25, positioning: +8 },
-        LM:  { pace: +12, shooting:  +2, passing: +8, dribbling: +10, defending:  -5, gk: -25, positioning: +5 },
-        RM:  { pace: +12, shooting:  +2, passing: +8, dribbling: +10, defending:  -5, gk: -25, positioning: +5 },
-        LW:  { pace: +15, shooting:  +8, passing: +5, dribbling: +15, defending: -15, gk: -25, positioning: +8 },
-        RW:  { pace: +15, shooting:  +8, passing: +5, dribbling: +15, defending: -15, gk: -25, positioning: +8 },
-        ST:  { pace: +10, shooting: +20, passing:  0, dribbling: +10, defending: -20, gk: -25, positioning:+12 },
-        CF:  { pace:  +8, shooting: +15, passing: +5, dribbling: +12, defending: -15, gk: -25, positioning:+10 },
+        GK: { pace: -20, shooting: -40, passing: 0, dribbling: -25, defending: 5, gk: +25, positioning: 5 },
+        CB: { pace: -8, shooting: -18, passing: -2, dribbling: -12, defending: +18, gk: -25, positioning: +5 },
+        LB: { pace: +5, shooting: -12, passing: +5, dribbling: +3, defending: +10, gk: -25, positioning: +3 },
+        RB: { pace: +5, shooting: -12, passing: +5, dribbling: +3, defending: +10, gk: -25, positioning: +3 },
+        LWB: { pace: +10, shooting: -8, passing: +5, dribbling: +8, defending: +5, gk: -25, positioning: +3 },
+        RWB: { pace: +10, shooting: -8, passing: +5, dribbling: +8, defending: +5, gk: -25, positioning: +3 },
+        CDM: { pace: -5, shooting: -5, passing: +8, dribbling: +2, defending: +12, gk: -25, positioning: +5 },
+        CM: { pace: 0, shooting: +2, passing: +12, dribbling: +5, defending: +2, gk: -25, positioning: +5 },
+        CAM: { pace: +5, shooting: +10, passing: +12, dribbling: +12, defending: -10, gk: -25, positioning: +8 },
+        LM: { pace: +12, shooting: +2, passing: +8, dribbling: +10, defending: -5, gk: -25, positioning: +5 },
+        RM: { pace: +12, shooting: +2, passing: +8, dribbling: +10, defending: -5, gk: -25, positioning: +5 },
+        LW: { pace: +15, shooting: +8, passing: +5, dribbling: +15, defending: -15, gk: -25, positioning: +8 },
+        RW: { pace: +15, shooting: +8, passing: +5, dribbling: +15, defending: -15, gk: -25, positioning: +8 },
+        ST: { pace: +10, shooting: +20, passing: 0, dribbling: +10, defending: -20, gk: -25, positioning: +12 },
+        CF: { pace: +8, shooting: +15, passing: +5, dribbling: +12, defending: -15, gk: -25, positioning: +10 },
     };
 
     const mod = modifiers[position] ?? { pace: 0, shooting: 0, passing: 0, dribbling: 0, defending: 0, gk: -25, positioning: 0 };
     const clamp = (v: number) => Math.max(1, Math.min(99, v));
 
     return {
-        pace:        clamp(rating + mod.pace),
-        shooting:    clamp(rating + mod.shooting),
-        passing:     clamp(rating + mod.passing),
-        dribbling:   clamp(rating + mod.dribbling),
-        defending:   clamp(rating + mod.defending),
-        gk:          clamp(rating + mod.gk),
+        pace: clamp(rating + mod.pace),
+        shooting: clamp(rating + mod.shooting),
+        passing: clamp(rating + mod.passing),
+        dribbling: clamp(rating + mod.dribbling),
+        defending: clamp(rating + mod.defending),
+        gk: clamp(rating + mod.gk),
         positioning: clamp(rating + mod.positioning),
         // Raw normalised [0..1] for convenience
-        paceN:        clamp(rating + mod.pace) / 100,
-        shootingN:    clamp(rating + mod.shooting) / 100,
-        passingN:     clamp(rating + mod.passing) / 100,
-        dribblingN:   clamp(rating + mod.dribbling) / 100,
-        defendingN:   clamp(rating + mod.defending) / 100,
-        gkN:          clamp(rating + mod.gk) / 100,
+        paceN: clamp(rating + mod.pace) / 100,
+        shootingN: clamp(rating + mod.shooting) / 100,
+        passingN: clamp(rating + mod.passing) / 100,
+        dribblingN: clamp(rating + mod.dribbling) / 100,
+        defendingN: clamp(rating + mod.defending) / 100,
+        gkN: clamp(rating + mod.gk) / 100,
         positioningN: clamp(rating + mod.positioning) / 100,
     };
 };
 
 class Vector {
-    constructor(public x: number, public y: number) {}
-    add(v: Vector)  { this.x += v.x; this.y += v.y; return this; }
-    sub(v: Vector)  { this.x -= v.x; this.y -= v.y; return this; }
-    mult(n: number) { this.x *= n;   this.y *= n;   return this; }
-    div(n: number)  { this.x /= n;   this.y /= n;   return this; }
-    mag()           { return Math.sqrt(this.x * this.x + this.y * this.y); }
-    normalize()     { const m = this.mag(); if (m !== 0) this.div(m); return this; }
+    constructor(public x: number, public y: number) { }
+    add(v: Vector) { this.x += v.x; this.y += v.y; return this; }
+    sub(v: Vector) { this.x -= v.x; this.y -= v.y; return this; }
+    mult(n: number) { this.x *= n; this.y *= n; return this; }
+    div(n: number) { this.x /= n; this.y /= n; return this; }
+    mag() { return Math.sqrt(this.x * this.x + this.y * this.y); }
+    normalize() { const m = this.mag(); if (m !== 0) this.div(m); return this; }
     limit(max: number) { if (this.mag() > max) { this.normalize(); this.mult(max); } return this; }
     static dist(v1: Vector, v2: Vector) { return Math.sqrt((v1.x - v2.x) ** 2 + (v1.y - v2.y) ** 2); }
     clone() { return new Vector(this.x, this.y); }
@@ -158,7 +158,7 @@ class Agent extends GameEntity {
 
 // ── Penalty shootout helper ───────────────────────────────────────────────
 const getPenaltyResult = (): { home: number; away: number } => {
-    const scores = [[5,4],[5,3],[4,3],[4,2],[3,1],[3,2],[6,5]];
+    const scores = [[5, 4], [5, 3], [4, 3], [4, 2], [3, 1], [3, 2], [6, 5]];
     const s = scores[Math.floor(Math.random() * scores.length)];
     return Math.random() > 0.5 ? { home: s[0], away: s[1] } : { home: s[1], away: s[0] };
 };
@@ -372,7 +372,7 @@ class GameEngine {
 
         // Distance from goal in "pitch units" (goal is at x=0 or x=100)
         const distToGoalX = Math.abs(from.pos.x - oppGoalX);
-        const distToGoal  = Vector.dist(from.pos, new Vector(oppGoalX, GOAL_MID));
+        const distToGoal = Vector.dist(from.pos, new Vector(oppGoalX, GOAL_MID));
 
         // Shooting skill of the player (position-adjusted)
         const shootSkill = from.skills.shootingN; // 0..1
@@ -399,7 +399,7 @@ class GameEngine {
 
         // Choose target corner: aim away from GK position
         let targetY: number;
-        const topOpen    = this.isShootingLaneOpen(from.pos, new Vector(oppGoalX, GOAL_TOP + 1), from.teamId);
+        const topOpen = this.isShootingLaneOpen(from.pos, new Vector(oppGoalX, GOAL_TOP + 1), from.teamId);
         const bottomOpen = this.isShootingLaneOpen(from.pos, new Vector(oppGoalX, GOAL_BOT - 1), from.teamId);
 
         if (topOpen && bottomOpen) {
@@ -448,8 +448,8 @@ class GameEngine {
 
         if (!this.isThrowInOrGoalKick) {
             const homeAttacksRight = this.period === 1;
-            const attackingRight   = from.isHome ? homeAttacksRight : !homeAttacksRight;
-            const offsideLine      = this.getOffsideLine(from.teamId, attackingRight);
+            const attackingRight = from.isHome ? homeAttacksRight : !homeAttacksRight;
+            const offsideLine = this.getOffsideLine(from.teamId, attackingRight);
             this.players.forEach(p => {
                 if (p.teamId !== from.teamId || p === from) return;
                 const isOffside = attackingRight ? p.pos.x > offsideLine + 0.2 : p.pos.x < offsideLine - 0.2;
@@ -532,8 +532,8 @@ class GameEngine {
         const awayOffsideLine = this.getOffsideLine(this.awayTeam.id, !homeAttacksRight);
 
         // Sort by distance to ball for pressing priority
-        const homeNonGK = this.players.filter(p => p.isHome && p.role !== 'GK').sort((a,b) => Vector.dist(a.pos, ballPos) - Vector.dist(b.pos, ballPos));
-        const awayNonGK = this.players.filter(p => !p.isHome && p.role !== 'GK').sort((a,b) => Vector.dist(a.pos, ballPos) - Vector.dist(b.pos, ballPos));
+        const homeNonGK = this.players.filter(p => p.isHome && p.role !== 'GK').sort((a, b) => Vector.dist(a.pos, ballPos) - Vector.dist(b.pos, ballPos));
+        const awayNonGK = this.players.filter(p => !p.isHome && p.role !== 'GK').sort((a, b) => Vector.dist(a.pos, ballPos) - Vector.dist(b.pos, ballPos));
         const homePressers = homeNonGK.slice(0, 2);
         const awayPressers = awayNonGK.slice(0, 2);
 
@@ -574,7 +574,7 @@ class GameEngine {
                     const openMates = this.players.filter(m =>
                         m.teamId === p.teamId && m !== p &&
                         this.isPassLaneOpen(p.pos, m.pos, p.teamId)
-                    ).sort((a,b) => {
+                    ).sort((a, b) => {
                         const sa = this.players.filter(d => d.teamId !== p.teamId && Vector.dist(a.pos, d.pos) < 15).length;
                         const sb = this.players.filter(d => d.teamId !== p.teamId && Vector.dist(b.pos, d.pos) < 15).length;
                         return sa - sb;
@@ -596,7 +596,7 @@ class GameEngine {
                     // Push forward with positioning ability
                     const fwdPush = 35 * (0.7 + p.skills.positioningN * 0.5);
                     if (attackingRight) target.x = Math.min(oppGoalX - 5, target.x + fwdPush * (roleType === 'DEF' ? 0.6 : roleType === 'FWD' ? 1.0 : 0.85));
-                    else              target.x = Math.max(oppGoalX + 5, target.x - fwdPush * (roleType === 'DEF' ? 0.6 : roleType === 'FWD' ? 1.0 : 0.85));
+                    else target.x = Math.max(oppGoalX + 5, target.x - fwdPush * (roleType === 'DEF' ? 0.6 : roleType === 'FWD' ? 1.0 : 0.85));
 
                     // Ball tracking
                     target.x += (ballPos.x - 50) * (roleType === 'FWD' ? 0.55 : 0.35);
@@ -618,7 +618,7 @@ class GameEngine {
                     // Defend: drop back based on role; CDM/CB hold shape, FWD press high
                     const dropFactor = roleType === 'DEF' ? 0.25 : roleType === 'FWD' ? 0.08 : 0.45;
                     if (attackingRight) target.x = Math.max(ownGoalX + 5, target.x - 10 * dropFactor);
-                    else               target.x = Math.min(ownGoalX - 5, target.x + 10 * dropFactor);
+                    else target.x = Math.min(ownGoalX - 5, target.x + 10 * dropFactor);
                     target.y = baseY + (ballPos.y - 50) * (roleType === 'DEF' ? 0.55 : 0.25);
                     // Clamp defenders from going too wide
                     if (roleType === 'DEF' && !isWide) {
@@ -634,8 +634,8 @@ class GameEngine {
                 if (this.ballOwner === p) {
                     // Ball carrier: decide to dribble, pass, or shoot
                     const distToGoalX = Math.abs(p.pos.x - oppGoalX);
-                    const distToGoal  = Vector.dist(p.pos, new Vector(oppGoalX, 50));
-                    const inPenBox    = distToGoalX <= 20 && p.pos.y >= 25 && p.pos.y <= 75;
+                    const distToGoal = Vector.dist(p.pos, new Vector(oppGoalX, 50));
+                    const inPenBox = distToGoalX <= 20 && p.pos.y >= 25 && p.pos.y <= 75;
 
                     // Nearest opponent threat
                     const threats = this.players
@@ -651,9 +651,9 @@ class GameEngine {
                         const shootProb = p.skills.shootingN;
                         // Attempt shot?
                         const isAwfulAngle = distToGoalX < 25 && (p.pos.y < 28 || p.pos.y > 72);
-                        const topOpen    = this.isShootingLaneOpen(p.pos, new Vector(oppGoalX, 42), p.teamId);
+                        const topOpen = this.isShootingLaneOpen(p.pos, new Vector(oppGoalX, 42), p.teamId);
                         const bottomOpen = this.isShootingLaneOpen(p.pos, new Vector(oppGoalX, 58), p.teamId);
-                        const clearShot  = topOpen || bottomOpen;
+                        const clearShot = topOpen || bottomOpen;
 
                         let shotTaken = false;
                         if (!isAwfulAngle && clearShot) {
@@ -686,7 +686,7 @@ class GameEngine {
                                     // Randomise slightly (lower quality players are less decisive)
                                     const noise = (1 - p.skills.passingN) * 25;
                                     return (distA - spaceA * 4 + (Math.random() - 0.5) * noise) -
-                                           (distB - spaceB * 4 + (Math.random() - 0.5) * noise);
+                                        (distB - spaceB * 4 + (Math.random() - 0.5) * noise);
                                 });
                                 // Pass probability scales with pressure and passing skill
                                 const passRate = underPressure
@@ -714,7 +714,7 @@ class GameEngine {
                     force.add(p.arrive(ballPos, 1.25));
                 } else if (isDefending && this.ballOwner) {
                     const isPrimary = pressers[0] === p;
-                    const isCover   = pressers[1] === p;
+                    const isCover = pressers[1] === p;
                     if (isPrimary) {
                         // Press with intensity based on defending skill
                         const pressIntensity = 1.0 + p.skills.defendingN * 0.3;
@@ -753,7 +753,7 @@ class GameEngine {
         if (this.ballOwner) {
             this.ball.pos.x = this.ballOwner.pos.x + this.ballOwner.vel.x * 0.05;
             this.ball.pos.y = this.ballOwner.pos.y + this.ballOwner.vel.y * 0.05;
-            this.ball.vel   = this.ballOwner.vel.clone();
+            this.ball.vel = this.ballOwner.vel.clone();
         } else {
             this.ball.updatePhysics(dt);
             this.ball.pos.x = Math.max(0, Math.min(100, this.ball.pos.x));
@@ -793,8 +793,8 @@ class GameEngine {
 
                     // Ball velocity direction → infer target Y on goal line
                     const ballDir = this.ball.vel.clone().normalize();
-                    const tGoalX  = closest.pos.x < 50 ? 5 : 95;
-                    const t       = (tGoalX - this.ball.pos.x) / (ballDir.x || 0.001);
+                    const tGoalX = closest.pos.x < 50 ? 5 : 95;
+                    const t = (tGoalX - this.ball.pos.x) / (ballDir.x || 0.001);
                     const ballArrivalY = this.ball.pos.y + ballDir.y * t;
 
                     // GK distance from projected arrival point
@@ -805,7 +805,7 @@ class GameEngine {
                     // - GK far from arrival → dive chance scaled by gk skill and reaction
                     const inPath = gkDistToArrival < 5;
                     const diveRange = 8 + gkSkill * 10; // elite GKs dive further
-                    const canDive   = gkDistToArrival < diveRange;
+                    const canDive = gkDistToArrival < diveRange;
 
                     let baseSaveProb: number;
                     if (inPath) {
@@ -904,10 +904,10 @@ class GameEngine {
                 if (isBehind) return; // can't tackle from behind legitimately
 
                 // Tackle contest: defender's defending vs carrier's dribbling
-                const defScore  = p.skills.defendingN  * (0.8 + Math.random() * 0.4);
+                const defScore = p.skills.defendingN * (0.8 + Math.random() * 0.4);
                 const dribScore = this.ballOwner.skills.dribblingN * (0.8 + Math.random() * 0.4);
                 // Stamina affects both
-                const defFinal  = defScore  * p.stamina;
+                const defFinal = defScore * p.stamina;
                 const dribFinal = dribScore * this.ballOwner.stamina;
 
                 if (defFinal > dribFinal + 0.08) {
@@ -947,7 +947,7 @@ class GameEngine {
                 this.ball.vel.mult(0);
                 const fkTaker = this.players
                     .filter(p => p.teamId === defendingTeam && p.role !== 'GK')
-                    .sort((a,b) => Vector.dist(a.pos, this.ball.pos) - Vector.dist(b.pos, this.ball.pos))[0];
+                    .sort((a, b) => Vector.dist(a.pos, this.ball.pos) - Vector.dist(b.pos, this.ball.pos))[0];
                 if (fkTaker) { fkTaker.pos = this.ball.pos.clone(); this.ballOwner = fkTaker; }
                 this.offsidePlayersOnPass.clear();
             }
@@ -960,8 +960,8 @@ class GameEngine {
         const { x, y } = this.ball.pos;
         // Goal mouth check: y 40–60, x past the line
         if (y > 40 && y < 60) {
-            if (x < 5)  { this.scoreGoal(this.period === 1 ? false : true); return; }
-            if (x > 95) { this.scoreGoal(this.period === 1 ? true  : false); return; }
+            if (x < 5) { this.scoreGoal(this.period === 1 ? false : true); return; }
+            if (x > 95) { this.scoreGoal(this.period === 1 ? true : false); return; }
         }
         if (y < 0 || y > 100 || x < 5 || x > 95) {
             this.state = 'STOPPED';
@@ -984,7 +984,7 @@ class GameEngine {
             const teamId = this.lastToucher?.teamId === this.homeTeam.id ? this.awayTeam.id : this.homeTeam.id;
             const nearest = this.players
                 .filter(p => p.teamId === teamId && p.role !== 'GK')
-                .sort((a,b) => Vector.dist(a.pos, this.ball.pos) - Vector.dist(b.pos, this.ball.pos))[0];
+                .sort((a, b) => Vector.dist(a.pos, this.ball.pos) - Vector.dist(b.pos, this.ball.pos))[0];
             if (nearest) { nearest.pos = this.ball.pos.clone(); this.ballOwner = nearest; }
         }
     }
@@ -1021,15 +1021,28 @@ class GameEngine {
         const avgRating = (team: Team) => {
             const on = (team.roster ?? []).filter(p => !p.offField);
             if (on.length === 0) return team.strength;
+
             const formation = FORMATIONS[team.formation || '4-3-3'];
-            return on.reduce((sum, p, i) => sum + getPenalizedRating(p.rating, p.position, formation[i]?.position || 'MID'), 0) / on.length;
+            const usedSlots = new Set<number>();
+
+            return on.reduce((sum, p) => {
+                // Try to find an exact position match first
+                let slotIndex = formation.findIndex((f, idx) => f.position === p.position && !usedSlots.has(idx));
+
+                // If no perfect match, just take the first available slot
+                if (slotIndex === -1) slotIndex = formation.findIndex((_, idx) => !usedSlots.has(idx));
+                if (slotIndex === -1) slotIndex = 0; // Fallback
+
+                usedSlots.add(slotIndex);
+                return sum + getPenalizedRating(p.rating, p.position, formation[slotIndex]?.position || 'MID');
+            }, 0) / on.length;
         };
 
         const homeStr = avgRating(this.homeTeam);
         const awayStr = avgRating(this.awayTeam);
-        const diff    = (homeStr + 4) - awayStr; // slight home advantage
-        const hProb   = Math.max(0.005, 0.015 + diff * 0.0006);
-        const aProb   = Math.max(0.005, 0.015 - diff * 0.0006);
+        const diff = (homeStr + 4) - awayStr; // slight home advantage
+        const hProb = Math.max(0.005, 0.015 + diff * 0.0006);
+        const aProb = Math.max(0.005, 0.015 - diff * 0.0006);
 
         for (let m = 0; m < remaining; m++) {
             if (Math.random() < hProb) {
@@ -1052,28 +1065,28 @@ class GameEngine {
 
 // ── React Component ──────────────────────────────────────────────────────────
 const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, onMatchComplete, competition = 'La Liga' }) => {
-    const canvasRef    = useRef<HTMLCanvasElement>(null);
-    const engineRef    = useRef<GameEngine | null>(null);
-    const prevTimeRef  = useRef<number>(0);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const engineRef = useRef<GameEngine | null>(null);
+    const prevTimeRef = useRef<number>(0);
     const isFinishedRef = useRef(false);
 
     const [isPausedState, setIsPausedState] = useState(false);
-    const [isHalftime, setIsHalftime]       = useState(false);
-    const [score, setScore]     = useState({ home: 0, away: 0 });
-    const [minute, setMinute]   = useState(0);
-    const [events, setEvents]   = useState<string[]>([]);
-    const [stats, setStats]     = useState<MatchStats>({
+    const [isHalftime, setIsHalftime] = useState(false);
+    const [score, setScore] = useState({ home: 0, away: 0 });
+    const [minute, setMinute] = useState(0);
+    const [events, setEvents] = useState<string[]>([]);
+    const [stats, setStats] = useState<MatchStats>({
         home: { shots: 0, shotsOnTarget: 0, possession: 50 },
         away: { shots: 0, shotsOnTarget: 0, possession: 50 },
     });
     const [showTacticsModal, setShowTacticsModal] = useState(false);
-    const [liveUserTeam, setLiveUserTeam]   = useState<Team>(userTeamId === homeTeam.id ? homeTeam : awayTeam);
-    const [selectedSub, setSelectedSub]     = useState<{onFieldId?: string; offFieldId?: string}>({});
+    const [liveUserTeam, setLiveUserTeam] = useState<Team>(userTeamId === homeTeam.id ? homeTeam : awayTeam);
+    const [selectedSub, setSelectedSub] = useState<{ onFieldId?: string; offFieldId?: string }>({});
 
-    const isPausedRef   = useRef(isPausedState || showTacticsModal);
+    const isPausedRef = useRef(isPausedState || showTacticsModal);
     const isHalftimeRef = useRef(isHalftime);
     const onMatchCompleteRef = useRef(onMatchComplete);
-    isPausedRef.current   = isPausedState || showTacticsModal;
+    isPausedRef.current = isPausedState || showTacticsModal;
     isHalftimeRef.current = isHalftime;
     onMatchCompleteRef.current = onMatchComplete;
 
@@ -1082,7 +1095,7 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
             const updated = {
                 ...liveUserTeam,
                 roster: liveUserTeam.roster?.map(p => {
-                    if (p.id === selectedSub.onFieldId)  return { ...p, offField: true };
+                    if (p.id === selectedSub.onFieldId) return { ...p, offField: true };
                     if (p.id === selectedSub.offFieldId) return { ...p, offField: false };
                     return p;
                 }),
@@ -1327,20 +1340,19 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
                     {/* Event log */}
                     <div className="flex-1 overflow-y-auto p-3 md:p-5 space-y-3">
                         {events.map((ev, i) => {
-                            const isGoal   = ev.includes('GOAL');
-                            const isSave   = ev.includes('Save') || ev.includes('Punched');
-                            const isShot   = ev.includes('Shot');
+                            const isGoal = ev.includes('GOAL');
+                            const isSave = ev.includes('Save') || ev.includes('Punched');
+                            const isShot = ev.includes('Shot');
                             const isOffside = ev.includes('OFFSIDE');
                             return (
                                 <div key={i} className="flex gap-3 items-start animate-in slide-in-from-right-4 fade-in duration-300">
                                     <div className="text-emerald-500/80 font-mono text-xs font-bold pt-1.5 min-w-[35px] text-right">{ev.split(' ')[0]}</div>
-                                    <div className={`p-3 rounded-xl text-sm w-full border shadow-sm leading-relaxed ${
-                                        isGoal    ? 'bg-yellow-900/30 border-yellow-600/50 text-yellow-300 font-black' :
-                                        isSave    ? 'bg-blue-900/20 border-blue-700/50 text-blue-200' :
-                                        isShot    ? 'bg-slate-800/80 border-slate-600 text-slate-100 font-medium' :
-                                        isOffside ? 'bg-red-900/20 border-red-700/50 text-red-300' :
-                                        'bg-slate-800/40 border-slate-700/50 text-slate-300'
-                                    }`}>
+                                    <div className={`p-3 rounded-xl text-sm w-full border shadow-sm leading-relaxed ${isGoal ? 'bg-yellow-900/30 border-yellow-600/50 text-yellow-300 font-black' :
+                                            isSave ? 'bg-blue-900/20 border-blue-700/50 text-blue-200' :
+                                                isShot ? 'bg-slate-800/80 border-slate-600 text-slate-100 font-medium' :
+                                                    isOffside ? 'bg-red-900/20 border-red-700/50 text-red-300' :
+                                                        'bg-slate-800/40 border-slate-700/50 text-slate-300'
+                                        }`}>
                                         {ev.substring(ev.indexOf(' ') + 1)}
                                     </div>
                                 </div>
