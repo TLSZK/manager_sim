@@ -545,9 +545,9 @@ const App: React.FC = () => {
                     <div className="mx-auto w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mb-6">
                         <span className="text-red-500 text-3xl font-bold">!</span>
                     </div>
-                    <h2 className="text-xl sm:text-2xl font-bold text-white mb-2">Session Terminated</h2>
+                    <h2 className="text-xl sm:text-2xl font-bold text-white mb-2">Session expired</h2>
                     <p className="text-slate-400 mb-8 text-sm leading-relaxed">
-                        Your account was logged into from another location. You have been disconnected to secure your session.
+                        Someone may have logged into your account from another location.
                     </p>
                     <button 
                         onClick={handleAcknowledgeLogout}
