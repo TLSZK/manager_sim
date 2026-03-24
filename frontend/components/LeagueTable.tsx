@@ -243,7 +243,7 @@ const LeagueTable: React.FC<LeagueTableProps> = ({ teams, userTeamId, activeTab,
                                         const stats = activeTab === 'La Liga' ? team.stats : team.uclStats!, pos = index + 1;
                                         if (!stats) return null;
                                         let posClass = "text-slate-400";
-                                        if (activeTab === 'La Liga') { if (pos === 1) posClass = "text-yellow-400 font-bold"; else if (pos <= 4) posClass = "text-blue-400"; else if (pos >= 18) posClass = "text-red-400"; }
+                                        if (activeTab === 'La Liga') { if (pos === 1) posClass = "text-yellow-400 font-bold"; else if (pos <= 5) posClass = "text-blue-400"; else if (pos >= 18) posClass = "text-red-400"; }
                                         else { if (pos <= 8) posClass = "text-green-400 font-bold"; else if (pos <= 24) posClass = "text-blue-400"; else posClass = "text-red-400"; }
                                         return (
                                             <tr key={team.id} className={`${team.id === userTeamId ? 'bg-indigo-900/40' : 'hover:bg-slate-700/30'} transition-colors animate-in fade-in slide-in-from-bottom-2 duration-500 fill-mode-both`} style={{ animationDelay: `${index * 30}ms` }}>

@@ -16,7 +16,7 @@ const SeasonRecapModal: React.FC<SeasonRecapModalProps> = ({ isOpen, onClose, su
 
     const isChampion = summary.position === 1;
     const isUCLWinner = summary.uclResult === 'Winner';
-    const isGoodSeason = summary.position <= 4 || isUCLWinner;
+    const isGoodSeason = summary.position <= 5 || isUCLWinner;
 
     // Trigger confetti on mount if it's a good season
     React.useEffect(() => {

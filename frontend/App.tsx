@@ -312,8 +312,9 @@ const App: React.FC = () => {
     };
 
     const handleSimToNextMatch = () => {
-        const nextMatch = schedule.find(m => m.week > currentWeek && !m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId));
-        if (nextMatch) {
+        const upcomingMatches = schedule.filter(m => m.week > currentWeek && !m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId));
+        if (upcomingMatches.length > 0) {
+            const nextMatch = upcomingMatches.sort((a, b) => a.week - b.week)[0];
             runSimulation(nextMatch.week, null, true, false);
         } else {
             runSimulation(maxWeek + 1, null, true, false);
@@ -505,7 +506,11 @@ const App: React.FC = () => {
 
     const nextUserMatch = useMemo(() => {
         if (!userTeamId) return undefined;
-        return schedule.find(m => m.week > currentWeek && !m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId));
+        const upcomingMatches = schedule.filter(m => m.week > currentWeek && !m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId));
+        if (upcomingMatches.length === 0) return undefined;
+        
+        // Sort explicitly by week to guarantee the absolute next match is returned regardless of array insertion order
+        return upcomingMatches.sort((a, b) => a.week - b.week)[0];
     }, [schedule, currentWeek, userTeamId]);
 
     const userMatch = useMemo(() => {
@@ -977,7 +982,11 @@ const App: React.FC = () => {
 
                                                 return (
                                                     <div className="mt-4 sm:mt-5 w-full bg-slate-900/80 rounded-lg border border-slate-700 p-2 sm:p-3 shadow-sm min-w-0">
-                                                        <div className="text-[9px] sm:text-[10px] text-slate-400 uppercase tracking-wider mb-1 font-bold">Next Match</div>
+                                                        <div className={`text-[9px] sm:text-[10px] uppercase tracking-wider mb-1 font-bold flex items-center justify-center gap-1 ${nextUserMatch.competition === 'Champions League' ? 'text-blue-400' : 'text-slate-400'}`}>
+                                                            <span>Next Match</span>
+                                                            <span className="text-slate-600 opacity-50">•</span>
+                                                            <span>{nextUserMatch.competition === 'Champions League' ? 'UCL' : 'La Liga'}</span>
+                                                        </div>
                                                         <div className="font-mono font-bold text-indigo-300 text-xs sm:text-sm">{mm}.{dd} {dayName}</div>
                                                         <div className="flex items-center justify-center gap-1.5 sm:gap-2 mt-2 min-w-0">
                                                             {opp?.logoUrl ? (

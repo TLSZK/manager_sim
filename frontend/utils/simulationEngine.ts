@@ -326,7 +326,7 @@ export const prepareTeamsForNextSeason = (currentTeams: Team[]): Team[] => {
         return b.stats.gf - a.stats.gf;
     });
 
-    const top4Ids = new Set(standings.slice(0, 4).map(t => t.id));
+    const top5Ids = new Set(standings.slice(0, 5).map(t => t.id));
 
     return currentTeams.map(team => {
         let isQualified = false;
@@ -334,7 +334,7 @@ export const prepareTeamsForNextSeason = (currentTeams: Team[]): Team[] => {
         if (team.id === 'TBD') {
             isQualified = false;
         } else if (team.tier === 1) {
-            isQualified = top4Ids.has(team.id);
+            isQualified = top5Ids.has(team.id);
         } else {
             isQualified = true; 
         }
