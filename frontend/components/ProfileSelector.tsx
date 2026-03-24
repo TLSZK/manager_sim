@@ -195,7 +195,7 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onSelectProfile, onLo
         {/* Create Button - always visible */}
         <button
           onClick={() => setIsCreating(true)}
-          className="group flex flex-col items-center justify-center p-8 bg-slate-800/50 border-2 border-dashed border-slate-700 rounded-2xl hover:border-blue-500 hover:bg-slate-800 transition-all min-h-[200px]"
+          className="group flex flex-col items-center justify-center p-8 bg-slate-800/50 border-2 border-dashed border-slate-700 rounded-2xl hover:border-blue-500 hover:bg-slate-800 transition-all min-h-[255px]"
         >
           <div className="w-16 h-16 bg-blue-600/20 text-blue-500 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
             <Plus size={32} />

@@ -18,12 +18,12 @@ export interface MatchStats {
 }
 
 const HALF_DURATION_REAL_SEC = 30.0;
-const MAX_SPEED = 130.0;
-const MAX_FORCE = 800.0;
+const MAX_SPEED = 75.0; 
+const MAX_FORCE = 300.0;
 const FRICTION = 0.92;
 const BALL_FRICTION = 0.985;
-const PASS_SPEED = 120.0;
-const SHOOT_SPEED = 150.0;
+const PASS_SPEED = 180.0;
+const SHOOT_SPEED = 200.0;
 
 const POSITION_ORDER: Record<string, number> = {
     'GK': 1,
@@ -91,6 +91,7 @@ class Agent extends GameEntity {
     rating: number;
     basePos: Vector;
     isHome: boolean;
+    currentMaxSpeed: number = MAX_SPEED;
 
     constructor(p: Player, teamId: string, role: string, isHome: boolean, bx: number, by: number, effectiveRating: number) {
         super(bx, by);
@@ -109,12 +110,26 @@ class Agent extends GameEntity {
         const d = desired.mag();
         desired.normalize();
         
-        const ratingPaceMult = 0.25 + (this.rating / 100) * 0.85; 
+        const ratingFactor = this.rating / 100;
+        const ratingPaceMult = 0.2 + Math.pow(ratingFactor, 4) * 2.0; 
         const finalMaxSpeed = MAX_SPEED * speedMult * ratingPaceMult;
         const finalMaxForce = MAX_FORCE * speedMult * ratingPaceMult;
 
+        this.currentMaxSpeed = finalMaxSpeed;
+
         desired.mult(d < 15 ? finalMaxSpeed * (d / 15) : finalMaxSpeed);
         return desired.sub(this.vel).limit(finalMaxForce);
+    }
+
+    updatePhysics(dt: number) {
+        this.vel.add(this.acc.clone().mult(dt));
+        
+        if (this.vel.mag() > this.currentMaxSpeed) {
+            this.vel.normalize().mult(this.currentMaxSpeed);
+        }
+        
+        this.pos.add(this.vel.clone().mult(dt));
+        this.acc.mult(0);
     }
 }
 
@@ -128,6 +143,9 @@ class GameEngine {
     ballOwner: Agent | null = null;
     passTarget: Agent | null = null;
     isShot: boolean = false;
+    isLoftedPass: boolean = false;
+    isSetPiece: boolean = false;
+    isThrowInOrGoalKick: boolean = false;
     offsidePlayersOnPass: Set<string> = new Set();
     players: Agent[] = [];
     state: 'PLAYING' | 'HALFTIME' | 'STOPPED' = 'PLAYING';
@@ -136,8 +154,8 @@ class GameEngine {
     private stateTimer = 0;
     private lastToucher: Agent | null = null;
     
-    homeStats = { shots: 0, possessionFrames: 0 };
-    awayStats = { shots: 0, possessionFrames: 0 };
+    homeStats = { shots: 0, possessionTime: 0 };
+    awayStats = { shots: 0, possessionTime: 0 };
 
     constructor(
         public homeTeam: Team,
@@ -151,10 +169,10 @@ class GameEngine {
     }
 
     private triggerUpdate() {
-        const total = (this.homeStats.possessionFrames + this.awayStats.possessionFrames) || 1;
+        const total = (this.homeStats.possessionTime + this.awayStats.possessionTime) || 1;
         this.onUpdate(this.homeScore, this.awayScore, Math.floor(this.minute), this.events, {
-            home: { shots: this.homeStats.shots, possession: Math.round((this.homeStats.possessionFrames / total) * 100) },
-            away: { shots: this.awayStats.shots, possession: Math.round((this.awayStats.possessionFrames / total) * 100) }
+            home: { shots: this.homeStats.shots, possession: Math.round((this.homeStats.possessionTime / total) * 100) },
+            away: { shots: this.awayStats.shots, possession: Math.round((this.awayStats.possessionTime / total) * 100) }
         });
     }
 
@@ -162,12 +180,18 @@ class GameEngine {
         const createAgents = (team: Team, isHome: boolean) => {
             const formation = FORMATIONS[team.formation || '4-3-3'];
             const onField = [...team.roster!].filter(p => !p.offField);
-            onField.sort((a, b) => (POSITION_ORDER[a.position] || 99) - (POSITION_ORDER[b.position] || 99));
-
-            return onField.map((p, i) => {
-                const pos = formation[i] || { x: 50, y: 50, position: 'MID' };
+            
+            const usedSlots = new Set<number>();
+            return onField.map((p) => {
+                let slotIndex = formation.findIndex((f, idx) => f.position === p.position && !usedSlots.has(idx));
+                if (slotIndex === -1) slotIndex = formation.findIndex((f, idx) => !usedSlots.has(idx));
+                if (slotIndex === -1) slotIndex = 0;
+                
+                usedSlots.add(slotIndex);
+                const pos = formation[slotIndex];
+                
                 const effectiveRating = getPenalizedRating(p.rating, p.position, pos.position);
-                const yPos = isHome ? 100 - pos.y : pos.y;
+                const yPos = isHome ? pos.y : 100 - pos.y;
                 return new Agent(p, team.id, pos.position, isHome, isHome ? pos.x : 100 - pos.x, yPos, effectiveRating);
             });
         };
@@ -180,13 +204,19 @@ class GameEngine {
         
         const formation = FORMATIONS[newTeam.formation || '4-3-3'];
         const onField = [...newTeam.roster!].filter(p => !p.offField);
-        onField.sort((a, b) => (POSITION_ORDER[a.position] || 99) - (POSITION_ORDER[b.position] || 99));
         
-        const newAgents = onField.map((p, i) => {
-            const pos = formation[i] || { x: 50, y: 50, position: 'MID' };
+        const newAgents = onField.map((p) => {
+            const usedSlots = new Set<number>();
+            let slotIndex = formation.findIndex((f, idx) => f.position === p.position && !usedSlots.has(idx));
+            if (slotIndex === -1) slotIndex = formation.findIndex((f, idx) => !usedSlots.has(idx));
+            if (slotIndex === -1) slotIndex = 0;
+            
+            usedSlots.add(slotIndex);
+            const pos = formation[slotIndex];
+            
             const effectiveRating = getPenalizedRating(p.rating, p.position, pos.position);
             const bx = isHome ? pos.x : 100 - pos.x;
-            const by = isHome ? 100 - pos.y : pos.y;
+            const by = isHome ? pos.y : 100 - pos.y;
             
             const existing = this.players.find(old => old.id === p.id && old.teamId === newTeam.id);
             if (existing) {
@@ -227,6 +257,9 @@ class GameEngine {
         this.lastToucher = null;
         this.passTarget = null;
         this.isShot = false;
+        this.isLoftedPass = false;
+        this.isSetPiece = false;
+        this.isThrowInOrGoalKick = false;
         this.offsidePlayersOnPass.clear();
         
         const homeAttacksRight = this.period === 1;
@@ -298,6 +331,35 @@ class GameEngine {
         return true;
     }
 
+    isShootingLaneOpen(from: Vector, to: Vector, teamId: string): boolean {
+        const LANE_THRESHOLD = 3.0;
+        const ABx = to.x - from.x;
+        const ABy = to.y - from.y;
+        const lenSq = ABx * ABx + ABy * ABy;
+        
+        if (lenSq === 0) return false;
+
+        for (const p of this.players) {
+            if (p.teamId === teamId || p.role === 'GK') continue; 
+            
+            const APx = p.pos.x - from.x;
+            const APy = p.pos.y - from.y;
+            
+            let t = (APx * ABx + APy * ABy) / lenSq;
+            t = Math.max(0, Math.min(1, t)); 
+            
+            const Cx = from.x + t * ABx;
+            const Cy = from.y + t * ABy;
+            
+            const distSq = (p.pos.x - Cx) ** 2 + (p.pos.y - Cy) ** 2;
+            
+            if (distSq < LANE_THRESHOLD * LANE_THRESHOLD) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     getOffsideLine(attackingTeamId: string, attackingRight: boolean): number {
         const defenders = this.players.filter(p => p.teamId !== attackingTeamId);
         if (attackingRight) {
@@ -318,8 +380,8 @@ class GameEngine {
             this.minute += dt * (45 / HALF_DURATION_REAL_SEC);
             
             if (this.ballOwner) {
-                if (this.ballOwner.isHome) this.homeStats.possessionFrames++;
-                else this.awayStats.possessionFrames++;
+                if (this.ballOwner.isHome) this.homeStats.possessionTime += dt;
+                else this.awayStats.possessionTime += dt;
             }
             
             if (this.period === 1 && this.minute >= 45) {
@@ -335,15 +397,26 @@ class GameEngine {
             this.stateTimer -= dt;
             if (this.stateTimer <= 0) {
                 if (this.ballOwner) {
-                    const validMates = this.players.filter(m => m.teamId === this.ballOwner!.teamId && m !== this.ballOwner);
+                    let validMates = this.players.filter(m => m.teamId === this.ballOwner!.teamId && m !== this.ballOwner && Vector.dist(this.ballOwner!.pos, m.pos) <= 65);
+                    if (validMates.length === 0) {
+                        validMates = this.players.filter(m => m.teamId === this.ballOwner!.teamId && m !== this.ballOwner);
+                    }
+
                     if (validMates.length > 0) {
-                        const mate = validMates[Math.floor(Math.random() * validMates.length)];
-                        this.pass(this.ballOwner, mate);
+                        if (this.isSetPiece) {
+                            validMates.sort((a, b) => Math.abs(Vector.dist(this.ballOwner!.pos, a.pos) - 40) - Math.abs(Vector.dist(this.ballOwner!.pos, b.pos) - 40));
+                            const bestOptions = validMates.slice(0, 3);
+                            const mate = bestOptions[Math.floor(Math.random() * bestOptions.length)];
+                            this.pass(this.ballOwner, mate);
+                        } else {
+                            const mate = validMates[Math.floor(Math.random() * validMates.length)];
+                            this.pass(this.ballOwner, mate);
+                        }
                     }
                 }
                 this.state = 'PLAYING';
             }
-            this.physicsStep(dt * 0.5);
+            this.physicsStep(dt); 
             return;
         }
 
@@ -359,13 +432,25 @@ class GameEngine {
 
     aiStep(dt: number) {
         const ballPos = this.ball.pos;
-        let cHome: Agent | null = null, cAway: Agent | null = null, dHome = Infinity, dAway = Infinity;
         
+        const homeDefenders: {player: Agent, dist: number}[] = [];
+        const awayDefenders: {player: Agent, dist: number}[] = [];
+
         this.players.forEach(p => {
-            const d = Vector.dist(p.pos, ballPos);
-            if (p.isHome && d < dHome) { dHome = d; cHome = p; }
-            if (!p.isHome && d < dAway) { dAway = d; cAway = p; }
+            const dist = Vector.dist(p.pos, ballPos);
+            if (p.role !== 'GK') {
+                if (p.isHome) homeDefenders.push({player: p, dist});
+                else awayDefenders.push({player: p, dist});
+            }
         });
+
+        homeDefenders.sort((a, b) => a.dist - b.dist);
+        awayDefenders.sort((a, b) => a.dist - b.dist);
+
+        const primaryPresserHome = homeDefenders[0]?.player;
+        const coverHome = homeDefenders[1]?.player;
+        const primaryPresserAway = awayDefenders[0]?.player;
+        const coverAway = awayDefenders[1]?.player;
 
         const possessingTeam = this.ballOwner ? this.ballOwner.teamId : (this.lastToucher ? this.lastToucher.teamId : null);
         const homeAttacksRight = this.period === 1;
@@ -376,6 +461,10 @@ class GameEngine {
         this.players.forEach(p => {
             const force = new Vector(0, 0);
             let separation = new Vector(0, 0);
+            const isDefending = possessingTeam && possessingTeam !== p.teamId;
+            const oppGoalX = p.isHome ? (homeAttacksRight ? 95 : 5) : (homeAttacksRight ? 5 : 95);
+            const ownGoalX = p.isHome ? (homeAttacksRight ? 5 : 95) : (homeAttacksRight ? 95 : 5);
+            const attackingRight = p.isHome ? homeAttacksRight : !homeAttacksRight;
             
             this.players.forEach(other => {
                 if (p !== other && p.role !== 'GK' && other.role !== 'GK') {
@@ -386,103 +475,129 @@ class GameEngine {
                             const diff = new Vector(p.pos.x - other.pos.x, p.pos.y - other.pos.y);
                             separation.add(diff.normalize().mult(35.0 / (dist + 0.1)));
                         }
-                    } else {
-                        if (this.ballOwner === p) {
-                            if (dist < 6.0) {
-                                const diff = new Vector(p.pos.x - other.pos.x, p.pos.y - other.pos.y);
-                                separation.add(diff.normalize().mult(30.0 / (dist + 0.1))); 
-                                
-                                const dribbleMult = (p.rating / 100) * 45.0;
-                                const sideStep = new Vector(-diff.y, diff.x).normalize().mult(dribbleMult / (dist + 0.1));
-                                if (p.pos.y > 50 && sideStep.y > 0) sideStep.mult(-1);
-                                if (p.pos.y <= 50 && sideStep.y < 0) sideStep.mult(-1);
-                                separation.add(sideStep);
-                            }
-                        } else if (this.ballOwner !== other && dist < 3.0) {
-                            const diff = new Vector(p.pos.x - other.pos.x, p.pos.y - other.pos.y);
-                            separation.add(diff.normalize().mult(10.0 / (dist + 0.1)));
-                        }
+                    } else if (this.ballOwner !== p && this.ballOwner !== other && dist < 3.0) {
+                        const diff = new Vector(p.pos.x - other.pos.x, p.pos.y - other.pos.y);
+                        separation.add(diff.normalize().mult(10.0 / (dist + 0.1)));
                     }
                 }
             });
 
-            const oppGoalX = p.isHome ? (homeAttacksRight ? 95 : 5) : (homeAttacksRight ? 5 : 95);
-            const ownGoalX = p.isHome ? (homeAttacksRight ? 5 : 95) : (homeAttacksRight ? 95 : 5);
-            const attackingRight = p.isHome ? homeAttacksRight : !homeAttacksRight;
             const offsideLine = p.isHome ? homeOffsideLine : awayOffsideLine;
+            const primaryPresser = p.isHome ? primaryPresserHome : primaryPresserAway;
+            const coverDefender = p.isHome ? coverHome : coverAway;
+
+            let currentMoveSpeed = 1.0;
 
             if (p.role === 'GK') {
                 const distToBall = Vector.dist(p.pos, ballPos);
-                const diveSpeed = distToBall < 40 ? 2.0 : 1.0;
+                const diveSpeed = distToBall < 40 ? 1.5 : 1.0;
                 
                 force.add(p.arrive(new Vector(ownGoalX === 5 ? 7 : 93, Math.max(40, Math.min(60, ballPos.y))), diveSpeed));
                 
                 if (this.ballOwner === p && this.cooldown <= 0) {
-                    if (Math.random() < 3.0 * dt) {
-                        const validMates = this.players.filter(m => m.teamId === p.teamId && m !== p);
-                        const openMates = validMates.filter(m => this.isPassLaneOpen(p.pos, m.pos, p.teamId));
-                        
-                        if (openMates.length > 0) {
-                            openMates.sort((a, b) => Vector.dist(p.pos, a.pos) - Vector.dist(p.pos, b.pos));
-                            const bestOptions = openMates.slice(0, 3);
-                            const mate = bestOptions[Math.floor(Math.random() * bestOptions.length)];
-                            this.pass(p, mate);
-                        } else if (validMates.length > 0) {
-                            const mate = validMates[Math.floor(Math.random() * validMates.length)];
-                            this.pass(p, mate);
+                    if (Math.random() < 2.0 * dt) { 
+                        let validMates = this.players.filter(m => m.teamId === p.teamId && m !== p && Vector.dist(p.pos, m.pos) <= 65);
+                        if (validMates.length === 0) {
+                            validMates = this.players.filter(m => m.teamId === p.teamId && m !== p);
+                        }
+
+                        if (validMates.length > 0) {
+                            validMates.sort((a, b) => {
+                                let spaceA = 50, spaceB = 50;
+                                this.players.forEach(def => {
+                                    if (def.teamId !== p.teamId) {
+                                        spaceA = Math.min(spaceA, Vector.dist(a.pos, def.pos));
+                                        spaceB = Math.min(spaceB, Vector.dist(b.pos, def.pos));
+                                    }
+                                });
+                                return spaceB - spaceA; 
+                            });
+                            this.pass(p, validMates[0]);
                         }
                     }
                 }
             } else {
-                let target = p.basePos.clone();
-                if (this.period === 2) {
-                    target.x = 100 - target.x;
-                    target.y = 100 - target.y; 
-                }
+                let targetX = this.period === 2 ? 100 - p.basePos.x : p.basePos.x;
+                let targetY = this.period === 2 ? 100 - p.basePos.y : p.basePos.y;
+                let target = new Vector(targetX, targetY);
 
                 const unmirroredX = p.isHome ? p.basePos.x : 100 - p.basePos.x;
                 let roleType = 'MID';
                 if (unmirroredX <= 45) roleType = 'DEF';
                 else if (unmirroredX >= 75) roleType = 'FWD';
 
-                const isWide = p.basePos.y < 35 || p.basePos.y > 65;
+                const baseY = targetY; 
+                const isWide = baseY < 35 || baseY > 65;
 
-                if (possessingTeam === p.teamId) {
+                if (!isDefending) {
                     const pushForward = p.isHome === homeAttacksRight ? 35 : -35;
                     target.x += pushForward * (roleType === 'DEF' ? 0.7 : roleType === 'FWD' ? 1.0 : 1.0);
                     
                     if (isWide) {
-                        target.y = p.basePos.y < 50 ? 15 : 85;
+                        target.y = baseY < 50 ? 15 : 85;
                         target.x += (ballPos.x - 50) * 0.2; 
                     } else {
                         target.x += (ballPos.x - 50) * (roleType === 'DEF' ? 0.3 : roleType === 'FWD' ? 0.6 : 0.5);
-                        target.y = p.basePos.y + (ballPos.y - 50) * 0.4; 
+                        target.y = baseY + (ballPos.y - 50) * 0.2; 
                     }
-                } else if (possessingTeam && possessingTeam !== p.teamId) {
+
+                    // CAM Freedom
+                    if (p.role === 'CAM') {
+                        target.x = this.ballOwner ? this.ballOwner.pos.x + (p.isHome === homeAttacksRight ? 15 : -15) : target.x;
+                        if (ballPos.y < 30 || ballPos.y > 70) {
+                            target.y += (ballPos.y - target.y) * 0.7;
+                        }
+                    }
+
+                    // Dynamic Passing Lane Creation
+                    if (this.ballOwner && p !== this.ballOwner) {
+                        if (!this.isPassLaneOpen(this.ballOwner.pos, p.pos, p.teamId)) {
+                            const toPlayer = new Vector(p.pos.x - this.ballOwner.pos.x, p.pos.y - this.ballOwner.pos.y);
+                            const perp = new Vector(-toPlayer.y, toPlayer.x).normalize().mult(12.0); 
+                            
+                            // Move towards center or edge to find space
+                            if (p.pos.y > 50) target.y -= Math.abs(perp.y);
+                            else target.y += Math.abs(perp.y);
+                        }
+                    }
+
+                } else {
                     const dropBack = p.isHome === homeAttacksRight ? -10 : 10;
                     target.x += dropBack * (roleType === 'DEF' ? 0.3 : roleType === 'FWD' ? 0.1 : 0.5);
                     
                     if (isWide) {
-                        target.y = p.basePos.y < 50 ? 25 : 75; 
+                        target.y = baseY < 50 ? 25 : 75; 
                     } else {
-                        target.y = p.basePos.y + (ballPos.y - 50) * 0.4; 
+                        target.y = baseY + (ballPos.y - 50) * 0.2; 
                     }
                     target.x += (ballPos.x - 50) * 0.3;
-                } else {
-                    target.x += (ballPos.x - 50) * 0.5;
-                    target.y = p.basePos.y + (ballPos.y - 50) * 0.4;
-                }
 
-                // AI Offside Awareness: Hold run behind the offside line
-                if (possessingTeam === p.teamId && p !== this.ballOwner) {
-                    if (attackingRight) {
-                        target.x = Math.min(target.x, offsideLine - 0.5);
-                    } else {
-                        target.x = Math.max(target.x, offsideLine + 0.5);
+                    if (roleType === 'DEF') {
+                        target.y += (ballPos.y - 50) * 0.6;
+                    }
+
+                    // Forwards track back directly behind the ball
+                    if (roleType === 'FWD') {
+                        const ballLine = ballPos.x + (p.isHome === homeAttacksRight ? -10 : 10);
+                        if (p.isHome === homeAttacksRight) {
+                             target.x = Math.max(target.x, ballLine); 
+                        } else {
+                             target.x = Math.min(target.x, ballLine);
+                        }
                     }
                 }
 
-                if (roleType === 'DEF' && possessingTeam !== p.teamId) {
+                if (!isDefending && p !== this.ballOwner) {
+                    if (attackingRight) {
+                        target.x = Math.min(target.x, offsideLine - 2.0);
+                        if (p.pos.x > offsideLine) currentMoveSpeed = 1.5; 
+                    } else {
+                        target.x = Math.max(target.x, offsideLine + 2.0);
+                        if (p.pos.x < offsideLine) currentMoveSpeed = 1.5; 
+                    }
+                }
+
+                if (roleType === 'DEF' && isDefending) {
                     const boxLine = p.isHome === homeAttacksRight ? 26 : 74;
                     if (p.isHome === homeAttacksRight) {
                         if (target.x < boxLine && ballPos.x > 35) target.x = boxLine;
@@ -496,27 +611,73 @@ class GameEngine {
 
                 if (this.ballOwner?.teamId === p.teamId) {
                     if (this.ballOwner === p) {
-                        
                         const distToGoalX = Math.abs(p.pos.x - oppGoalX);
                         const distToGoal = Vector.dist(p.pos, new Vector(oppGoalX, 50));
                         let driveY = p.pos.y;
+                        let driveX = oppGoalX;
                         
-                        if (distToGoalX < 35 && (p.pos.y < 35 || p.pos.y > 65)) {
-                            driveY = p.pos.y < 50 ? p.pos.y + 15 : p.pos.y - 15;
-                        } else if (distToGoalX > 40) {
-                            driveY = p.basePos.y; 
+                        let closestThreat: Agent | null = null;
+                        let closestThreatDist = Infinity;
+                        this.players.forEach(def => {
+                            if (def.teamId !== p.teamId && def.role !== 'GK') {
+                                const distX = (def.pos.x - p.pos.x) * (attackingRight ? 1 : -1);
+                                const distY = Math.abs(def.pos.y - p.pos.y);
+                                if (distX > -2 && distY < 15) { 
+                                    const trueDist = Vector.dist(p.pos, def.pos);
+                                    if (trueDist < closestThreatDist) {
+                                        closestThreatDist = trueDist;
+                                        closestThreat = def;
+                                    }
+                                }
+                            }
+                        });
+
+                        const inPenaltyBox = distToGoalX <= 18 && p.pos.y >= 22 && p.pos.y <= 78;
+
+                        if (closestThreatDist < 15 && !inPenaltyBox) {
+                            const evadeY = (p.pos.y > closestThreat!.pos.y) ? 1 : -1;
+                            const evadeX = attackingRight ? 0.5 : -0.5;
+                            const dribbleSkill = p.rating / 100;
+                            
+                            driveY = p.pos.y + evadeY * 20 * dribbleSkill;
+                            driveX = p.pos.x + evadeX * 20;
+                            
+                            force.add(p.arrive(new Vector(driveX, driveY), 0.85 + (dribbleSkill * 0.15)));
                         } else {
-                            driveY = 50; 
+                            if (distToGoalX < 35 && (p.pos.y < 35 || p.pos.y > 65)) {
+                                driveY = p.pos.y < 50 ? p.pos.y + 15 : p.pos.y - 15;
+                            } else if (distToGoalX > 40) {
+                                driveY = baseY; 
+                            } else {
+                                driveY = 50; 
+                            }
+                            force.add(p.arrive(new Vector(oppGoalX, driveY), 0.95)); 
                         }
                         
-                        force.add(p.arrive(new Vector(oppGoalX, driveY)).mult(1.5));
-                        
-                        if (distToGoal < 45 && this.cooldown <= 0) {
-                            const shootProb = distToGoal < 20 ? 3.0 : (distToGoal < 30 ? 1.5 : 0.5);
+                        if (this.cooldown <= 0) {
+                            let shotTaken = false;
+                            const ratingMod = Math.pow(p.rating / 100, 2);
+                            const isAwfulAngle = distToGoalX < 25 && (p.pos.y < 30 || p.pos.y > 70);
                             
-                            if (Math.random() < shootProb * dt) {
-                                this.shoot(p);
-                            } else if (Math.random() < 4.0 * dt) {
+                            const topOpen = this.isShootingLaneOpen(p.pos, new Vector(oppGoalX, 42), p.teamId);
+                            const bottomOpen = this.isShootingLaneOpen(p.pos, new Vector(oppGoalX, 58), p.teamId);
+                            const centerOpen = this.isShootingLaneOpen(p.pos, new Vector(oppGoalX, 50), p.teamId);
+                            const hasClearShot = topOpen || bottomOpen || centerOpen;
+                            
+                            if (!isAwfulAngle) {
+                                if (inPenaltyBox && hasClearShot) {
+                                    this.shoot(p);
+                                    shotTaken = true;
+                                } else if (distToGoal < 40 && hasClearShot) {
+                                    const shootProb = (distToGoal < 20 ? 4.0 : (distToGoal < 30 ? 2.0 : 0.5)) * ratingMod;
+                                    if (Math.random() < shootProb * dt) {
+                                        this.shoot(p);
+                                        shotTaken = true;
+                                    }
+                                }
+                            }
+                            
+                            if (!shotTaken && Math.random() < (5.0 * ratingMod) * dt) {
                                 const validMates = this.players.filter(m => m.teamId === p.teamId && m !== p && Vector.dist(p.pos, m.pos) < 55 && Vector.dist(p.pos, m.pos) > 8);
                                 const openMates = validMates.filter(m => this.isPassLaneOpen(p.pos, m.pos, p.teamId));
                                 
@@ -533,8 +694,8 @@ class GameEngine {
                                             }
                                         });
                                         
-                                        const randomWeightA = Math.random() * 25;
-                                        const randomWeightB = Math.random() * 25;
+                                        const randomWeightA = Math.random() * (100 - p.rating);
+                                        const randomWeightB = Math.random() * (100 - p.rating);
                                         
                                         return (distAGoal - spaceA * 3.5 + randomWeightA) - (distBGoal - spaceB * 3.5 + randomWeightB);
                                     });
@@ -543,45 +704,31 @@ class GameEngine {
                                     this.pass(p, mate);
                                 }
                             }
-                        } else if (this.cooldown <= 0 && Math.random() < 5.0 * dt) {
-                            const validMates = this.players.filter(m => m.teamId === p.teamId && m !== p && Vector.dist(p.pos, m.pos) < 55 && Vector.dist(p.pos, m.pos) > 8);
-                            const openMates = validMates.filter(m => this.isPassLaneOpen(p.pos, m.pos, p.teamId));
-                            
-                            if (openMates.length > 0) {
-                                openMates.sort((a, b) => {
-                                    const distAGoal = Math.abs(a.pos.x - oppGoalX);
-                                    const distBGoal = Math.abs(b.pos.x - oppGoalX);
-                                    
-                                    let spaceA = 50, spaceB = 50;
-                                    this.players.forEach(def => {
-                                        if (def.teamId !== p.teamId && def.role !== 'GK') {
-                                            spaceA = Math.min(spaceA, Vector.dist(a.pos, def.pos));
-                                            spaceB = Math.min(spaceB, Vector.dist(b.pos, def.pos));
-                                        }
-                                    });
-                                    
-                                    const randomWeightA = Math.random() * 25;
-                                    const randomWeightB = Math.random() * 25;
-                                    
-                                    return (distAGoal - spaceA * 3.5 + randomWeightA) - (distBGoal - spaceB * 3.5 + randomWeightB);
-                                });
-                                const bestOptions = openMates.slice(0, 2);
-                                const mate = bestOptions[Math.floor(Math.random() * bestOptions.length)];
-                                this.pass(p, mate);
-                            } 
                         }
                     } else {
-                        force.add(p.arrive(target));
+                        force.add(p.arrive(target, 1.0));
                     }
                 } else {
                     if (!this.ballOwner && this.passTarget === p) {
-                        force.add(p.arrive(ballPos).mult(2.8));
-                    } else if (p === cHome || p === cAway) {
-                        force.add(p.arrive(ballPos).mult(2.0));
-                    } else if (!this.ballOwner && Vector.dist(p.pos, ballPos) < 20) {
-                        force.add(p.arrive(ballPos).mult(1.8));
+                        force.add(p.arrive(ballPos, 1.15));
+                    } else if (isDefending && this.ballOwner) {
+                        if (p === primaryPresser) {
+                            const interceptX = ballPos.x + (ownGoalX > 50 ? -2.5 : 2.5); 
+                            let interceptPoint = new Vector(interceptX, ballPos.y);
+                            
+                            const predictionAccuracy = p.rating / 100;
+                            interceptPoint.y += this.ballOwner.vel.y * 0.3 * predictionAccuracy;
+                            
+                            force.add(p.arrive(interceptPoint, 1.15));
+                        } else if (p === coverDefender) {
+                            let coverPos = new Vector((ballPos.x + ownGoalX) / 2, ballPos.y);
+                            coverPos.x = ballPos.x + (ownGoalX > 50 ? 12 : -12);
+                            force.add(p.arrive(coverPos, currentMoveSpeed));
+                        } else {
+                            force.add(p.arrive(target, currentMoveSpeed));
+                        }
                     } else {
-                        force.add(p.arrive(target));
+                        force.add(p.arrive(target, currentMoveSpeed));
                     }
                 }
             }
@@ -593,22 +740,35 @@ class GameEngine {
     }
 
     physicsStep(dt: number) {
+        const fpsScale = dt * 60;
+        
+        if (this.isLoftedPass && this.ball.vel.mag() < 70) {
+            this.isLoftedPass = false;
+        }
+
         this.players.forEach(p => {
             p.updatePhysics(dt);
-            p.vel.mult(FRICTION);
+            p.vel.mult(Math.pow(FRICTION, fpsScale));
             p.pos.x = Math.max(5, Math.min(95, p.pos.x));
             p.pos.y = Math.max(0, Math.min(100, p.pos.y));
         });
         
         if (this.ballOwner) {
-            this.ball.pos.x += (this.ballOwner.pos.x + this.ballOwner.vel.x * 0.1 - this.ball.pos.x) * 0.3;
-            this.ball.pos.y += (this.ballOwner.pos.y + this.ballOwner.vel.y * 0.1 - this.ball.pos.y) * 0.3;
+            this.ball.pos.x = this.ballOwner.pos.x + this.ballOwner.vel.x * 0.05;
+            this.ball.pos.y = this.ballOwner.pos.y + this.ballOwner.vel.y * 0.05;
             this.ball.vel = this.ballOwner.vel.clone();
         } else {
             this.ball.updatePhysics(dt);
             this.ball.pos.x = Math.max(0, Math.min(100, this.ball.pos.x));
             this.ball.pos.y = Math.max(0, Math.min(100, this.ball.pos.y));
-            this.ball.vel.mult(BALL_FRICTION);
+            
+            if (this.passTarget) {
+                const dir = new Vector(this.passTarget.pos.x - this.ball.pos.x, this.passTarget.pos.y - this.ball.pos.y).normalize();
+                const currentSpeed = this.ball.vel.mag();
+                this.ball.vel = dir.mult(currentSpeed > 0 ? currentSpeed : PASS_SPEED);
+            } else {
+                this.ball.vel.mult(Math.pow(BALL_FRICTION, fpsScale));
+            }
         }
     }
 
@@ -617,27 +777,34 @@ class GameEngine {
         this.lastToucher = from;
         this.passTarget = to;
         this.isShot = false;
+        
+        this.isLoftedPass = from.role === 'GK' || this.isSetPiece;
 
         this.offsidePlayersOnPass.clear();
-        const homeAttacksRight = this.period === 1;
-        const attackingRight = from.isHome ? homeAttacksRight : !homeAttacksRight;
-        const offsideLine = this.getOffsideLine(from.teamId, attackingRight);
+        
+        if (!this.isThrowInOrGoalKick) {
+            const homeAttacksRight = this.period === 1;
+            const attackingRight = from.isHome ? homeAttacksRight : !homeAttacksRight;
+            const offsideLine = this.getOffsideLine(from.teamId, attackingRight);
 
-        // Tag attackers physically past the offside line on pass release
-        this.players.forEach(p => {
-            if (p.teamId === from.teamId && p !== from) {
-                const isOffside = attackingRight ? (p.pos.x > offsideLine + 0.2) : (p.pos.x < offsideLine - 0.2);
-                if (isOffside) {
-                    this.offsidePlayersOnPass.add(p.id);
+            this.players.forEach(p => {
+                if (p.teamId === from.teamId && p !== from) {
+                    const isOffside = attackingRight ? (p.pos.x > offsideLine + 0.2) : (p.pos.x < offsideLine - 0.2);
+                    if (isOffside) {
+                        this.offsidePlayersOnPass.add(p.id);
+                    }
                 }
-            }
-        });
+            });
+        }
+        
+        this.isSetPiece = false;
+        this.isThrowInOrGoalKick = false;
 
         const ratingFactor = Math.min(100, Math.max(1, from.rating));
         const ratingMultiplier = 0.4 + (ratingFactor / 100) * 0.8;
         const actualPassSpeed = PASS_SPEED * ratingMultiplier;
 
-        const inaccuracyScale = Math.pow((100 - ratingFactor) / 100, 3) * 50.0; 
+        const inaccuracyScale = Math.pow((100 - ratingFactor) / 100, 4) * 80.0; 
         
         const targetX = to.pos.x + (Math.random() - 0.5) * inaccuracyScale;
         const targetY = to.pos.y + (Math.random() - 0.5) * inaccuracyScale;
@@ -652,6 +819,7 @@ class GameEngine {
         this.lastToucher = from;
         this.passTarget = null;
         this.isShot = true;
+        this.isLoftedPass = false;
         this.offsidePlayersOnPass.clear();
         
         if (from.isHome) this.homeStats.shots++;
@@ -659,12 +827,12 @@ class GameEngine {
         
         const oppGoalX = from.isHome ? (this.period === 1 ? 95 : 5) : (this.period === 1 ? 5 : 95);
         
-        const topCorner = 41;
-        const bottomCorner = 59;
+        const topCorner = 42;
+        const bottomCorner = 58;
         let targetY = 50;
 
-        const topOpen = this.isPassLaneOpen(from.pos, new Vector(oppGoalX, topCorner), from.teamId);
-        const bottomOpen = this.isPassLaneOpen(from.pos, new Vector(oppGoalX, bottomCorner), from.teamId);
+        const topOpen = this.isShootingLaneOpen(from.pos, new Vector(oppGoalX, topCorner), from.teamId);
+        const bottomOpen = this.isShootingLaneOpen(from.pos, new Vector(oppGoalX, bottomCorner), from.teamId);
         const accuracy = from.rating / 100;
 
         if (topOpen && bottomOpen) {
@@ -679,14 +847,14 @@ class GameEngine {
         } else if (bottomOpen) {
             targetY = bottomCorner;
         } else {
-            targetY = 50 + (Math.random() - 0.5) * 20;
+            targetY = 50 + (Math.random() - 0.5) * 16;
         }
 
         const distToGoal = Vector.dist(from.pos, new Vector(oppGoalX, 50));
 
         if (topOpen || bottomOpen) {
              const distPenalty = distToGoal > 25 ? (distToGoal - 25) * 0.5 : 0;
-             const missMargin = Math.pow(1 - accuracy, 3) * 60 + distPenalty; 
+             const missMargin = Math.pow(1 - accuracy, 4) * 100 + distPenalty; 
              targetY += (Math.random() - 0.5) * missMargin;
         }
 
@@ -702,6 +870,8 @@ class GameEngine {
         if (!this.ballOwner) {
             let closest: Agent | null = null, minD = 1000;
             this.players.forEach(p => {
+                if (this.isLoftedPass && p !== this.passTarget && p.role !== 'GK') return;
+
                 const d = Vector.dist(p.pos, this.ball.pos);
                 const threshold = p.role === 'GK' ? 5.0 : 3.5;
                 if (d < threshold && d < minD && !(this.lastToucher === p && this.cooldown > 0)) {
@@ -716,13 +886,14 @@ class GameEngine {
                         const shooterRating = this.lastToucher.rating;
                         const gkRating = closest.rating;
                         
-                        const saveScore = Math.pow(gkRating, 3) * Math.random();
-                        const shotScore = Math.pow(shooterRating, 3) * Math.random();
+                        const saveScore = Math.pow(gkRating, 5) * Math.random();
+                        const shotScore = Math.pow(shooterRating, 5) * Math.random();
                         
                         if (saveScore > shotScore) {
                             this.ballOwner = closest;
                             this.passTarget = null;
                             this.isShot = false;
+                            this.isLoftedPass = false;
                             this.state = 'STOPPED';
                             this.stateTimer = 1.0;
                             this.events.unshift(`${Math.floor(this.minute)}' Great Save by ${closest.name}!`);
@@ -735,6 +906,7 @@ class GameEngine {
                         this.ballOwner = closest;
                         this.passTarget = null;
                         this.isShot = false;
+                        this.isLoftedPass = false;
                     }
                 } else if (closest.role !== 'GK' && this.isShot && this.lastToucher && this.lastToucher.teamId !== closest.teamId) {
                     this.ball.vel.mult(-0.5); 
@@ -744,7 +916,7 @@ class GameEngine {
                 } else {
                     let goodTouch = true;
                     if (this.passTarget === closest && closest.role !== 'GK') {
-                        const failChance = Math.pow((100 - closest.rating) / 100, 3);
+                        const failChance = Math.pow((100 - closest.rating) / 100, 4);
                         if (Math.random() < failChance) goodTouch = false;
                     }
 
@@ -752,6 +924,7 @@ class GameEngine {
                         this.ballOwner = closest;
                         this.passTarget = null;
                         this.isShot = false;
+                        this.isLoftedPass = false;
                     } else {
                         this.ball.vel.mult(-0.5); 
                         this.lastToucher = closest;
@@ -763,42 +936,43 @@ class GameEngine {
             this.players.forEach(p => {
                 if (!this.ballOwner) return; 
                 
-                if (p.teamId !== this.ballOwner.teamId && Vector.dist(p.pos, this.ballOwner.pos) < 3.5 && this.cooldown <= 0) {
+                if (p.teamId !== this.ballOwner.teamId && this.ballOwner.role !== 'GK' && Vector.dist(p.pos, this.ballOwner.pos) < 3.5 && this.cooldown <= 0) {
                     
                     const homeAttacksRight = this.period === 1;
                     const attackingDir = this.ballOwner.isHome ? (homeAttacksRight ? 1 : -1) : (homeAttacksRight ? -1 : 1);
                     const isBehind = (this.ballOwner.pos.x - p.pos.x) * attackingDir > 0.5;
 
                     if (!isBehind) {
-                        const tackleScore = Math.pow(p.rating, 3) * Math.random();
-                        const possessionScore = Math.pow(this.ballOwner.rating, 3) * Math.random();
+                        const tackleScore = p.rating + (Math.random() * 15); 
+                        const possessionScore = this.ballOwner.rating + (Math.random() * 15);
 
-                        if (tackleScore > possessionScore) {
+                        if (tackleScore > possessionScore + 5) {
                             this.lastToucher = p;
                             this.passTarget = null;
                             
-                            const cleanStealChance = 0.50 + (p.rating / 100) * 0.45;
-                            
-                            if (Math.random() < cleanStealChance) {
+                            if (tackleScore > possessionScore + 15) {
                                 this.ballOwner = p;
                                 this.cooldown = 1.0; 
                             } else {
                                 this.ballOwner = null;
-                                this.ball.vel = new Vector((Math.random() - 0.5) * 100, (Math.random() - 0.5) * 100);
+                                this.ball.vel = new Vector((Math.random() - 0.5) * 80, (Math.random() - 0.5) * 80);
                                 this.cooldown = 0.5;
                             }
+                        } else {
+                            this.cooldown = 0.25; 
                         }
                     }
                 }
             });
         }
 
-        // Offside Trap Trigger Check
         if (this.ballOwner && this.lastToucher) {
             if (this.ballOwner.teamId === this.lastToucher.teamId) {
                 if (this.offsidePlayersOnPass.has(this.ballOwner.id)) {
                     this.state = 'STOPPED';
                     this.stateTimer = 1.5;
+                    this.isSetPiece = true;
+                    this.isThrowInOrGoalKick = false;
                     this.events.unshift(`${Math.floor(this.minute)}' OFFSIDE! ${this.ballOwner.name}`);
                     
                     const defendingTeamId = this.ballOwner.teamId === this.homeTeam.id ? this.awayTeam.id : this.homeTeam.id;
@@ -815,7 +989,6 @@ class GameEngine {
                     this.offsidePlayersOnPass.clear();
                 }
             } else {
-                // Opponent gains control, clear trap
                 this.offsidePlayersOnPass.clear();
             }
         }
@@ -835,11 +1008,13 @@ class GameEngine {
             this.ballOwner = null;
             this.passTarget = null;
             this.isShot = false;
+            this.isLoftedPass = false;
+            this.isSetPiece = true;
+            this.isThrowInOrGoalKick = true;
             this.offsidePlayersOnPass.clear();
             
             if (y < 0 || y > 100) {
                 this.ball.pos.y = y < 0 ? 0.5 : 99.5;
-                this.events.unshift(`${Math.floor(this.minute)}' Throw-in`);
             } else { 
                 const isHomeGoalLine = this.period === 1 ? x < 50 : x > 50;
                 this.ball.pos = new Vector(isHomeGoalLine ? 10 : 90, 50);
@@ -863,6 +1038,7 @@ class GameEngine {
         this.state = 'STOPPED';
         this.stateTimer = 1.0;
         this.isShot = false;
+        this.isLoftedPass = false;
         this.offsidePlayersOnPass.clear();
         
         let scorer = 'Unknown Player';

@@ -83,8 +83,8 @@ export const FORMATIONS: Record<Formation, { position: string, x: number, y: num
   '4-2-3-1': [
     { position: 'GK', x: 5, y: 50 },
     { position: 'RB', x: 20, y: 85 },
-    { position: 'CB', x: 18, y: 56 },
-    { position: 'CB', x: 18, y: 44 },
+    { position: 'CB', x: 18, y: 64 },
+    { position: 'CB', x: 18, y: 42 },
     { position: 'LB', x: 20, y: 15 },
     { position: 'CDM', x: 35, y: 60 },
     { position: 'CM', x: 35, y: 40 },
