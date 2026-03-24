@@ -7,11 +7,12 @@ import confetti from 'canvas-confetti';
 interface SeasonRecapModalProps {
     isOpen: boolean;
     onClose: () => void;
+    onReviewSeason: () => void;
     summary: SeasonSummary | null;
     team: Team;
 }
 
-const SeasonRecapModal: React.FC<SeasonRecapModalProps> = ({ isOpen, onClose, summary, team }) => {
+const SeasonRecapModal: React.FC<SeasonRecapModalProps> = ({ isOpen, onClose, onReviewSeason, summary, team }) => {
     if (!isOpen || !summary) return null;
 
     const isChampion = summary.position === 1;
@@ -160,12 +161,18 @@ const SeasonRecapModal: React.FC<SeasonRecapModalProps> = ({ isOpen, onClose, su
                 </div>
 
                 {/* Footer */}
-                <div className="p-6 bg-slate-900 border-t border-slate-800 flex justify-end">
+                <div className="p-4 sm:p-6 bg-slate-900 border-t border-slate-800 flex flex-wrap justify-end gap-3 sm:gap-4">
                     <button
                         onClick={onClose}
-                        className="px-8 py-4 bg-white text-slate-900 font-bold rounded-xl hover:bg-slate-200 transition-colors shadow-lg active:scale-95 text-lg"
+                        className="px-6 py-3 bg-white text-slate-900 font-bold rounded-xl hover:bg-slate-200 transition-colors shadow-lg active:scale-95 text-base"
                     >
                         Continue to Off-Season
+                    </button>
+                    <button
+                        onClick={onReviewSeason}
+                        className="px-6 py-3 bg-slate-800 border border-slate-600 text-white font-bold rounded-xl hover:bg-slate-700 transition-colors active:scale-95 text-base"
+                    >
+                        Review Season
                     </button>
                 </div>
             </div>

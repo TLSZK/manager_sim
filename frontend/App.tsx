@@ -80,8 +80,8 @@ const App: React.FC = () => {
         if (isAuthenticated && !showForceLogoutModal) {
             interval = setInterval(() => {
                 // Silently poll the backend. If token is invalid, api.ts fires 'session-expired'.
-                fetchCurrentUser().catch(() => {});
-            }, 10000); 
+                fetchCurrentUser().catch(() => { });
+            }, 10000);
         }
 
         return () => {
@@ -94,7 +94,7 @@ const App: React.FC = () => {
         setShowForceLogoutModal(false);
         localStorage.clear();
         sessionStorage.clear();
-        window.location.reload(); 
+        window.location.reload();
     };
 
     useEffect(() => {
@@ -508,7 +508,7 @@ const App: React.FC = () => {
         if (!userTeamId) return undefined;
         const upcomingMatches = schedule.filter(m => m.week > currentWeek && !m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId));
         if (upcomingMatches.length === 0) return undefined;
-        
+
         // Sort explicitly by week to guarantee the absolute next match is returned regardless of array insertion order
         return upcomingMatches.sort((a, b) => a.week - b.week)[0];
     }, [schedule, currentWeek, userTeamId]);
@@ -549,7 +549,7 @@ const App: React.FC = () => {
                     <p className="text-slate-400 mb-8 text-sm leading-relaxed">
                         Someone may have logged into your account from another location.
                     </p>
-                    <button 
+                    <button
                         onClick={handleAcknowledgeLogout}
                         className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-4 rounded-xl shadow-lg hover:shadow-red-500/20 transition-all duration-200 active:scale-95 outline-none focus:outline-none focus:ring-0"
                     >
@@ -754,6 +754,7 @@ const App: React.FC = () => {
                         setIsRecapOpen(false);
                         setIsContractModalOpen(true);
                     }}
+                    onReviewSeason={() => setIsRecapOpen(false)}
                     summary={seasonSummary}
                     team={teams.find(t => t.id === userTeamId)!}
                 />
@@ -899,10 +900,18 @@ const App: React.FC = () => {
                             </div>
 
                             {simState === 'season_over' ? (
-                                <div className="flex flex-col items-center justify-center p-4 sm:p-6 text-center">
-                                    <Trophy size={48} className="text-yellow-500 mb-4" />
-                                    <h3 className="text-white font-bold text-lg sm:text-xl mb-2">Season Completed</h3>
-                                    <p className="text-slate-400 text-xs sm:text-sm">Please finalize your contract options in the pop-up.</p>
+                                <div className="flex flex-col gap-4 mb-6">
+                                    <div className="p-4 sm:p-6 bg-slate-900/60 rounded-lg border border-slate-700/80 backdrop-blur-sm shadow-inner flex flex-col items-center text-center">
+                                        <Trophy size={48} className="text-yellow-500 mb-4" />
+                                        <h3 className="text-white font-bold text-lg sm:text-xl mb-2">Season Completed</h3>
+                                        <p className="text-slate-400 text-xs sm:text-sm">Review your final standings and statistics.</p>
+                                    </div>
+                                    <button
+                                        onClick={() => setIsContractModalOpen(true)}
+                                        className="w-full flex items-center justify-center gap-2 bg-white hover:bg-slate-200 hover:-translate-y-0.5 text-slate-900 font-bold py-3 sm:py-4 px-4 rounded-xl transition-all duration-200 shadow-lg active:scale-95 text-sm sm:text-base outline-none focus:outline-none focus:ring-0"
+                                    >
+                                        Continue to Off-Season <ArrowRight size={18} />
+                                    </button>
                                 </div>
                             ) : simState === 'match_recap' && lastSimMatch && lastSimHome && lastSimAway ? (
                                 <div className="flex flex-col gap-4 mb-6">
