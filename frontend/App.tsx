@@ -407,20 +407,28 @@ const App: React.FC = () => {
                 }
             });
 
-            if (userPos === 1 || wonUCL) {
-                confetti({ particleCount: 200, spread: 70, origin: { y: 0.6 } });
+            // FIX: Check if we have already recorded this season in the manager's history
+            const alreadyRecorded = activeProfile.history.some(h => h.seasonYear === currentSeasonYear);
+
+            if (!alreadyRecorded) {
+                if (userPos === 1 || wonUCL) {
+                    confetti({ particleCount: 200, spread: 70, origin: { y: 0.6 } });
+                }
+
+                const newRecord = await saveSeasonResult(activeProfile.id, {
+                    seasonYear: currentSeasonYear, teamId: userTeam.id, teamName: userTeam.name,
+                    position: userPos, points: userTeam.stats.points,
+                    wonLiga: userPos === 1, wonUcl: wonUCL,
+                    wins, draws, losses, biggestWin: biggestWinStr, biggestLoss: biggestLossStr
+                });
+
+                setActiveProfile(prev => prev ? ({ ...prev, history: [newRecord, ...prev.history] }) : null);
+                setSeasonSummary({ position: userPos, points: userTeam.stats.points, wonLeague: userPos === 1, uclResult: uclResultString, message: "Season concluded." });
+                setIsRecapOpen(true);
+            } else {
+                // If it was already recorded, just silently update the local state to match without saving duplicates or opening the recap modal again
+                setSeasonSummary({ position: userPos, points: userTeam.stats.points, wonLeague: userPos === 1, uclResult: uclResultString, message: "Season concluded." });
             }
-
-            const newRecord = await saveSeasonResult(activeProfile.id, {
-                seasonYear: currentSeasonYear, teamId: userTeam.id, teamName: userTeam.name,
-                position: userPos, points: userTeam.stats.points,
-                wonLiga: userPos === 1, wonUcl: wonUCL,
-                wins, draws, losses, biggestWin: biggestWinStr, biggestLoss: biggestLossStr
-            });
-
-            setActiveProfile(prev => prev ? ({ ...prev, history: [newRecord, ...prev.history] }) : null);
-            setSeasonSummary({ position: userPos, points: userTeam.stats.points, wonLeague: userPos === 1, uclResult: uclResultString, message: "Season concluded." });
-            setIsRecapOpen(true);
         } catch (error) {
             alert("Failed to save season data.");
             setSimState('ready');
