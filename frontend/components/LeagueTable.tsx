@@ -22,11 +22,14 @@ const getLegColor = (score1: number | '-', score2: number | '-') => {
 
 const KnockoutBracket = ({ schedule, teams, userTeamId }: { schedule: Match[], teams: Team[], userTeamId: string }) => {
     const stages = ['Playoffs', 'Round of 16', 'Quarter-finals', 'Semi-finals', 'Final'];
+    // Safely filter out any stages that haven't been generated yet so lines don't draw into empty space
+    const visibleStages = stages.filter(s => schedule.some(m => m.stage === s));
 
     return (
         <div className="w-full h-full bg-[#0f172a] overflow-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-700 [&::-webkit-scrollbar-thumb]:rounded-full">
-            <div className="flex h-[800px] min-w-max p-4 md:p-8 gap-8 md:gap-12 select-none relative">
-                {stages.map((stageName, colIdx) => {
+            {/* Increased height to comfortably fit all 8 cards per column, added items-stretch */}
+            <div className="flex h-[1100px] md:h-[1200px] min-w-max p-4 md:p-8 gap-8 md:gap-12 select-none relative items-stretch">
+                {visibleStages.map((stageName, colIdx) => {
                     const stageMatches = schedule.filter(m => m.stage === stageName);
                     if (stageMatches.length === 0) return null;
 
@@ -45,7 +48,7 @@ const KnockoutBracket = ({ schedule, teams, userTeamId }: { schedule: Match[], t
                     });
 
                     return (
-                        <div key={stageName} className="flex flex-col h-full w-[240px] md:w-[280px] shrink-0 relative z-10 justify-around">
+                        <div key={stageName} className="flex flex-col h-full w-[240px] md:w-[280px] shrink-0 relative z-10">
                             {sortedPairs.map((pair, idx) => {
                                 const l1 = pair.find(m => !m.isLeg2);
                                 const l2 = pair.find(m => m.isLeg2);
@@ -80,8 +83,9 @@ const KnockoutBracket = ({ schedule, teams, userTeamId }: { schedule: Match[], t
                                     }
                                 }
 
+                                // Replaced flex-1 with strict mathematical height injection to bypass flex-collapse bugs
                                 return (
-                                    <div key={idx} className="flex-1 flex flex-col justify-center relative animate-in fade-in zoom-in-95 duration-500 fill-mode-both" style={{ animationDelay: `${(colIdx * 150) + (idx * 50)}ms` }}>
+                                    <div key={idx} className="flex flex-col justify-center relative animate-in fade-in zoom-in-95 duration-500 fill-mode-both" style={{ height: `${100 / sortedPairs.length}%`, animationDelay: `${(colIdx * 150) + (idx * 50)}ms` }}>
                                         <div className={`bg-[#1e293b] rounded-lg p-2 md:p-3 flex flex-col gap-2 md:gap-2.5 relative z-10 border ${isUserInvolved ? 'border-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.2)]' : 'border-slate-700/50'}`}>
                                             
                                             <div className="flex justify-between items-center border-b border-slate-700/50 pb-1.5 mb-0.5">
@@ -146,7 +150,8 @@ const KnockoutBracket = ({ schedule, teams, userTeamId }: { schedule: Match[], t
                                             </div>
                                         </div>
 
-                                        {stageName !== 'Final' && (
+                                        {/* Right Connectors */}
+                                        {colIdx < visibleStages.length - 1 && (
                                             <>
                                                 {stageName === 'Playoffs' ? (
                                                     <div className="absolute top-1/2 -right-4 md:-right-6 w-4 md:w-6 h-[2px] bg-[#334155] z-0 pointer-events-none -translate-y-1/2" />
@@ -159,6 +164,7 @@ const KnockoutBracket = ({ schedule, teams, userTeamId }: { schedule: Match[], t
                                                 )}
                                             </>
                                         )}
+                                        {/* Left Connectors */}
                                         {colIdx > 0 && (
                                             <div className="absolute top-1/2 -left-4 md:-left-6 w-4 md:w-6 h-[2px] bg-[#334155] z-0 pointer-events-none -translate-y-1/2" />
                                         )}
