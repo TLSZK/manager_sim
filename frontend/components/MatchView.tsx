@@ -18,12 +18,15 @@ export interface MatchStats {
 }
 
 const HALF_DURATION_REAL_SEC = 30.0;
-const MAX_SPEED = 75.0;
-const MAX_FORCE = 300.0;
-const FRICTION = 0.92;
-const BALL_FRICTION = 0.985;
-const PASS_SPEED = 180.0;
-const SHOOT_SPEED = 210.0;
+// Speed constants calibrated for 30 s/half (90× time compression).
+// Real sprint: 10 m/s ≈ 8.57 coord-units/s. ×90 compression ÷ 12 watchability = ~64 units/s.
+const MAX_SPEED = 65.0;
+const MAX_FORCE = 280.0;
+const FRICTION = 0.90;
+const BALL_FRICTION = 0.982;
+// Pass speed: real kick ≈ 25–30 m/s ≈ 21.4 coord-units/s × 90 ÷ 12 ≈ 160
+const PASS_SPEED = 160.0;
+const SHOOT_SPEED = 190.0;
 
 // ── Position-specific rating components ─────────────────────────────────────
 // Derives realistic sub-skills from overall rating and position
@@ -114,6 +117,9 @@ class Agent extends GameEntity {
     skills: ReturnType<typeof getSkillComponents>;
     // Stamina: starts at 1.0, degrades towards 0.6 by minute 90
     stamina: number = 1.0;
+    // Off-ball run state
+    runTarget: Vector | null = null;
+    runTimer: number = 0;
 
     constructor(p: Player, teamId: string, role: string, isHome: boolean, bx: number, by: number, effectiveRating: number) {
         super(bx, by);
@@ -182,6 +188,7 @@ class GameEngine {
 
     private cooldown = 0;
     private stateTimer = 0;
+    private gkHoldTime = 0;
     private lastToucher: Agent | null = null;
     // Momentum: shifts between -1 (away dominating) and +1 (home dominating)
     private momentum = 0;
@@ -239,8 +246,8 @@ class GameEngine {
         if (isHome) this.homeTeam = newTeam; else this.awayTeam = newTeam;
         const formation = FORMATIONS[newTeam.formation || '4-3-3'];
         const onField = [...(newTeam.roster ?? [])].filter(p => !p.offField);
+        const usedSlots = new Set<number>();
         const newAgents = onField.map(p => {
-            const usedSlots = new Set<number>();
             let slotIndex = formation.findIndex((f, idx) => f.position === p.position && !usedSlots.has(idx));
             if (slotIndex === -1) slotIndex = formation.findIndex((_, idx) => !usedSlots.has(idx));
             if (slotIndex === -1) slotIndex = 0;
@@ -344,13 +351,20 @@ class GameEngine {
     }
 
     private getOffsideLine(attackingTeamId: string, attackingRight: boolean): number {
+        // The offside line is the position of the second-to-last opponent —
+        // i.e. the last OUTFIELD defender (the GK being the last one).
+        // "Second-to-last from their own goal" means:
+        //   attacking right → own goal is high-x → sort DESCENDING, take [1]
+        //   attacking left  → own goal is low-x  → sort ASCENDING,  take [1]
         const defenders = this.players.filter(p => p.teamId !== attackingTeamId);
         if (attackingRight) {
-            defenders.sort((a, b) => b.pos.x - a.pos.x);
-            return Math.max(50, this.ball.pos.x, defenders[1]?.pos.x ?? 95);
+            defenders.sort((a, b) => b.pos.x - a.pos.x);          // highest x first
+            const line = defenders[1]?.pos.x ?? 95;                // second-deepest defender
+            return Math.max(50, this.ball.pos.x, line);            // can't be offside in own half or behind ball
         } else {
-            defenders.sort((a, b) => a.pos.x - b.pos.x);
-            return Math.min(50, this.ball.pos.x, defenders[1]?.pos.x ?? 5);
+            defenders.sort((a, b) => a.pos.x - b.pos.x);          // lowest x first
+            const line = defenders[1]?.pos.x ?? 5;
+            return Math.min(50, this.ball.pos.x, line);
         }
     }
 
@@ -367,8 +381,8 @@ class GameEngine {
 
         const oppGoalX = from.isHome ? (this.period === 1 ? 95 : 5) : (this.period === 1 ? 5 : 95);
 
-        // Goal opening: y 42–58 (16% of pitch)
-        const GOAL_TOP = 42, GOAL_BOT = 58, GOAL_MID = 50;
+        // Goal opening: y 44.6–55.4 (7.32 m on a 68 m pitch ≈ 10.8 %)
+        const GOAL_TOP = 44.6, GOAL_BOT = 55.4, GOAL_MID = 50;
 
         // Distance from goal in "pitch units" (goal is at x=0 or x=100)
         const distToGoalX = Math.abs(from.pos.x - oppGoalX);
@@ -504,9 +518,17 @@ class GameEngine {
         if (this.state === 'STOPPED') {
             this.stateTimer -= dt;
             if (this.stateTimer <= 0 && this.ballOwner) {
-                const validMates = this.players.filter(m => m.teamId === this.ballOwner!.teamId && m !== this.ballOwner);
-                if (validMates.length > 0) {
-                    const mate = validMates[Math.floor(Math.random() * validMates.length)];
+                // Throw-ins limited to 28 units; goal kicks and other restarts unrestricted
+                const maxDist = this.isThrowInOrGoalKick && this.ballOwner.role !== 'GK' ? 28 : 100;
+                const validMates = this.players.filter(m =>
+                    m.teamId === this.ballOwner!.teamId &&
+                    m !== this.ballOwner &&
+                    Vector.dist(m.pos, this.ballOwner!.pos) < maxDist
+                );
+                const fallback = this.players.filter(m => m.teamId === this.ballOwner!.teamId && m !== this.ballOwner);
+                const targets = validMates.length > 0 ? validMates : fallback;
+                if (targets.length > 0) {
+                    const mate = targets[Math.floor(Math.random() * targets.length)];
                     this.pass(this.ballOwner, mate);
                 }
                 this.state = 'PLAYING';
@@ -563,7 +585,7 @@ class GameEngine {
             if (p.role === 'GK') {
                 // GK: stay on goal line but track ball laterally, use positioning skill
                 const gkLineX = attackingRight ? 6 : 94;
-                const gkTargetY = Math.max(38, Math.min(62, ballPos.y));
+                const gkTargetY = Math.max(44, Math.min(56, ballPos.y));
                 // GK comes off line slightly when ball is close
                 const distBall = Vector.dist(p.pos, ballPos);
                 const lineX = distBall < 30 ? (attackingRight ? gkLineX + 4 : gkLineX - 4) : gkLineX;
@@ -571,6 +593,7 @@ class GameEngine {
 
                 // GK distributes when has ball
                 if (this.ballOwner === p && this.cooldown <= 0) {
+                    this.gkHoldTime += dt;
                     const openMates = this.players.filter(m =>
                         m.teamId === p.teamId && m !== p &&
                         this.isPassLaneOpen(p.pos, m.pos, p.teamId)
@@ -581,7 +604,17 @@ class GameEngine {
                     });
                     if (openMates.length > 0 && Math.random() < 2.5 * dt) {
                         this.pass(p, openMates[0]);
+                        this.gkHoldTime = 0;
+                    } else if (this.gkHoldTime > 3.0) {
+                        // No open lane for 3+ seconds – punt to any teammate
+                        const anyMate = this.players.filter(m => m.teamId === p.teamId && m !== p);
+                        if (anyMate.length > 0) {
+                            this.pass(p, anyMate[Math.floor(Math.random() * anyMate.length)]);
+                            this.gkHoldTime = 0;
+                        }
                     }
+                } else if (this.ballOwner !== p) {
+                    this.gkHoldTime = 0;
                 }
             } else {
                 let baseX = this.period === 2 ? 100 - p.basePos.x : p.basePos.x;
@@ -606,21 +639,35 @@ class GameEngine {
                         target.y = baseY + (ballPos.y - 50) * 0.2;
                     }
 
-                    // Offside awareness – respect the line
+                    // Offside awareness – only restrict movement when the line is
+                    // actually inside the opponent's half (> 52 / < 48).
+                    // This prevents players being blocked at the halfway line.
                     if (attackingRight) {
-                        target.x = Math.min(target.x, offsideLine - 2);
+                        if (offsideLine > 52) target.x = Math.min(target.x, offsideLine - 2);
                         if (p.pos.x > offsideLine) force.add(p.arrive(new Vector(offsideLine - 3, p.pos.y), 1.8));
                     } else {
-                        target.x = Math.max(target.x, offsideLine + 2);
+                        if (offsideLine < 48) target.x = Math.max(target.x, offsideLine + 2);
                         if (p.pos.x < offsideLine) force.add(p.arrive(new Vector(offsideLine + 3, p.pos.y), 1.8));
                     }
                 } else {
-                    // Defend: drop back based on role; CDM/CB hold shape, FWD press high
-                    const dropFactor = roleType === 'DEF' ? 0.25 : roleType === 'FWD' ? 0.08 : 0.45;
-                    if (attackingRight) target.x = Math.max(ownGoalX + 5, target.x - 10 * dropFactor);
-                    else target.x = Math.min(ownGoalX - 5, target.x + 10 * dropFactor);
+                    // Defend
+                    if (roleType === 'DEF') {
+                        // Hold a compact, high defensive line tracking ball depth.
+                        // Stay ~22 units behind the ball – prevents dropping to own box
+                        // and allows the offside trap to function.
+                        const lineDepth = 22;
+                        if (attackingRight) {
+                            target.x = Math.max(ownGoalX + 10, Math.min(48, ballPos.x - lineDepth));
+                        } else {
+                            target.x = Math.min(ownGoalX - 10, Math.max(52, ballPos.x + lineDepth));
+                        }
+                    } else {
+                        const dropFactor = roleType === 'FWD' ? 0.08 : 0.45;
+                        if (attackingRight) target.x = Math.max(ownGoalX + 5, target.x - 10 * dropFactor);
+                        else target.x = Math.min(ownGoalX - 5, target.x + 10 * dropFactor);
+                    }
                     target.y = baseY + (ballPos.y - 50) * (roleType === 'DEF' ? 0.55 : 0.25);
-                    // Clamp defenders from going too wide
+                    // Clamp central defenders to box width
                     if (roleType === 'DEF' && !isWide) {
                         const boxLine = attackingRight ? 26 : 74;
                         if (attackingRight && target.x < boxLine) target.x = boxLine;
@@ -651,8 +698,8 @@ class GameEngine {
                         const shootProb = p.skills.shootingN;
                         // Attempt shot?
                         const isAwfulAngle = distToGoalX < 25 && (p.pos.y < 28 || p.pos.y > 72);
-                        const topOpen = this.isShootingLaneOpen(p.pos, new Vector(oppGoalX, 42), p.teamId);
-                        const bottomOpen = this.isShootingLaneOpen(p.pos, new Vector(oppGoalX, 58), p.teamId);
+                        const topOpen = this.isShootingLaneOpen(p.pos, new Vector(oppGoalX, 45), p.teamId);
+                        const bottomOpen = this.isShootingLaneOpen(p.pos, new Vector(oppGoalX, 55), p.teamId);
                         const clearShot = topOpen || bottomOpen;
 
                         let shotTaken = false;
@@ -730,7 +777,28 @@ class GameEngine {
                         force.add(p.arrive(target, 1.0));
                     }
                 } else {
-                    force.add(p.arrive(target, 1.0));
+                    // Off-ball movement: decay run timer, occasionally trigger a run into space
+                    if (p.runTimer > 0) {
+                        p.runTimer -= dt;
+                        if (p.runTimer <= 0) p.runTarget = null;
+                    }
+                    if (!isDefending && roleType !== 'DEF' && !p.runTarget && Math.random() < 0.10 * dt) {
+                        const runDepth = attackingRight
+                            ? Math.min(oppGoalX - 5, ballPos.x + 8 + Math.random() * 22)
+                            : Math.max(oppGoalX + 5, ballPos.x - 8 - Math.random() * 22);
+                        p.runTarget = new Vector(
+                            Math.max(10, Math.min(90, runDepth)),
+                            20 + Math.random() * 60
+                        );
+                        p.runTimer = 1.8 + Math.random() * 2.0;
+                    }
+                    const moveTarget = (!isDefending && p.runTarget) ? p.runTarget.clone() : target.clone();
+                    // Respect offside line on runs — only in opponent's half
+                    if (!isDefending) {
+                        if (attackingRight && offsideLine > 52) moveTarget.x = Math.min(moveTarget.x, offsideLine - 2);
+                        else if (!attackingRight && offsideLine < 48) moveTarget.x = Math.max(moveTarget.x, offsideLine + 2);
+                    }
+                    force.add(p.arrive(moveTarget, 1.0));
                 }
             }
 
@@ -958,8 +1026,8 @@ class GameEngine {
 
     private checkBoundaries() {
         const { x, y } = this.ball.pos;
-        // Goal mouth check: y 40–60, x past the line
-        if (y > 40 && y < 60) {
+        // Goal mouth check: y 44.6–55.4 (accurate goal width), x past the line
+        if (y > 44.6 && y < 55.4) {
             if (x < 5) { this.scoreGoal(this.period === 1 ? false : true); return; }
             if (x > 95) { this.scoreGoal(this.period === 1 ? true : false); return; }
         }
@@ -974,18 +1042,46 @@ class GameEngine {
             this.isThrowInOrGoalKick = true;
             this.offsidePlayersOnPass.clear();
             if (y < 0 || y > 100) {
+                // Throw-in: ball stays on the touchline where it left
                 this.ball.pos.y = y < 0 ? 0.5 : 99.5;
+                this.ball.vel = new Vector(0, 0);
+                const throwTeamId = this.lastToucher?.teamId === this.homeTeam.id ? this.awayTeam.id : this.homeTeam.id;
+                const nearest = this.players
+                    .filter(p => p.teamId === throwTeamId && p.role !== 'GK')
+                    .sort((a, b) => Vector.dist(a.pos, this.ball.pos) - Vector.dist(b.pos, this.ball.pos))[0];
+                if (nearest) { nearest.pos = this.ball.pos.clone(); this.ballOwner = nearest; }
             } else {
-                const isHomeGoalLine = this.period === 1 ? x < 50 : x > 50;
-                this.ball.pos = new Vector(isHomeGoalLine ? 10 : 90, 50);
-                this.events.unshift(`${Math.floor(this.minute)}' Goal Kick`);
+                // Ball over goal line (but not in goal) – corner or goal kick
+                const homeAttacksRight = this.period === 1;
+                const isLeftGoalLine = x < 50; // x<50 is left side of pitch
+                // Which team defends this goal line?
+                const defendingTeamId = (homeAttacksRight === isLeftGoalLine)
+                    ? this.awayTeam.id   // left line in p1 = away goal
+                    : this.homeTeam.id;
+                const attackingTeamId = defendingTeamId === this.homeTeam.id ? this.awayTeam.id : this.homeTeam.id;
+                const lastTouchWasAttacking = this.lastToucher?.teamId === attackingTeamId;
+                this.ball.vel = new Vector(0, 0);
+
+                if (lastTouchWasAttacking) {
+                    // CORNER KICK – ball placed at the nearest corner flag
+                    const cornerX = x < 5 ? 5.5 : 94.5;
+                    const cornerY = y < 50 ? 0.5 : 99.5;
+                    this.ball.pos = new Vector(cornerX, cornerY);
+                    this.isSetPiece = true;
+                    this.events.unshift(`${Math.floor(this.minute)}' Corner`);
+                    const taker = this.players
+                        .filter(p => p.teamId === attackingTeamId && p.role !== 'GK')
+                        .sort((a, b) => Vector.dist(a.pos, this.ball.pos) - Vector.dist(b.pos, this.ball.pos))[0];
+                    if (taker) { taker.pos = this.ball.pos.clone(); this.ballOwner = taker; }
+                } else {
+                    // GOAL KICK – GK restarts from 6-yard box
+                    const gkX = x < 50 ? 9 : 91;
+                    this.ball.pos = new Vector(gkX, 50);
+                    this.events.unshift(`${Math.floor(this.minute)}' Goal Kick`);
+                    const gk = this.players.find(p => p.teamId === defendingTeamId && p.role === 'GK');
+                    if (gk) { gk.pos = this.ball.pos.clone(); this.ballOwner = gk; }
+                }
             }
-            this.ball.vel = new Vector(0, 0);
-            const teamId = this.lastToucher?.teamId === this.homeTeam.id ? this.awayTeam.id : this.homeTeam.id;
-            const nearest = this.players
-                .filter(p => p.teamId === teamId && p.role !== 'GK')
-                .sort((a, b) => Vector.dist(a.pos, this.ball.pos) - Vector.dist(b.pos, this.ball.pos))[0];
-            if (nearest) { nearest.pos = this.ball.pos.clone(); this.ballOwner = nearest; }
         }
     }
 
@@ -1122,58 +1218,104 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
             ctx.fillRect(i * 10 * sx, 0, 10 * sx, cvs.height);
         }
 
-        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(5 * sx, 0, 90 * sx, cvs.height);
-        ctx.beginPath(); ctx.moveTo(cvs.width / 2, 0); ctx.lineTo(cvs.width / 2, cvs.height); ctx.stroke();
-        ctx.beginPath(); ctx.arc(cvs.width / 2, cvs.height / 2, 9 * sx, 0, Math.PI * 2); ctx.stroke();
-        ctx.strokeRect(5 * sx, 20 * sy, 15 * sx, 60 * sy);
-        ctx.strokeRect(80 * sx, 20 * sy, 15 * sx, 60 * sy);
-        ctx.strokeRect(5 * sx, 32 * sy, 6 * sx, 36 * sy);
-        ctx.strokeRect(89 * sx, 32 * sy, 6 * sx, 36 * sy);
+        // ── Real pitch markings (105 m × 68 m) ──────────────────────────────
+        // Coordinate space: x 0–100 (pitch x=5–95), y 0–100
+        // 1 x-unit = 105/90 = 1.167 m | 1 y-unit = 68/100 = 0.68 m
+        //
+        // Penalty area: 16.5 m deep → 16.5/1.167 = 14.1 x-units from goal line (x=5)
+        //               40.32 m wide → 40.32/0.68 = 59.3 y-units → y 20.35–79.65
+        // 6-yard box:   5.5 m deep  → 5.5/1.167  =  4.7 x-units
+        //               18.32 m wide→ 18.32/0.68 = 26.9 y-units → y 36.55–63.45
+        // Centre circle:9.15 m r    → x: 9.15/1.167=7.84 units | y: 9.15/0.68=13.45 units
+        // Goal:         7.32 m wide → 7.32/0.68 = 10.76 y-units → y 44.6–55.4
 
-        // Goal nets
-        ctx.fillStyle = 'rgba(255,255,255,0.5)';
-        ctx.fillRect(0, 40 * sy, 5 * sx, 20 * sy);
-        ctx.fillRect(95 * sx, 40 * sy, 5 * sx, 20 * sy);
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(0, 40 * sy, 5 * sx, 20 * sy);
-        ctx.strokeRect(95 * sx, 40 * sy, 5 * sx, 20 * sy);
+        const W = cvs.width, H = cvs.height;
+
+        ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+        ctx.lineWidth = 1.5;
+        // Pitch outline
+        ctx.strokeRect(5 * sx, 0, 90 * sx, H);
+        // Halfway line
+        ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke();
+        // Centre circle (ellipse to preserve real-world proportions)
+        ctx.beginPath();
+        ctx.ellipse(W / 2, H / 2, 7.84 * sx, 13.45 * sy, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        // Centre spot
+        ctx.fillStyle = 'rgba(255,255,255,0.75)';
+        ctx.beginPath(); ctx.arc(W / 2, H / 2, 2, 0, Math.PI * 2); ctx.fill();
+        // Penalty areas
+        ctx.strokeRect(5 * sx,  20.35 * sy, 14.1 * sx, 59.3 * sy);
+        ctx.strokeRect((95 - 14.1) * sx, 20.35 * sy, 14.1 * sx, 59.3 * sy);
+        // 6-yard boxes
+        ctx.strokeRect(5 * sx, 36.55 * sy, 4.7 * sx, 26.9 * sy);
+        ctx.strokeRect((95 - 4.7) * sx, 36.55 * sy, 4.7 * sx, 26.9 * sy);
+        // Penalty spots (11 m from goal line = 11/1.167 = 9.42 x-units)
+        const pSpot = 9.42;
+        [5 + pSpot, 95 - pSpot].forEach(px => {
+            ctx.beginPath(); ctx.arc(px * sx, H / 2, 2, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.fill();
+        });
+        // Penalty arcs (9.15 m from penalty spot, outside the box)
+        ctx.beginPath();
+        ctx.ellipse((5 + pSpot) * sx, H / 2, 7.84 * sx, 13.45 * sy, 0, -0.93, 0.93);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.ellipse((95 - pSpot) * sx, H / 2, 7.84 * sx, 13.45 * sy, 0, Math.PI - 0.93, Math.PI + 0.93);
+        ctx.stroke();
+        // Corner arcs (1 m radius ≈ 0.86 x-units / 1.47 y-units)
+        [[5, 0], [95, 0], [5, 100], [95, 100]].forEach(([cx, cy]) => {
+            const startA = (cx < 50 ? 0 : Math.PI) + (cy < 50 ? -Math.PI / 2 : Math.PI / 2);
+            ctx.beginPath();
+            ctx.ellipse(cx * sx, cy * sy, 0.86 * sx, 1.47 * sy, 0, startA, startA + Math.PI / 2);
+            ctx.stroke();
+        });
+
+        // Goal nets (y 44.6–55.4, x 0–5 and 95–100)
+        const GNET_Y = 44.6 * sy, GNET_H = 10.8 * sy;
+        ctx.fillStyle = 'rgba(255,255,255,0.45)';
+        ctx.fillRect(0, GNET_Y, 5 * sx, GNET_H);
+        ctx.fillRect(95 * sx, GNET_Y, 5 * sx, GNET_H);
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(0, GNET_Y, 5 * sx, GNET_H);
+        ctx.strokeRect(95 * sx, GNET_Y, 5 * sx, GNET_H);
 
         // Players
+        // Real player footprint ≈ 0.5 m = 0.5/1.167 ≈ 0.43 x-units.
+        // Use 0.7 * sx (~7 px at 1000 px canvas) for visibility.
+        const pr = 0.7 * sx;
         game.players.forEach(p => {
             const x = p.pos.x * sx, y = p.pos.y * sy;
-            const r = 1.8 * sx;
 
-            // Stamina indicator: subtle ring opacity
-            const staminaAlpha = 0.3 + p.stamina * 0.7;
+            // Stamina tint
+            const staminaAlpha = 0.35 + p.stamina * 0.65;
             ctx.globalAlpha = staminaAlpha;
             ctx.fillStyle = p.isHome ? homeTeam.primaryColor : awayTeam.primaryColor;
-            ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(x, y, pr, 0, Math.PI * 2); ctx.fill();
             ctx.strokeStyle = p.isHome ? homeTeam.secondaryColor : awayTeam.secondaryColor;
-            ctx.lineWidth = 1.5; ctx.stroke();
+            ctx.lineWidth = 1.2; ctx.stroke();
             ctx.globalAlpha = 1.0;
 
-            // Ball carrier highlight
+            // Ball-carrier highlight ring
             if (game.ballOwner === p) {
                 ctx.strokeStyle = '#FBBF24';
-                ctx.lineWidth = 2.5;
-                ctx.beginPath(); ctx.arc(x, y, r + 1.5, 0, Math.PI * 2); ctx.stroke();
+                ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.arc(x, y, pr + 2.5, 0, Math.PI * 2); ctx.stroke();
             }
 
             ctx.fillStyle = p.isHome ? homeTeam.secondaryColor : awayTeam.secondaryColor;
-            ctx.font = 'bold 14px system-ui';
+            ctx.font = `bold ${Math.round(pr * 1.3)}px system-ui`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(p.number.toString(), x, y);
         });
 
-        // Ball
+        // Ball – real ball diameter ≈ 0.22 m = 0.19 x-units; use 0.38*sx for visibility
         const bx = game.ball.pos.x * sx, by = game.ball.pos.y * sy;
         ctx.fillStyle = '#ffffff';
-        ctx.beginPath(); ctx.arc(bx, by, 1.4 * sx, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = '#000000'; ctx.lineWidth = 0.8; ctx.stroke();
+        ctx.beginPath(); ctx.arc(bx, by, 0.38 * sx, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#333333'; ctx.lineWidth = 0.7; ctx.stroke();
     }, [homeTeam, awayTeam]);
 
     useEffect(() => {
@@ -1232,7 +1374,7 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
             <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-w-0">
                 {/* Canvas */}
                 <div className="w-full lg:flex-1 p-2 md:p-6 flex items-center justify-center relative min-h-[40vh] lg:min-h-0 shrink-0 lg:border-r border-slate-800/50">
-                    <canvas ref={canvasRef} width={1000} height={600} className="max-w-full max-h-full aspect-[5/3] bg-[#166534] rounded-lg md:rounded-2xl shadow-2xl border-2 md:border-4 border-slate-800" />
+                    <canvas ref={canvasRef} width={1000} height={583} className="max-w-full max-h-full aspect-[1000/583] bg-[#166534] rounded-lg md:rounded-2xl shadow-2xl border-2 md:border-4 border-slate-800" />
 
                     {isHalftime && !showTacticsModal && (
                         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex flex-col items-center justify-center z-30 rounded-lg md:rounded-2xl">
