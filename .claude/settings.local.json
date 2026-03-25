@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(find /c/laragon/www/manager_sim1/backend/app/Models -type f -name *.php)",
+      "Bash(find /c/laragon/www/manager_sim1/backend/app -type f -name *.php)",
+      "Bash(xargs grep:*)",
+      "Bash(grep -r \"match\\\\|Match\\\\|game\\\\|Game\" /c/laragon/www/manager_sim1/frontend/*.tsx)",
+      "Bash(grep -n \"interface\\\\|type\\\\|export\" /c/laragon/www/manager_sim1/backend/app/Models/*.php)",
+      "Bash(npx vite:*)"
+    ]
+  }
+}
