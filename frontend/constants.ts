@@ -1,4 +1,4 @@
-import { Team, Formation, Match } from './types';
+import { Team, Formation, Match, Player } from './types';
 
 export const LIGA_LOGO_URL = "https://images.fotmob.com/image_resources/logo/leaguelogo/87.png";
 export const UCL_LOGO_URL = "https://images.fotmob.com/image_resources/logo/leaguelogo/42.png";
@@ -59,6 +59,55 @@ export const getPenalizedRating = (playerRating: number, playerPos: string, slot
   if (fit === 'good') return playerRating;
   if (fit === 'okay') return Math.max(1, playerRating - 5);
   return Math.max(1, playerRating - 15);
+};
+
+/**
+ * Shared roster alignment utility.
+ * Reorders on-field players so that roster index i corresponds to formation slot i,
+ * minimising out-of-position penalties.  Bench players are appended after starters.
+ *
+ * This MUST be used by every system that maps roster → formation:
+ *   • App.tsx (on load / season transition)
+ *   • SquadManagement.tsx (on open)
+ *   • GameEngine.initPlayers (live sim)  — uses index-based mapping
+ *   • getTeamStrength (quick sim)         — uses index-based mapping
+ */
+export const alignRoster = (currentRoster: Player[], formation: Formation): Player[] => {
+    const onField = currentRoster.filter(p => !p.offField);
+    const bench = currentRoster.filter(p => p.offField);
+    const formPositions = FORMATIONS[formation] || FORMATIONS['4-3-3'];
+
+    const sortedStarters: Player[] = [];
+    const pool = [...onField];
+
+    for (const posDef of formPositions) {
+        const expectedPos = posDef.position;
+
+        // 1. Exact position match
+        let matchIdx = pool.findIndex(p => p.position === expectedPos);
+
+        // 2. "good" compatibility (perfectlyCompatible positions, no rating penalty)
+        if (matchIdx === -1) {
+            matchIdx = pool.findIndex(p => getPositionFit(p.position, expectedPos) === 'good');
+        }
+
+        // 3. "okay" compatibility (minor rating penalty)
+        if (matchIdx === -1) {
+            matchIdx = pool.findIndex(p => getPositionFit(p.position, expectedPos) === 'okay');
+        }
+
+        // 4. Anyone left (respect GK constraint)
+        if (matchIdx === -1 && pool.length > 0) {
+            matchIdx = pool.findIndex(p => (p.position === 'GK') === (expectedPos === 'GK'));
+            if (matchIdx === -1) matchIdx = 0;
+        }
+
+        if (matchIdx !== -1) {
+            sortedStarters.push(pool.splice(matchIdx, 1)[0]);
+        }
+    }
+
+    return [...sortedStarters, ...pool, ...bench];
 };
 
 export const FORMATIONS: Record<Formation, { position: string, x: number, y: number }[]> = {

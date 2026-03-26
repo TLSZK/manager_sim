@@ -1,24 +1,26 @@
 import { Team, Match } from '../types';
-import { FORMATIONS, getPenalizedRating, getCompetitionWeeks } from '../constants';
+import { FORMATIONS, getPenalizedRating, getCompetitionWeeks, alignRoster } from '../constants';
 
+/**
+ * Calculate effective team strength from the pre-aligned roster.
+ * 
+ * IMPORTANT: This relies on the roster being pre-aligned via alignRoster()
+ * so that onField[i] corresponds to FORMATIONS[formation][i].
+ * App.tsx guarantees this by aligning all rosters at load time and after
+ * every roster mutation (squad management, season transition).
+ */
 export const getTeamStrength = (team: Team): number => {
     if (!team.roster || team.roster.length === 0) return team.strength;
     const onFieldPlayers = team.roster.filter(p => !p.offField);
     if (onFieldPlayers.length === 0) return team.strength;
 
     const formation = FORMATIONS[team.formation || '4-3-3'];
-    const usedSlots = new Set<number>();
 
-    return onFieldPlayers.reduce((sum, p) => {
-        // Try to find an exact position match first
-        let slotIndex = formation.findIndex((f, idx) => f.position === p.position && !usedSlots.has(idx));
-
-        // If no perfect match, just take the first available slot
-        if (slotIndex === -1) slotIndex = formation.findIndex((_, idx) => !usedSlots.has(idx));
-        if (slotIndex === -1) slotIndex = 0; // Fallback
-
-        usedSlots.add(slotIndex);
-        const slotPos = formation[slotIndex]?.position || 'MID';
+    return onFieldPlayers.reduce((sum, p, i) => {
+        // Index-based: roster has been pre-aligned so player at index i
+        // occupies formation slot i.  Fall back to player's native position
+        // if there are more starters than formation slots (shouldn't happen).
+        const slotPos = formation[i]?.position || p.position;
         return sum + getPenalizedRating(p.rating, p.position, slotPos);
     }, 0) / onFieldPlayers.length;
 };
@@ -27,16 +29,12 @@ export const calculateMatchResult = (match: Match, homeStr: number, awayStr: num
     let hStr = homeStr;
     let aStr = awayStr;
 
-    // Reduced the artificial home advantage boost to a minimal 1.5%
     if (match.stage !== 'Final') {
         hStr *= 1.015;
     }
 
     const strRatio = hStr / aStr;
 
-    // Equalized the base xG multiplier to 1.3 for both teams.
-    // Increased the exponent slightly (from 4.5 to 5.0) to make the simulation 
-    // punish weaker teams more aggressively and reward higher player ratings.
     let homeXG = 1.3 * Math.pow(strRatio, 5.0);
     let awayXG = 1.3 * Math.pow(1 / strRatio, 5.0);
 

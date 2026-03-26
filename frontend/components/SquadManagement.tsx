@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Team, Player, Formation } from '../types';
-import { FORMATIONS, getPositionFit, getPenalizedRating } from '../constants';
+import { FORMATIONS, getPositionFit, getPenalizedRating, alignRoster } from '../constants';
 import { ChevronLeft, Shirt, Users, ArrowRightLeft, AlertTriangle } from 'lucide-react';
 
 interface SquadManagementProps {
@@ -8,37 +8,6 @@ interface SquadManagementProps {
   onUpdateTeam: (updatedTeam: Team) => void;
   onBack: () => void;
 }
-
-// Helper: Smart aligner that only runs on initial load
-const alignRoster = (currentRoster: Player[], formation: Formation): Player[] => {
-    const onField = currentRoster.filter(p => !p.offField);
-    const bench = currentRoster.filter(p => p.offField);
-    const formPositions = FORMATIONS[formation] || FORMATIONS['4-3-3'];
-    
-    const sortedStarters: Player[] = [];
-    const pool = [...onField];
-    
-    for (const posDef of formPositions) {
-        const expectedPos = posDef.position;
-        
-        let matchIdx = pool.findIndex(p => p.position === expectedPos);
-        
-        if (matchIdx === -1) {
-            matchIdx = pool.findIndex(p => getPositionFit(p.position, expectedPos) === 'okay');
-        }
-        
-        if (matchIdx === -1 && pool.length > 0) {
-            matchIdx = pool.findIndex(p => (p.position === 'GK') === (expectedPos === 'GK'));
-            if (matchIdx === -1) matchIdx = 0; 
-        }
-
-        if (matchIdx !== -1) {
-            sortedStarters.push(pool.splice(matchIdx, 1)[0]);
-        }
-    }
-    
-    return [...sortedStarters, ...pool, ...bench];
-};
 
 const SquadManagement: React.FC<SquadManagementProps> = ({ team, onUpdateTeam, onBack }) => {
   const [selectedFormation, setSelectedFormation] = useState<Formation>(team.formation || '4-3-3');
@@ -79,7 +48,10 @@ const SquadManagement: React.FC<SquadManagementProps> = ({ team, onUpdateTeam, o
 
   const handleFormationChange = (fmt: Formation) => {
     setSelectedFormation(fmt);
-    onUpdateTeam({ ...team, formation: fmt });
+    // Re-align roster to the new formation so players are optimally placed
+    const aligned = alignRoster(roster, fmt);
+    setRoster(aligned);
+    onUpdateTeam({ ...team, roster: aligned, formation: fmt });
   };
 
   const handlePlayerClick = (clickedPlayer: Player) => {
