@@ -341,8 +341,9 @@ export class GameEngine {
         this.aiAttacking(p, dt, force, atkRight, oppGoalX, ownGoalX, offLine);
       }
 
-      // Separation (teammates tighter, opponents looser)
-      const sepR = p.teamId === possTeam ? 10 : 6;
+      // Separation (attacking team needs wider spread; defending DEFs stay compact)
+      const isDefLine = isDefending && this.effectiveRoleType(p) === 'DEF';
+      const sepR = p.teamId === possTeam ? 10 : isDefLine ? 5 : 7;
       force.add(p.separate(this.players, sepR));
 
       p.applyForce(force);
@@ -450,7 +451,7 @@ export class GameEngine {
         const gkOffset = gk.pos.y - PITCH.CENTER_Y;
         targetY = PITCH.CENTER_Y - gkOffset * 0.4;
       }
-      force.add(p.seek(new Vec2(oppGoalX, targetY), 1.5));
+      force.add(p.seek(new Vec2(oppGoalX, targetY), 1.2 + p.attrs.dribbleSkill * 0.5));
       return;
     }
 
@@ -473,7 +474,7 @@ export class GameEngine {
     });
 
     if (clearCone && distGoalX < 40) {
-      force.add(p.seek(goalCenter, 1.45));
+      force.add(p.seek(goalCenter, 1.15 + p.attrs.dribbleSkill * 0.5));
       return;
     }
 
@@ -490,7 +491,9 @@ export class GameEngine {
       (atkRight ? d.pos.x > p.pos.x && d.pos.x < fwdX : d.pos.x < p.pos.x && d.pos.x > fwdX) &&
       Math.abs(d.pos.y - p.pos.y) < 14,
     );
-    const speed = underPressure ? 0.75 : clearPath ? 1.35 : 0.95;
+    // Rating emphasis: dribble speed scales with dribbleSkill
+    const dribSpeedMult = 0.7 + p.attrs.dribbleSkill * 0.6;
+    const speed = (underPressure ? 0.75 : clearPath ? 1.35 : 0.95) * dribSpeedMult;
     force.add(p.arrive(new Vec2(oppGoalX, driveY), speed));
   }
 
@@ -506,26 +509,119 @@ export class GameEngine {
     const ballPos = this.ball.pos;
 
     if (pressers[0] === p) {
-      // Primary presser
+      // Primary presser — approach from goal-side to cut off the attack
       p.state = PlayerState.Pressing;
-      const intensity = 1.0 + p.attrs.tackleSkill * 0.3;
+      const intensity = 1.15 + p.attrs.tackleSkill * 0.35;
+      // Approach slightly from goal-side so we don't overrun the attacker
+      const goalSideOffset = ownGoalX > 50 ? -3 : 3;
       force.add(p.arrive(new Vec2(
-        ballPos.x + (ownGoalX > 50 ? -3 : 3), ballPos.y,
+        ballPos.x + goalSideOffset, ballPos.y,
       ), intensity));
     } else if (pressers[1] === p) {
-      // Cover player — block passing lane
+      // Cover player — position between ball and own goal, slightly offset
+      // to cut the most dangerous passing lane (toward centre of goal)
       p.state = PlayerState.Covering;
-      const coverX = ballPos.x + (ownGoalX > 50 ? 14 : -14);
-      force.add(p.arrive(new Vec2(coverX, ballPos.y), 1.0));
+      const dirToGoal = ownGoalX > 50 ? 1 : -1;
+      const coverX = ballPos.x + dirToGoal * 10;
+      // Shift toward centre of pitch to block the inside channel
+      const coverY = ballPos.y + (PITCH.CENTER_Y - ballPos.y) * 0.3;
+      force.add(p.arrive(new Vec2(coverX, coverY), 1.2));
     } else {
-      // Positional defending
+      // Positional defending — with mark-tracking for defenders
       const target = this.getDefensiveTarget(p, atkRight, ownGoalX);
-      if (p.roleType === 'DEF' || Vec2.dist(p.pos, target) > 20) {
-        p.state = PlayerState.TrackingBack;
-        force.add(p.arrive(target, 1.1));
+      const ert = this.effectiveRoleType(p);
+
+      // ── PROXIMITY ENGAGEMENT: step up to close down if ball carrier is approaching ──
+      // Non-pressing defenders shouldn't just stand and watch the carrier run past
+      const distToBall = Vec2.dist(p.pos, ballPos);
+      const carrierApproaching = this.ballOwner && this.ballOwner.teamId !== p.teamId;
+      const inEngagementZone = distToBall < 14;
+      // Check if ball is heading toward this defender (carrier moving in our direction)
+      const carrierMovingToward = carrierApproaching && this.ballOwner &&
+        Vec2.dist(this.ballOwner.pos, p.pos) < Vec2.dist(
+          new Vec2(this.ballOwner.pos.x - this.ballOwner.vel.x * 0.02,
+                   this.ballOwner.pos.y - this.ballOwner.vel.y * 0.02),
+          p.pos);
+      // Also engage if an attacker without the ball is making a run past this defender
+      const runnerNearby = !carrierApproaching && this.players.some(a =>
+        a.teamId !== p.teamId && a.role !== Role.Goalkeeper &&
+        a.state === PlayerState.SeekingSpace &&
+        Vec2.dist(a.pos, p.pos) < 10,
+      );
+
+      if (inEngagementZone && (carrierMovingToward || runnerNearby)) {
+        // Step up to jockey the ball carrier — don't just stand at formation target
+        p.state = PlayerState.Pressing;
+        const jockeyIntensity = 0.9 + p.attrs.tackleSkill * 0.4;
+        // Position between ball and own goal, close to the ball
+        const goalDir = ownGoalX > 50 ? 1 : -1;
+        const jockeyX = ballPos.x + goalDir * 2.5;
+        const jockeyY = ballPos.y;
+        force.add(p.arrive(new Vec2(jockeyX, jockeyY), jockeyIntensity));
       } else {
-        p.state = PlayerState.Positioning;
-        force.add(p.arrive(target, 0.9));
+        // Normal positional defending
+
+        // Defenders track nearby attackers laterally (Y only) — never let marking pull X forward
+        if (ert === 'DEF') {
+          const nearbyAttackers = this.players.filter(a =>
+            a.teamId !== p.teamId && a.role !== Role.Goalkeeper &&
+            Vec2.dist(a.pos, p.pos) < 20 &&
+            a !== this.ballOwner, // don't mark the ball carrier (presser handles that)
+          );
+          if (nearbyAttackers.length > 0) {
+            const mark = nearbyAttackers.sort((a, b) =>
+              Vec2.dist(a.pos, p.pos) - Vec2.dist(b.pos, p.pos),
+            )[0];
+            // Only adjust Y — slide laterally to stay goal-side of the mark
+            const markY = mark.pos.y + (PITCH.CENTER_Y - mark.pos.y) * 0.15;
+            target.y = target.y * 0.45 + markY * 0.55;
+          }
+
+          // ── BACKLINE COHESION: CBs must be the deepest players in the line ──
+          const baseBy = this.period === 2 ? 100 - p.basePos.y : p.basePos.y;
+          const isCB = baseBy >= 35 && baseBy <= 65; // centre back (not fullback)
+
+          if (isCB) {
+            // Find all same-team fullbacks (wide DEFs) — CBs must never be ahead of them
+            const teammates = this.players.filter(t =>
+              t.teamId === p.teamId && t !== p && this.effectiveRoleType(t) === 'DEF',
+            );
+            for (const fb of teammates) {
+              const fbBy = this.period === 2 ? 100 - fb.basePos.y : fb.basePos.y;
+              const isFB = fbBy < 35 || fbBy > 65;
+              if (!isFB) continue;
+              if (atkRight) {
+                if (target.x > fb.pos.x) target.x = Math.min(target.x, fb.pos.x);
+              } else {
+                if (target.x < fb.pos.x) target.x = Math.max(target.x, fb.pos.x);
+              }
+            }
+          } else {
+            // Fullback — must not be deeper than the deepest CB
+            const cbMates = this.players.filter(t =>
+              t.teamId === p.teamId && t !== p && this.effectiveRoleType(t) === 'DEF',
+            );
+            for (const cb of cbMates) {
+              const cbBy = this.period === 2 ? 100 - cb.basePos.y : cb.basePos.y;
+              const isCBMate = cbBy >= 35 && cbBy <= 65;
+              if (!isCBMate) continue;
+              if (atkRight) {
+                target.x = Math.max(target.x, cb.pos.x - 4);
+              } else {
+                target.x = Math.min(target.x, cb.pos.x + 4);
+              }
+            }
+          }
+        }
+
+        if (ert === 'DEF' || Vec2.dist(p.pos, target) > 20) {
+          p.state = PlayerState.TrackingBack;
+          const urgency = Math.min(1.6, 1.3 + Vec2.dist(p.pos, target) * 0.005);
+          force.add(p.arrive(target, urgency));
+        } else {
+          p.state = PlayerState.Positioning;
+          force.add(p.arrive(target, 1.1));
+        }
       }
     }
   }
@@ -546,7 +642,7 @@ export class GameEngine {
 
     // ── FWD half-space exploitation ───────────────────────────────────
     // Attackers look for the channels between CBs and fullbacks
-    if (p.roleType === 'FWD' && !p.runTarget && Math.random() < 0.18 * dt) {
+    if (this.effectiveRoleType(p) === 'FWD' && !p.runTarget && Math.random() < 0.18 * dt) {
       // Half-space y-zones: between CB (~50) and fullbacks (~30 or ~70)
       const halfSpaces = [33, 67]; // left & right half-space channels
       const bestY = halfSpaces.reduce((best, hy) =>
@@ -572,7 +668,7 @@ export class GameEngine {
     }
 
     // ── General off-ball runs (MID & FWD) ────────────────────────────
-    if (p.roleType !== 'DEF' && !p.runTarget && Math.random() < 0.10 * dt) {
+    if (this.effectiveRoleType(p) !== 'DEF' && !p.runTarget && Math.random() < 0.10 * dt) {
       const depth = atkRight
         ? Math.min(oppGoalX - 5, this.ball.pos.x + 8 + Math.random() * 22)
         : Math.max(oppGoalX + 5, this.ball.pos.x - 8 - Math.random() * 22);
@@ -637,13 +733,14 @@ export class GameEngine {
     const isWide = by < 35 || by > 65;
 
     const push = 35 * (0.7 + p.attrs.positioning * 0.5);
-    const mult = p.roleType === 'DEF' ? 0.6 : p.roleType === 'FWD' ? 1.0 : 0.85;
+    const ert = this.effectiveRoleType(p);
+    const mult = ert === 'DEF' ? 0.6 : ert === 'FWD' ? 1.0 : 0.85;
 
     if (atkRight) bx = Math.min(oppGoalX - 5, bx + push * mult);
     else bx = Math.max(oppGoalX + 5, bx - push * mult);
 
     // Ball tracking
-    bx += (this.ball.pos.x - 50) * (p.roleType === 'FWD' ? 0.55 : 0.35);
+    bx += (this.ball.pos.x - 50) * (ert === 'FWD' ? 0.55 : 0.35);
     if (isWide) {
       by = by < 50 ? 14 : 86;
     } else {
@@ -657,23 +754,76 @@ export class GameEngine {
     let bx = this.period === 2 ? 100 - p.basePos.x : p.basePos.x;
     let by = this.period === 2 ? 100 - p.basePos.y : p.basePos.y;
     const isWide = by < 35 || by > 65;
+    const defRT = this.effectiveRoleType(p);
 
-    if (p.roleType === 'DEF') {
-      const depth = 22;
-      if (atkRight) bx = Math.max(ownGoalX + 10, Math.min(48, this.ball.pos.x - depth));
-      else bx = Math.min(ownGoalX - 10, Math.max(52, this.ball.pos.x + depth));
+    if (defRT === 'DEF') {
+      // ── DEFENSIVE LINE: compute a shared base line from ball position ──
+      // All defenders anchor to a line that retreats as the ball advances.
+      // Depth is measured from the ball toward own goal.
+      const depth = 24;
+      let lineX: number;
+      if (atkRight) {
+        // Attacking right → own goal is left, defenders sit to the left of the ball
+        lineX = Math.max(ownGoalX + 12, Math.min(46, this.ball.pos.x - depth));
+      } else {
+        // Attacking left → own goal is right, defenders sit to the right of the ball
+        lineX = Math.min(ownGoalX - 12, Math.max(54, this.ball.pos.x + depth));
+      }
+
+      // ── CBs sit ON or BEHIND the line; fullbacks sit ON or SLIGHTLY AHEAD ──
+      // This ensures CBs never push higher than fullbacks.
+      if (!isWide) {
+        // Center back — sit 1-2 units DEEPER than the line (closer to own goal)
+        const cbExtraDepth = atkRight ? -2 : 2;
+        bx = lineX + cbExtraDepth;
+      } else {
+        // Fullback — sit on the line or marginally ahead to provide width
+        const fbOffset = atkRight ? 1 : -1;
+        bx = lineX + fbOffset;
+      }
+
+      // ── Box-line floor: don't retreat deeper than the edge of the penalty box ──
+      const boxLine = atkRight ? 24 : 76;
+      if (atkRight) bx = Math.max(boxLine, bx);
+      else bx = Math.min(boxLine, bx);
+
+      // ── Lateral positioning (Y) ──
+      // CBs stay COMPACT in the centre; fullbacks hold wider but tuck in
+      // when ball is on the opposite flank.
+      const ballY = this.ball.pos.y;
+
+      if (!isWide) {
+        // Center backs: gentle tracking toward ball, stay near the centre
+        // Limit how far they drift from the central corridor (35–65 zone)
+        by += (ballY - 50) * 0.30;
+        by = Math.max(35, Math.min(65, by));
+      } else {
+        // Fullbacks: tuck inside when ball is on the far side,
+        // push wider when ball is on their side
+        const isLeftBack = by < 50;
+        const ballOnMySide = isLeftBack ? ballY < 45 : ballY > 55;
+        const ballOnFarSide = isLeftBack ? ballY > 60 : ballY < 40;
+
+        if (ballOnFarSide) {
+          // Tuck in toward centre — narrow the back line
+          by = isLeftBack ? Math.max(28, by + 8) : Math.min(72, by - 8);
+        } else if (ballOnMySide) {
+          // Push wide to cover the flank but track the ball
+          by += (ballY - by) * 0.35;
+          by = isLeftBack ? Math.max(8, Math.min(38, by)) : Math.max(62, Math.min(92, by));
+        } else {
+          // Ball central — hold natural width but slightly narrower
+          by += (ballY - 50) * 0.20;
+        }
+      }
     } else {
-      const drop = p.roleType === 'FWD' ? 0.08 : 0.45;
+      // ── MID / FWD dropping back ──
+      const drop = defRT === 'FWD' ? 0.08 : 0.45;
       if (atkRight) bx = Math.max(ownGoalX + 5, bx - 10 * drop);
       else bx = Math.min(ownGoalX - 5, bx + 10 * drop);
-    }
 
-    by += (this.ball.pos.y - 50) * (p.roleType === 'DEF' ? 0.55 : 0.25);
-
-    if (p.roleType === 'DEF' && !isWide) {
-      const boxLine = atkRight ? 26 : 74;
-      if (atkRight && bx < boxLine) bx = boxLine;
-      else if (!atkRight && bx > boxLine) bx = boxLine;
+      // Midfielders also shift slightly toward the ball
+      by += (this.ball.pos.y - 50) * 0.25;
     }
 
     return new Vec2(Math.max(10, Math.min(90, bx)), Math.max(5, Math.min(95, by)));
@@ -770,7 +920,9 @@ export class GameEngine {
       distFactor = 0.20;         // long range
     }
 
-    const quality = Math.min(1, p.attrs.shotAccuracy * angleFactor * pressFactor * distFactor);
+    // Rating emphasis: square accuracy to widen gap between elite and average shooters
+    const accSquared = p.attrs.shotAccuracy * p.attrs.shotAccuracy;
+    const quality = Math.min(1, accSquared * angleFactor * pressFactor * distFactor);
 
     // ── Target: aim away from GK ────────────────────────────────────
     const gk = this.players.find(d => d.teamId !== p.teamId && d.role === Role.Goalkeeper);
@@ -785,15 +937,16 @@ export class GameEngine {
 
     // ── Spread: scales with quality AND distance ────────────────────
     // Close range = tight, long range = wild. Quality tames spread.
+    // Rating emphasis: better players have much tighter accuracy
     const baseSpread = distGoalX <= PITCH.SIX_DEPTH ? 3
       : distGoalX <= PITCH.PEN_DEPTH ? 8
-      : distGoalX <= 22 ? 14
-      : 22;
-    const spread = baseSpread * (1 - quality * 0.7);
+        : distGoalX <= 22 ? 14
+          : 22;
+    const spread = baseSpread * (1 - quality * 0.8);
     targetY = Math.max(GT - 3, Math.min(GB + 3, targetY + (Math.random() - 0.5) * spread));
     const spreadX = (Math.random() - 0.5) * spread * 0.15;
 
-    const power = SHOOT_SPEED * (0.75 + p.attrs.shotPower * 0.45) * p.staminaFactor;
+    const power = SHOOT_SPEED * (0.65 + p.attrs.shotPower * 0.55) * p.staminaFactor;
     const target = new Vec2(oppGoalX + spreadX, targetY);
     this.ball.kick(target, power, distGoalX > 22 ? 3 : 0);
     this.cooldown = 0.45;
@@ -822,6 +975,9 @@ export class GameEngine {
       const d = Vec2.dist(p.pos, m.pos);
       if (d < 12 || d > 55) continue;
 
+      // Skip offside targets — through balls to offside players are always wasted
+      if (this.isPlayerOffside(m, p.teamId)) continue;
+
       // Space around target — no close markers
       const nearestOpp = Math.min(...opps.map(o => Vec2.dist(o.pos, m.pos)));
       if (nearestOpp < 8) continue;
@@ -834,7 +990,7 @@ export class GameEngine {
 
       // Must be a running player or an attacker positioned high
       const isRunning = m.state === PlayerState.SeekingSpace;
-      const isHighAttacker = m.roleType === 'FWD' && Math.abs(m.pos.x - oppGoalX) < 35;
+      const isHighAttacker = this.effectiveRoleType(m) === 'FWD' && Math.abs(m.pos.x - oppGoalX) < 35;
 
       // Score: proximity to goal + space + running bonus
       const goalProximity = 50 - Math.abs(m.pos.x - oppGoalX);
@@ -854,7 +1010,7 @@ export class GameEngine {
     candidates.sort((a, b) => b.score - a.score);
     const best = candidates[0];
 
-    if (Math.random() < 4.0 * p.attrs.vision * dt) {
+    if (Math.random() < 5.0 * p.attrs.vision * p.attrs.vision * dt) {
       this.executePass(p, best.mate, true);
       return true;
     }
@@ -874,6 +1030,7 @@ export class GameEngine {
 
     // Progressive pass weighting (Expected Threat model)
     const vision = p.attrs.vision; // 0–1, scales forward-pass bonus
+    const visionSq = vision * vision; // squared to amplify rating differences
     const passerGoalDist = Math.abs(p.pos.x - oppGoalX);
 
     const scored = mates.map(m => {
@@ -899,27 +1056,34 @@ export class GameEngine {
       const inFinalThird = atkRight ? m.pos.x > finalThirdX : m.pos.x < finalThirdX;
 
       // Build score: forward progression is king
+      // Rating emphasis: vision² used throughout for sharper differentiation
       let score = 0;
       // Forward pass multiplier: massive bonus scaled by vision
       if (progression > 0) {
-        score += progression * (2.0 + vision * 4.0);
+        score += progression * (1.5 + visionSq * 5.5);
       } else {
         // Backward/lateral: only acceptable if under pressure or no forward options
         score += progression * 0.3; // negative = penalty
       }
 
       // Lines bypassed bonus (through-the-lines passing)
-      score += linesBypassed * (8 + vision * 12);
+      score += linesBypassed * (5 + visionSq * 18);
 
       // Space bonus (moderate weight)
       score += space * 1.5;
 
       // Final third bonus
-      if (inFinalThird) score += 15 + vision * 10;
+      if (inFinalThird) score += 10 + visionSq * 18;
 
-      // Decision noise — lower vision = noisier decisions
-      const noise = (1 - vision) * 20;
+      // Decision noise — lower vision = MUCH noisier decisions
+      const noise = (1 - visionSq) * 30;
       score += (Math.random() - 0.5) * noise;
+
+      // Offside penalty — players should avoid passing forward to offside teammates
+      // Backward passes are fine (receiver can't be offside if ball is ahead)
+      if (progression > 0 && this.isPlayerOffside(m, p.teamId)) {
+        score -= 200; // massive penalty — effectively eliminates this option
+      }
 
       return { mate: m, score };
     });
@@ -970,13 +1134,14 @@ export class GameEngine {
     this.isThrowInOrGoalKick = false;
 
     // Pass accuracy — higher rating = tighter delivery
+    // Rating emphasis: square accuracy to amplify difference between 0.9 and 0.6 passers
     const acc = from.attrs.passAccuracy;
     const pressure = this.players.filter(d =>
       d.teamId !== from.teamId && d.role !== Role.Goalkeeper && Vec2.dist(d.pos, from.pos) < 7,
     ).length;
-    const pressFactor = Math.max(0, 1 - pressure * 0.15);
-    const quality = acc * pressFactor;
-    const spread = Math.pow(1 - quality, 3) * 60;
+    const pressFactor = Math.max(0, 1 - pressure * 0.18);
+    const quality = (acc * acc) * pressFactor;
+    const spread = Math.pow(1 - quality, 2.5) * 70;
 
     const tx = to.pos.x + (Math.random() - 0.5) * spread;
     const ty = to.pos.y + (Math.random() - 0.5) * spread;
@@ -1076,8 +1241,10 @@ export class GameEngine {
             const pressure = this.players.filter(d =>
               d.teamId !== closest.teamId && d.role !== Role.Goalkeeper && Vec2.dist(d.pos, closest.pos) < 7,
             ).length;
-            const trap = closest.attrs.firstTouch * (1 - pressure * 0.1);
-            if (Math.random() < Math.pow(1 - trap, 4)) goodTouch = false;
+            // Rating emphasis: square firstTouch so low-rated players miscontrol noticeably more
+            const trapSkill = closest.attrs.firstTouch * closest.attrs.firstTouch;
+            const trap = trapSkill * (1 - pressure * 0.15);
+            if (Math.random() < Math.pow(1 - trap, 3)) goodTouch = false;
           }
           if (goodTouch && (this.passTarget === closest || Math.random() < 0.88)) {
             this.ballOwner = closest;
@@ -1106,11 +1273,15 @@ export class GameEngine {
         if ((this.ballOwner.pos.x - p.pos.x) * atkDir > 0.8) continue;
 
         // Contest: defender tackle vs carrier dribble
-        const defScore = p.attrs.tackleSkill * (0.8 + Math.random() * 0.4) * p.staminaFactor;
-        const dribScore = this.ballOwner.attrs.dribbleSkill * (0.8 + Math.random() * 0.4) * this.ballOwner.staminaFactor;
+        // Rating emphasis: square the skill values to amplify differences
+        // A 0.9 player vs 0.6 → 0.81 vs 0.36, much clearer separation
+        const defSkill = p.attrs.tackleSkill * p.attrs.tackleSkill;
+        const dribSkill = this.ballOwner.attrs.dribbleSkill * this.ballOwner.attrs.dribbleSkill;
+        const defScore = defSkill * (0.85 + Math.random() * 0.3) * p.staminaFactor;
+        const dribScore = dribSkill * (0.85 + Math.random() * 0.3) * this.ballOwner.staminaFactor;
 
-        if (defScore > dribScore + 0.08) {
-          if (defScore > dribScore + 0.22) {
+        if (defScore > dribScore + 0.04) {
+          if (defScore > dribScore + 0.15) {
             // Win possession
             this.ballOwner = p;
             this.cooldown = 0.9;
@@ -1131,31 +1302,36 @@ export class GameEngine {
     }
 
     // ── Offside check after reception ────────────────────────────────────
-    if (this.ballOwner && this.lastToucher && this.ballOwner.teamId === this.lastToucher.teamId) {
-      if (this.offsideOnPass.has(this.ballOwner.id)) {
-        this.phase = MatchPhase.Stopped;
-        this.setPieceTimer = 1.5;
-        this.setPiece = SetPieceType.FreeKick;
-        this.events.unshift(`${Math.floor(this.minute)}' OFFSIDE – ${this.ballOwner.name}`);
-        const defTeam = this.ballOwner.teamId === this.homeTeam.id ? this.awayTeam.id : this.homeTeam.id;
-        this.ballOwner = null;
-        this.passTarget = null;
-        this.ball.stop();
-        const fk = this.players
-          .filter(p => p.teamId === defTeam && p.role !== Role.Goalkeeper)
-          .sort((a, b) => Vec2.dist(a.pos, this.ball.pos) - Vec2.dist(b.pos, this.ball.pos))[0];
-        if (fk) { fk.pos.copy(this.ball.pos); this.ballOwner = fk; }
+    if (this.ballOwner && this.lastToucher) {
+      if (this.ballOwner.teamId === this.lastToucher.teamId) {
+        // Same team received the ball — check if receiver was offside
+        if (this.offsideOnPass.has(this.ballOwner.id)) {
+          this.phase = MatchPhase.Stopped;
+          this.setPieceTimer = 1.5;
+          this.setPiece = SetPieceType.FreeKick;
+          this.events.unshift(`${Math.floor(this.minute)}' OFFSIDE – ${this.ballOwner.name}`);
+          const defTeam = this.ballOwner.teamId === this.homeTeam.id ? this.awayTeam.id : this.homeTeam.id;
+          this.ballOwner = null;
+          this.passTarget = null;
+          this.ball.stop();
+          const fk = this.players
+            .filter(p => p.teamId === defTeam && p.role !== Role.Goalkeeper)
+            .sort((a, b) => Vec2.dist(a.pos, this.ball.pos) - Vec2.dist(b.pos, this.ball.pos))[0];
+          if (fk) { fk.pos.copy(this.ball.pos); this.ballOwner = fk; }
+          this.offsideOnPass.clear();
+        }
+      } else {
+        // Opponent touched the ball — offside no longer applicable
         this.offsideOnPass.clear();
       }
-    } else {
-      this.offsideOnPass.clear();
     }
   }
 
   // ── GK save model ─────────────────────────────────────────────────────
 
   private handleGKSave(gk: PlayerAgent) {
-    const gkSkill = gk.attrs.gkReflex;
+    // Rating emphasis: square GK reflexes to amplify difference between top and average keepers
+    const gkSkill = gk.attrs.gkReflex * gk.attrs.gkReflex;
     const shooter = this.lastToucher!;
 
     // Project where ball arrives on goal line
@@ -1169,7 +1345,7 @@ export class GameEngine {
 
     const gkDist = Math.abs(gk.pos.y - arrivalY);
     const inPath = gkDist < 5;
-    const diveRange = 8 + gk.attrs.gkReach * 10;
+    const diveRange = 6 + gk.attrs.gkReach * 14; // wider range for high-rated GKs
     const canDive = gkDist < diveRange;
 
     // ── Realistic save probabilities based on shot distance ─────────
@@ -1191,15 +1367,17 @@ export class GameEngine {
 
     let baseSave: number;
     if (inPath) {
-      baseSave = (0.45 + gkSkill * 0.40) * distModifier;
+      baseSave = (0.35 + gkSkill * 0.50) * distModifier;
     } else if (canDive) {
-      baseSave = (0.20 + gkSkill * 0.40) * (1 - gkDist / diveRange) * distModifier;
+      baseSave = (0.12 + gkSkill * 0.50) * (1 - gkDist / diveRange) * distModifier;
     } else {
       baseSave = 0.03; // out of reach
     }
 
     // Shooter quality reduces save chance (well-placed shots are harder to stop)
-    const finalSave = Math.min(0.92, baseSave * (1 - shooter.attrs.shotAccuracy * 0.30));
+    // Rating emphasis: squared accuracy means elite finishers are much harder to save against
+    const shooterAcc = shooter.attrs.shotAccuracy * shooter.attrs.shotAccuracy;
+    const finalSave = Math.min(0.92, baseSave * (1 - shooterAcc * 0.35));
 
     if (Math.random() < finalSave) {
       if (Math.random() < 0.25) {
@@ -1277,7 +1455,7 @@ export class GameEngine {
         const homeRight = this.period === 1;
         const isLeftLine = x < 50;
         const defTeamId = (homeRight === isLeftLine) ? this.homeTeam.id : this.awayTeam.id;
-        const atkTeamId = defTeamId === this.homeTeam.id ? this.awayTeam.id : this.homeTeam.id;
+        const atkTeamId = defTeamId === this.homeTeam.id ? this.homeTeam.id : this.awayTeam.id;
         const lastTouchAtk = this.lastToucher?.teamId === atkTeamId;
         this.ball.stop();
 
@@ -1385,6 +1563,28 @@ export class GameEngine {
   // ═══════════════════════════════════════════════════════════════════════
   // HELPERS
   // ═══════════════════════════════════════════════════════════════════════
+
+  /**
+   * Returns the tactical role type for AI purposes.
+   * CDM/DM positions play as midfielders, not as part of the back line.
+   */
+  private effectiveRoleType(p: PlayerAgent): 'DEF' | 'MID' | 'FWD' {
+    const pos = p.position?.toUpperCase?.() ?? '';
+    if (pos === 'CDM' || pos === 'DM') return 'MID';
+    return p.roleType as 'DEF' | 'MID' | 'FWD';
+  }
+
+  /** Check if a potential pass target is currently in an offside position */
+  private isPlayerOffside(target: PlayerAgent, passerTeamId: string): boolean {
+    const homeRight = this.period === 1;
+    const atkRight = target.isHome ? homeRight : !homeRight;
+    const offLine = this.getOffsideLine(passerTeamId, atkRight);
+    if (atkRight) {
+      return target.pos.x > offLine + 0.2;
+    } else {
+      return target.pos.x < offLine - 0.2;
+    }
+  }
 
   private getOffsideLine(atkTeamId: string, atkRight: boolean): number {
     const defenders = this.players.filter(p => p.teamId !== atkTeamId);

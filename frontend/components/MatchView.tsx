@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Team, Player } from '../types';
 import { FORMATIONS } from '../constants';
 import { GameEngine, PITCH, type MatchStats } from '../utils/simulation';
-import { FastForward, Play, Pause, RotateCcw, Sliders } from 'lucide-react';
+import { FastForward, Play, Pause, RotateCcw, Sliders, PlayIcon } from 'lucide-react';
 
 // ── Public types re-exported for consumers ───────────────────────────────────
 export type { MatchStats };
@@ -366,7 +366,7 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
                                 onClick={() => { engineRef.current?.startSecondHalf(); setIsHalftime(false); setIsPausedState(false); }}
                                 className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 transition-all px-7 py-3 rounded-xl font-bold text-sm shadow-xl hover:-translate-y-0.5 duration-150"
                             >
-                                <RotateCcw size={16} /> Start Second Half
+                                <PlayIcon size={16} /> Start Second Half
                             </button>
                         </div>
                     </div>
