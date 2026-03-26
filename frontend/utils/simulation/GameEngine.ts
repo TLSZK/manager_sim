@@ -257,6 +257,9 @@ export class GameEngine {
       this.physicsStep(dt);
       this.checkCollisions();
       this.checkBoundaries();
+      // Safety clamp — only runs AFTER boundaries have been checked
+      this.ball.pos.x = Math.max(-2, Math.min(102, this.ball.pos.x));
+      this.ball.pos.y = Math.max(-2, Math.min(102, this.ball.pos.y));
     }
   }
 
@@ -1190,8 +1193,8 @@ export class GameEngine {
       }
 
       this.ball.update(dt);
-      this.ball.pos.x = Math.max(0, Math.min(100, this.ball.pos.x));
-      this.ball.pos.y = Math.max(0, Math.min(100, this.ball.pos.y));
+      // NOTE: do NOT clamp ball position here — checkBoundaries() must be able
+      // to detect when the ball has crossed sidelines/goal lines.
     }
   }
 
@@ -1440,14 +1443,19 @@ export class GameEngine {
       this.offsideOnPass.clear();
 
       if (y < PITCH.TOP || y > PITCH.BOTTOM) {
-        // ── Throw-in ───────────────────────────────────────────────────
+        // ── Throw-in (awarded to the team that did NOT touch the ball last) ──
         this.ball.pos.y = y < PITCH.TOP ? 0.5 : 99.5;
+        this.ball.pos.x = Math.max(1, Math.min(99, this.ball.pos.x)); // keep X on the pitch
         this.ball.stop();
         this.setPiece = SetPieceType.ThrowIn;
         this.isThrowInOrGoalKick = true;
-        const throwTeam = this.lastToucher?.teamId === this.homeTeam.id ? this.awayTeam.id : this.homeTeam.id;
+        // The team that did NOT touch it last gets the throw-in
+        const lastTeamId = this.lastToucher?.teamId;
+        const throwTeamId = lastTeamId === this.homeTeam.id ? this.awayTeam.id
+          : lastTeamId === this.awayTeam.id ? this.homeTeam.id
+          : this.homeTeam.id; // fallback if no last toucher
         const nearest = this.players
-          .filter(p => p.teamId === throwTeam && p.role !== Role.Goalkeeper)
+          .filter(p => p.teamId === throwTeamId && p.role !== Role.Goalkeeper)
           .sort((a, b) => Vec2.dist(a.pos, this.ball.pos) - Vec2.dist(b.pos, this.ball.pos))[0];
         if (nearest) { nearest.pos.copy(this.ball.pos); this.ballOwner = nearest; nearest.state = PlayerState.SetPiece; }
       } else {
@@ -1455,12 +1463,13 @@ export class GameEngine {
         const homeRight = this.period === 1;
         const isLeftLine = x < 50;
         const defTeamId = (homeRight === isLeftLine) ? this.homeTeam.id : this.awayTeam.id;
-        const atkTeamId = defTeamId === this.homeTeam.id ? this.homeTeam.id : this.awayTeam.id;
-        const lastTouchAtk = this.lastToucher?.teamId === atkTeamId;
+        const atkTeamId = defTeamId === this.homeTeam.id ? this.awayTeam.id : this.homeTeam.id;
+        // In football: defending team touches last → corner; attacking team touches last → goal kick
+        const lastTouchDef = this.lastToucher?.teamId === defTeamId;
         this.ball.stop();
 
-        if (lastTouchAtk) {
-          // ── Corner ─────────────────────────────────────────────────
+        if (lastTouchDef) {
+          // ── Corner (awarded to attacking team) ─────────────────────
           const cx = x < PITCH.LEFT ? PITCH.LEFT + 0.5 : PITCH.RIGHT - 0.5;
           const cy = y < 50 ? 0.5 : 99.5;
           this.ball.pos.set(cx, cy);
