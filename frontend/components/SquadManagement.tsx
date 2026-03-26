@@ -17,25 +17,13 @@ const SquadManagement: React.FC<SquadManagementProps> = ({ team, onUpdateTeam, o
   const [isVertical, setIsVertical] = useState<boolean>(true);
   const initializedRef = useRef<string | null>(null);
 
-  // Force sync local state anytime the team prop changes (e.g., late backend hydration or team switch)
+  // Sync local state when switching to a different team; otherwise leave local state as the source of truth
   useEffect(() => {
-    const initialFormation = team.formation || '4-3-3';
-    setSelectedFormation(initialFormation);
-    
     const teamIdentifier = team.id || team.name || 'default';
-
     if (initializedRef.current !== teamIdentifier) {
-        // Only run the aligner algorithm once per team initialization
-        const aligned = alignRoster(team.roster || [], initialFormation);
-        setRoster(aligned);
-        initializedRef.current = teamIdentifier;
-        
-        if (team.roster && team.roster.length > 0) {
-            onUpdateTeam({ ...team, roster: aligned, formation: initialFormation });
-        }
-    } else {
-        // Just sync array changes naturally 
+        setSelectedFormation(team.formation || '4-3-3');
         setRoster(team.roster || []);
+        initializedRef.current = teamIdentifier;
     }
   }, [team]); // eslint-disable-line react-hooks/exhaustive-deps
 
