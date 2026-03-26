@@ -51,6 +51,7 @@ export class GameEngine {
   private cooldown = 0;
   private gkHoldTimer = 0;
   private momentum = 0;
+  private isFromCorner = false;   // offside exempt on corner deliveries
 
   // ── Fixed-timestep accumulator (frame-rate independent) ───────────────
   private static readonly STEP = 1 / 60;   // 60 Hz physics
@@ -235,6 +236,12 @@ export class GameEngine {
     // Set-piece countdown
     if (this.phase === MatchPhase.Stopped) {
       this.setPieceTimer -= dt;
+
+      // ── Corner kick: crowd the box while waiting ──────────────────────
+      if (this.setPiece === SetPieceType.Corner && this.ballOwner) {
+        this.positionPlayersForCorner(dt);
+      }
+
       if (this.setPieceTimer <= 0 && this.ballOwner) {
         this.executeSetPiece();
         this.phase = MatchPhase.Playing;
@@ -277,7 +284,35 @@ export class GameEngine {
 
   private executeSetPiece() {
     if (!this.ballOwner) return;
-    const maxDist = this.isThrowInOrGoalKick && this.ballOwner.role !== Role.Goalkeeper ? 28 : 100;
+
+    // ── Corner kick: deliver a lofted cross into the box ──────────────
+    if (this.setPiece === SetPieceType.Corner) {
+      this.isFromCorner = true;   // exempt from offside
+      const atkRight = this.ballOwner.isHome ? (this.period === 1) : !(this.period === 1);
+      const boxCenterX = atkRight ? PITCH.RIGHT - PITCH.PEN_DEPTH * 0.6 : PITCH.LEFT + PITCH.PEN_DEPTH * 0.6;
+
+      // Target a teammate inside the box area
+      const boxMates = this.players.filter(m =>
+        m.teamId === this.ballOwner!.teamId && m !== this.ballOwner &&
+        Math.abs(m.pos.x - boxCenterX) < PITCH.PEN_DEPTH &&
+        m.pos.y > PITCH.PEN_TOP - 5 && m.pos.y < PITCH.PEN_BOTTOM + 5,
+      );
+      const anyMates = this.players.filter(m => m.teamId === this.ballOwner!.teamId && m !== this.ballOwner);
+      const target = boxMates.length > 0
+        ? boxMates[Math.floor(Math.random() * boxMates.length)]
+        : anyMates[Math.floor(Math.random() * anyMates.length)];
+
+      if (target) {
+        this.executePass(this.ballOwner, target, true); // always lofted
+      }
+      this.setPiece = SetPieceType.None;
+      return;
+    }
+
+    // ── Throw-in: short range only (realistic ~15m) ──────────────────
+    const isThrowIn = this.setPiece === SetPieceType.ThrowIn;
+    const maxDist = isThrowIn ? 15 : (this.isThrowInOrGoalKick && this.ballOwner.role !== Role.Goalkeeper ? 15 : 100);
+
     const mates = this.players.filter(m =>
       m.teamId === this.ballOwner!.teamId && m !== this.ballOwner &&
       Vec2.dist(m.pos, this.ballOwner!.pos) < maxDist,
@@ -286,7 +321,7 @@ export class GameEngine {
     const targets = mates.length > 0 ? mates : fallback;
     if (targets.length > 0) {
       const target = targets[Math.floor(Math.random() * targets.length)];
-      const lofted = this.setPiece === SetPieceType.Corner || this.setPiece === SetPieceType.GoalKick;
+      const lofted = this.setPiece === SetPieceType.GoalKick;
       this.executePass(this.ballOwner, target, lofted);
     }
     this.isThrowInOrGoalKick = false;
@@ -320,6 +355,24 @@ export class GameEngine {
       const ownGoalX = atkRight ? PITCH.LEFT : PITCH.RIGHT;
       const offLine = p.isHome ? homeOff : awayOff;
       const pressers = p.isHome ? homePressers : awayPressers;
+
+      // ── LOOSE BALL: no owner AND no pass target → chase it ─────────
+      const isLooseBall = !this.ballOwner && !this.passTarget && this.ball.speed > 5;
+      const distToBallLoose = Vec2.dist(p.pos, ballPos);
+      const isHomeChaser = p.isHome && homeField.indexOf(p) < 3;
+      const isAwayChaser = !p.isHome && awayField.indexOf(p) < 3;
+      const isChaser = (isHomeChaser || isAwayChaser) && p.role !== Role.Goalkeeper;
+
+      if (isLooseBall && isChaser && distToBallLoose < 45) {
+        // Sprint toward the ball at full speed
+        p.state = PlayerState.Pressing;
+        const urgency = 1.6 + p.attrs.maxVelocity * 0.5;
+        force.add(p.seek(ballPos, urgency));
+        // Separation
+        force.add(p.separate(this.players, 6));
+        p.applyForce(force);
+        continue;
+      }
 
       // ── Dispatch to role-specific AI ─────────────────────────────────
       if (p.role === Role.Goalkeeper) {
@@ -997,7 +1050,8 @@ export class GameEngine {
     this.isLoftedPass = from.role === Role.Goalkeeper || this.setPiece !== SetPieceType.None || isLofted;
     this.offsideOnPass.clear();
 
-    if (!this.isThrowInOrGoalKick) {
+    // Skip offside marking for throw-ins, goal kicks, AND corner kicks
+    if (!this.isThrowInOrGoalKick && !this.isFromCorner) {
       const homeRight = this.period === 1;
       const atkRight = from.isHome ? homeRight : !homeRight;
       const offLine = this.getOffsideLine(from.teamId, atkRight);
@@ -1008,6 +1062,7 @@ export class GameEngine {
       }
     }
     this.isThrowInOrGoalKick = false;
+    this.isFromCorner = false;
 
     const acc = from.attrs.passAccuracy;
     const pressure = this.players.filter(d =>
@@ -1297,6 +1352,7 @@ export class GameEngine {
           const cy = y < 50 ? 0.5 : 99.5;
           this.ball.pos.set(cx, cy);
           this.setPiece = SetPieceType.Corner;
+          this.setPieceTimer = 2.5;   // longer timer so players crowd the box
           this.isThrowInOrGoalKick = false;
           this.events.unshift(`${Math.floor(this.minute)}' Corner`);
           const taker = this.players
@@ -1386,6 +1442,58 @@ export class GameEngine {
     }
     this.minute = 90;
     this.triggerUpdate();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // CORNER KICK — CROWD THE BOX
+  // ═══════════════════════════════════════════════════════════════════════
+
+  private positionPlayersForCorner(dt: number) {
+    if (!this.ballOwner) return;
+    const takerTeamId = this.ballOwner.teamId;
+    const atkRight = this.ballOwner.isHome ? (this.period === 1) : !(this.period === 1);
+    const boxX = atkRight ? PITCH.RIGHT - PITCH.PEN_DEPTH : PITCH.LEFT + PITCH.PEN_DEPTH;
+    const goalX = atkRight ? PITCH.RIGHT : PITCH.LEFT;
+
+    for (const p of this.players) {
+      if (p === this.ballOwner) continue;
+      const force = new Vec2(0, 0);
+
+      if (p.teamId === takerTeamId) {
+        // ── Attacking team: crowd the box ────────────────────────────
+        if (p.role === Role.Goalkeeper) {
+          // GK stays back
+          continue;
+        }
+        const ert = this.effectiveRoleType(p);
+        if (ert === 'DEF') {
+          // Defenders hold at the edge of the box for second balls
+          const targetX = atkRight ? boxX - 8 : boxX + 8;
+          const targetY = 30 + Math.random() * 40;
+          force.add(p.arrive(new Vec2(targetX, targetY), 1.4));
+        } else {
+          // Midfielders and forwards push into the box
+          const targetX = atkRight ? goalX - 6 - Math.random() * 10 : goalX + 6 + Math.random() * 10;
+          const targetY = PITCH.PEN_TOP + 5 + Math.random() * (PITCH.PEN_BOTTOM - PITCH.PEN_TOP - 10);
+          force.add(p.arrive(new Vec2(targetX, targetY), 1.5));
+        }
+      } else {
+        // ── Defending team: mark in the box ──────────────────────────
+        if (p.role === Role.Goalkeeper) {
+          // GK positions on the goal line
+          const gkY = Math.max(PITCH.GOAL_TOP + 1, Math.min(PITCH.GOAL_BOTTOM - 1, PITCH.CENTER_Y));
+          force.add(p.arrive(new Vec2(goalX + (atkRight ? -1 : 1), gkY), 1.5));
+        } else {
+          // Outfield defenders crowd the box to mark attackers
+          const targetX = atkRight ? goalX - 4 - Math.random() * 10 : goalX + 4 + Math.random() * 10;
+          const targetY = PITCH.PEN_TOP + 3 + Math.random() * (PITCH.PEN_BOTTOM - PITCH.PEN_TOP - 6);
+          force.add(p.arrive(new Vec2(targetX, targetY), 1.4));
+        }
+      }
+
+      force.add(p.separate(this.players, 4));
+      p.applyForce(force);
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════
