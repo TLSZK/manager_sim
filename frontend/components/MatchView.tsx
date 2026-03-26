@@ -576,13 +576,13 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
                     </div>
                     <div className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs shrink-0">
                         <span className="font-black text-emerald-400 tabular-nums">{stats.home.shots}</span>
-                        <span className="text-slate-500 uppercase tracking-wider text-[8px] sm:text-[10px]">Sh</span>
+                        <span className="text-slate-500 uppercase tracking-wider text-[8px] sm:text-[10px]">Shots</span>
                         <span className="font-black text-sky-400 tabular-nums">{stats.away.shots}</span>
                     </div>
                     <div className="w-px h-3 sm:h-3.5 bg-slate-700 shrink-0" />
                     <div className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs shrink-0">
                         <span className="font-black text-emerald-400 tabular-nums">{stats.home.shotsOnTarget}</span>
-                        <span className="text-slate-500 uppercase tracking-wider text-[8px] sm:text-[10px]">OT</span>
+                        <span className="text-slate-500 uppercase tracking-wider text-[8px] sm:text-[10px]">Shots on target</span>
                         <span className="font-black text-sky-400 tabular-nums">{stats.away.shotsOnTarget}</span>
                     </div>
                     <div className="w-px h-3 sm:h-3.5 bg-slate-700 shrink-0" />
@@ -600,13 +600,13 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto py-1.5 sm:py-2 flex flex-col gap-1 sm:gap-1.5 custom-scrollbar px-2" style={{ paddingLeft: Math.max(8, alignPad.left), paddingRight: Math.max(8, alignPad.right) }}>
+                <div className="flex-1 overflow-y-auto py-2 sm:py-2.5 flex flex-col gap-1.5 sm:gap-2 custom-scrollbar px-2" style={{ paddingLeft: Math.max(8, alignPad.left), paddingRight: Math.max(8, alignPad.right) }}>
                     {events.length === 0 ? (
                         <div className="flex-1 flex items-center justify-center">
                             <span className="text-slate-600 text-[10px] sm:text-xs uppercase tracking-widest font-bold">Match underway...</span>
                         </div>
                     ) : (
-                        [...events].reverse().map((ev, i) => {
+                        [...events].map((ev, i) => {
                             const isGoal    = ev.includes('GOAL');
                             const isSave    = ev.includes('Save') || ev.includes('Punched');
                             const isShot    = ev.includes('Shot');
@@ -614,9 +614,9 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
                             const evMinute  = ev.split(' ')[0];
                             const text      = ev.substring(ev.indexOf(' ') + 1);
                             return (
-                                <div key={events.length - 1 - i} className="flex gap-1.5 sm:gap-2 items-start">
-                                    <span className="text-slate-600 font-mono text-[9px] sm:text-[10px] font-bold pt-1 sm:pt-1.5 shrink-0 w-6 sm:w-7 text-right">{evMinute}</span>
-                                    <div className={`flex-1 py-1 sm:py-1.5 px-2 sm:px-2.5 rounded-lg text-[10px] sm:text-xs border leading-snug ${
+                                <div key={events.length - 1 - i} className="flex gap-2 sm:gap-2.5 items-start">
+                                    <span className="text-slate-500 font-mono text-[10px] sm:text-xs font-bold pt-1.5 sm:pt-2 shrink-0 w-7 sm:w-8 text-right">{evMinute}</span>
+                                    <div className={`flex-1 py-1.5 sm:py-2 px-2.5 sm:px-3 rounded-lg text-[11px] sm:text-sm border leading-normal ${
                                         isGoal    ? 'bg-amber-950/70 border-amber-600/60 text-amber-200 font-black border-l-2 border-l-amber-400' :
                                         isSave    ? 'bg-sky-950/60 border-sky-800/60 text-sky-300 font-medium' :
                                         isShot    ? 'bg-slate-800/70 border-slate-700 text-slate-200 font-medium' :

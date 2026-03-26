@@ -26,15 +26,15 @@ const LaLigaLegend = () => (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-3 py-2.5 bg-[#0f172a]/60 border-t border-slate-700/50">
         <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-yellow-400 shrink-0" />
-            <span className="text-[9px] md:text-[10px] text-slate-400 font-medium">1st — Champion</span>
+            <span className="text-[9px] md:text-[10px] text-slate-400 font-medium">1st — Champion & UCL Qualification</span>
         </div>
         <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
-            <span className="text-[9px] md:text-[10px] text-slate-400 font-medium">2nd–5th — UCL Qualification</span>
+            <span className="text-[9px] md:text-[10px] text-slate-400 font-medium">2nd-5th — UCL Qualification</span>
         </div>
         <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-red-400 shrink-0" />
-            <span className="text-[9px] md:text-[10px] text-slate-400 font-medium">18th–20th — Relegation Zone</span>
+            <span className="text-[9px] md:text-[10px] text-slate-400 font-medium">18th-20th — Relegation Zone</span>
         </div>
     </div>
 );
@@ -43,15 +43,15 @@ const UCLLeagueLegend = () => (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-3 py-2.5 bg-[#0f172a]/60 border-t border-slate-700/50">
         <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
-            <span className="text-[9px] md:text-[10px] text-slate-400 font-medium">1st–8th — Direct Round of 16</span>
+            <span className="text-[9px] md:text-[10px] text-slate-400 font-medium">1st-8th — Direct Round of 16</span>
         </div>
         <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
-            <span className="text-[9px] md:text-[10px] text-slate-400 font-medium">9th–24th — Playoffs</span>
+            <span className="text-[9px] md:text-[10px] text-slate-400 font-medium">9th-24th — Playoffs</span>
         </div>
         <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-red-400 shrink-0" />
-            <span className="text-[9px] md:text-[10px] text-slate-400 font-medium">25th+ — Eliminated</span>
+            <span className="text-[9px] md:text-[10px] text-slate-400 font-medium">25th-36th — Eliminated</span>
         </div>
     </div>
 );
