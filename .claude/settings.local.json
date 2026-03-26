@@ -8,7 +8,12 @@
       "Bash(xargs grep:*)",
       "Bash(grep -r \"match\\\\|Match\\\\|game\\\\|Game\" /c/laragon/www/manager_sim1/frontend/*.tsx)",
       "Bash(grep -n \"interface\\\\|type\\\\|export\" /c/laragon/www/manager_sim1/backend/app/Models/*.php)",
-      "Bash(npx vite:*)"
+      "Bash(npx vite:*)",
+      "Bash(ls -la /c/laragon/www/manager_sim1/.cursor* /c/laragon/www/manager_sim1/.cursorrules /c/laragon/www/manager_sim1/.github)",
+      "Bash(grep:*)",
+      "Bash(ls /c/laragon/www/manager_sim1/frontend/*.config.*)",
+      "Bash(ls /c/laragon/www/manager_sim1/frontend/vite*)",
+      "Bash(ls:*)"
     ]
   }
 }

@@ -18,7 +18,7 @@ const SetupModal: React.FC<SetupModalProps> = ({ onSave, onCancel }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md animate-in fade-in duration-500">
-      <div className="bg-slate-800 rounded-2xl border border-slate-600 shadow-2xl w-full max-w-md p-8">
+      <div className="bg-slate-800 rounded-2xl border border-slate-600 shadow-2xl w-full max-w-md p-8 animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
         <div className="text-center mb-8">
           <div className="w-20 h-20 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg ring-4 ring-slate-700">
              <UserCheck size={40} className="text-white" />

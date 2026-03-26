@@ -46,24 +46,31 @@ const SeasonRecapModal: React.FC<SeasonRecapModalProps> = ({ isOpen, onClose, on
             <div className="bg-slate-900 w-full max-w-4xl rounded-3xl border border-slate-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
 
                 {/* Header Banner */}
-                <div className={`relative py-20 flex items-center justify-center overflow-hidden ${isChampion ? 'bg-gradient-to-r from-yellow-600 to-yellow-400' : 'bg-gradient-to-r from-slate-800 to-slate-700'}`}>
-                    <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white to-transparent" />
+                <div className={`relative py-16 flex items-center justify-center overflow-hidden ${isChampion ? 'bg-gradient-to-br from-yellow-600 via-amber-500 to-yellow-400' : isUCLWinner ? 'bg-gradient-to-br from-blue-800 via-blue-700 to-indigo-700' : 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-700'}`}>
+                    <div className="absolute inset-0 opacity-25 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white to-transparent" />
+                    {/* Subtle shimmer lines for champion */}
+                    {(isChampion || isUCLWinner) && (
+                        <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'repeating-linear-gradient(45deg, white 0px, white 1px, transparent 1px, transparent 40px)' }} />
+                    )}
 
-                    <div className="z-10 text-center">
+                    <div className="z-10 text-center px-4">
                         {team.logoUrl ? (
-                            <img src={team.logoUrl} alt={team.name} className="w-24 h-24 mx-auto mb-8 object-contain drop-shadow-2xl" />
+                            <img src={team.logoUrl} alt={team.name} className={`w-20 h-20 mx-auto mb-6 object-contain drop-shadow-2xl ${(isChampion || isUCLWinner) ? 'animate-bounce' : ''}`} style={{ animationDuration: '2.5s' }} />
                         ) : (
                             <div
-                                className="w-24 h-24 mx-auto mb-8 rounded-full flex items-center justify-center text-3xl font-bold shadow-2xl border-4 border-white/20 mt-4"
+                                className="w-20 h-20 mx-auto mb-6 rounded-full flex items-center justify-center text-3xl font-bold shadow-2xl border-4 border-white/20"
                                 style={{ backgroundColor: team.primaryColor, color: team.secondaryColor }}
                             >
                                 {team.shortName}
                             </div>
                         )}
 
-                        <h2 className="text-4xl font-extrabold text-white drop-shadow-md tracking-tight mb-6">
-                            {isChampion ? 'CAMPEONES!' : 'Season Concluded'}
+                        <h2 className="text-3xl md:text-4xl font-extrabold text-white drop-shadow-md tracking-tight mb-2">
+                            {isChampion ? '¡CAMPEONES!' : isUCLWinner ? 'Champions of Europe!' : 'Season Concluded'}
                         </h2>
+                        <p className={`text-sm font-bold uppercase tracking-widest ${isChampion ? 'text-yellow-200/80' : isUCLWinner ? 'text-blue-200/80' : 'text-slate-400'}`}>
+                            {team.name} · Season Review
+                        </p>
                     </div>
                 </div>
 

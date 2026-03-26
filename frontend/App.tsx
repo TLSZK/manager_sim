@@ -603,7 +603,22 @@ const App: React.FC = () => {
     const hasNoResults = resultGroups.length === 0;
 
     return (
-        <div className={`min-h-screen w-full overflow-x-hidden text-slate-100 p-2 sm:p-3 md:p-8 transition-colors duration-500 ${isUCLWeek ? 'bg-slate-950' : 'bg-slate-900'}`}>
+        <div className={`min-h-screen w-full overflow-x-hidden text-slate-100 p-2 sm:p-3 md:p-8 transition-colors duration-500 relative ${isUCLWeek ? 'bg-slate-950' : 'bg-slate-900'}`}>
+            {/* Ambient background glow — shifts with UCL/Liga week */}
+            <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10 transition-all duration-1000">
+                <div
+                    className="absolute top-[-15%] left-[-10%] w-[55%] h-[55%] rounded-full opacity-60 transition-all duration-1000"
+                    style={{ background: isUCLWeek
+                        ? 'radial-gradient(circle, rgba(37, 99, 235, 0.12) 0%, transparent 60%)'
+                        : 'radial-gradient(circle, rgba(220, 38, 38, 0.08) 0%, transparent 60%)' }}
+                />
+                <div
+                    className="absolute bottom-[-15%] right-[-10%] w-[55%] h-[55%] rounded-full opacity-60 transition-all duration-1000"
+                    style={{ background: isUCLWeek
+                        ? 'radial-gradient(circle, rgba(79, 70, 229, 0.12) 0%, transparent 60%)'
+                        : 'radial-gradient(circle, rgba(99, 102, 241, 0.08) 0%, transparent 60%)' }}
+                />
+            </div>
 
             {/* Sim Summary Modal */}
             {isSimSummaryOpen && (
@@ -785,8 +800,10 @@ const App: React.FC = () => {
 
                             {simState === 'season_over' ? (
                                 <div className="flex flex-col gap-4 mb-6">
-                                    <div className="p-4 sm:p-6 bg-slate-900/60 rounded-lg border border-slate-700/80 backdrop-blur-sm shadow-inner flex flex-col items-center text-center">
-                                        <Trophy size={48} className="text-yellow-500 mb-4" />
+                                    <div className="p-4 sm:p-6 bg-slate-900/60 rounded-lg border border-yellow-900/30 backdrop-blur-sm shadow-inner flex flex-col items-center text-center">
+                                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-yellow-500/20 to-amber-600/20 border border-yellow-500/30 flex items-center justify-center mb-4 shadow-[0_0_20px_rgba(234,179,8,0.15)]">
+                                            <Trophy size={32} className="text-yellow-400" />
+                                        </div>
                                         <h3 className="text-white font-bold text-lg sm:text-xl mb-2">Season Completed</h3>
                                         <p className="text-slate-400 text-xs sm:text-sm">Review your final standings and statistics.</p>
                                     </div>
@@ -795,13 +812,19 @@ const App: React.FC = () => {
                             ) : simState === 'match_recap' && lastSimMatch && lastSimHome && lastSimAway ? (
                                 <div className="flex flex-col gap-4 mb-6">
                                     <div className="mb-2 p-3 sm:p-4 bg-slate-900/80 rounded-lg border border-slate-700 shadow-xl backdrop-blur-sm">
-                                        <div className="text-center text-[10px] sm:text-xs mb-2 uppercase tracking-wide font-bold text-green-400">Match Finished</div>
+                                        <div className="text-center text-[10px] sm:text-xs mb-2 uppercase tracking-widest font-bold text-emerald-400 flex items-center justify-center gap-2">
+                                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                                            Match Finished
+                                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                                        </div>
                                         <div className="flex items-center justify-between">
                                             <div className="text-center w-[40%] sm:w-1/3 flex flex-col items-center">
                                                 {lastSimHome.logoUrl ? (<img src={lastSimHome.logoUrl} className="w-10 h-10 sm:w-12 sm:h-12 mb-2 object-contain" />) : (<div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full mb-2" style={{ backgroundColor: lastSimHome.primaryColor }}></div>)}
                                                 <div className="font-bold text-xs sm:text-sm md:text-lg leading-tight truncate w-full">{lastSimHome.shortName}</div>
                                             </div>
-                                            <div className="text-xl sm:text-2xl md:text-3xl font-mono font-bold text-white bg-slate-800 px-2 sm:px-3 py-1 rounded border border-slate-700 mx-1 shrink-0 whitespace-nowrap">{lastSimMatch.homeScore} - {lastSimMatch.awayScore}</div>
+                                            <div className="text-2xl sm:text-3xl md:text-4xl font-mono font-black text-white bg-slate-900 px-3 sm:px-4 py-1.5 rounded-xl border border-slate-700 mx-1 shrink-0 whitespace-nowrap shadow-inner tracking-tight">
+                                                {lastSimMatch.homeScore} - {lastSimMatch.awayScore}
+                                            </div>
                                             <div className="text-center w-[40%] sm:w-1/3 flex flex-col items-center">
                                                 {lastSimAway.logoUrl ? (<img src={lastSimAway.logoUrl} className="w-10 h-10 sm:w-12 sm:h-12 mb-2 object-contain" />) : (<div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full mb-2" style={{ backgroundColor: lastSimAway.primaryColor }}></div>)}
                                                 <div className="font-bold text-xs sm:text-sm md:text-lg leading-tight truncate w-full">{lastSimAway.shortName}</div>
@@ -821,7 +844,7 @@ const App: React.FC = () => {
                                                     <div className="font-bold text-xs sm:text-sm md:text-lg leading-tight truncate w-full">{userHome?.name}</div>
                                                     <div className="text-[10px] sm:text-xs text-slate-400">Home</div>
                                                 </div>
-                                                <div className="text-base sm:text-lg md:text-xl font-bold text-slate-500 px-1">VS</div>
+                                                <div className="text-xs sm:text-sm font-black text-slate-200 px-2.5 py-1 bg-slate-800/90 rounded-lg border border-slate-700 tracking-[0.2em] shadow-inner shrink-0">VS</div>
                                                 <div className="text-center w-[40%] sm:w-1/3 flex flex-col items-center">
                                                     {userAway?.logoUrl ? <img src={userAway.logoUrl} className="w-8 h-8 sm:w-10 sm:h-10 mb-2 object-contain" /> : null}
                                                     <div className="font-bold text-xs sm:text-sm md:text-lg leading-tight truncate w-full">{userAway?.name}</div>
@@ -837,8 +860,10 @@ const App: React.FC = () => {
                                         </div>
                                     ) : (
                                         <div className="flex flex-col items-center text-center p-2">
-                                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-800 flex items-center justify-center mb-3 border border-slate-700 shadow-inner"><Calendar size={20} className="sm:w-[24px] sm:h-[24px] text-slate-400" /></div>
-                                            <div className="font-bold text-slate-300 text-base sm:text-lg">Training & Rest</div>
+                                            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center mb-3 border border-slate-600 shadow-lg ring-1 ring-white/5">
+                                                <Calendar size={22} className="sm:w-[26px] sm:h-[26px] text-blue-400" />
+                                            </div>
+                                            <div className="font-bold text-slate-200 text-base sm:text-lg">Training & Rest</div>
                                             <div className="text-[10px] sm:text-xs text-slate-500 uppercase tracking-wider mt-1">No match today</div>
                                             {nextUserMatch && (() => {
                                                 const oppId = nextUserMatch.homeTeamId === userTeamId ? nextUserMatch.awayTeamId : nextUserMatch.homeTeamId;

@@ -52,17 +52,22 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
       {/* Background ambient glow - OPTIMIZED FOR SAFARI/MOBILE */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none transform-gpu">
-        <div 
-          className="absolute top-[-25%] left-[-20%] w-[80%] h-[80%] rounded-full opacity-60" 
-          style={{ background: 'radial-gradient(circle, rgba(37, 99, 235, 0.15) 0%, transparent 60%)' }}
+        <div
+          className="absolute top-[-20%] left-[-15%] w-[90%] h-[90%] rounded-full opacity-70"
+          style={{ background: 'radial-gradient(circle, rgba(37, 99, 235, 0.18) 0%, transparent 55%)' }}
         />
-        <div 
-          className="absolute bottom-[-25%] right-[-20%] w-[80%] h-[80%] rounded-full opacity-60" 
-          style={{ background: 'radial-gradient(circle, rgba(79, 70, 229, 0.15) 0%, transparent 60%)' }}
+        {/* Center bridge glow — fills the gap between the two corner glows */}
+        <div
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[70%] h-[70%] rounded-full opacity-50"
+          style={{ background: 'radial-gradient(circle, rgba(59, 130, 246, 0.07) 0%, transparent 65%)' }}
+        />
+        <div
+          className="absolute bottom-[-20%] right-[-15%] w-[90%] h-[90%] rounded-full opacity-70"
+          style={{ background: 'radial-gradient(circle, rgba(79, 70, 229, 0.18) 0%, transparent 55%)' }}
         />
         {/* Subtle grid pattern overlay */}
-        <div 
-          className="absolute inset-0 opacity-[0.02]" 
+        <div
+          className="absolute inset-0 opacity-[0.02]"
           style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)', backgroundSize: '60px 60px' }}
         />
       </div>

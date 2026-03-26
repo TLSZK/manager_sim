@@ -102,12 +102,14 @@ const SquadManagement: React.FC<SquadManagementProps> = ({ team, onUpdateTeam, o
 
   return (
     <div className="h-[100dvh] bg-slate-900 text-slate-100 flex flex-col overflow-hidden w-full min-w-0">
-      <header className="bg-slate-800 p-2 md:p-4 border-b border-slate-700 flex items-center justify-between shrink-0 z-50 shadow-md">
-        <button onClick={onBack} className="flex items-center gap-1 md:gap-2 text-slate-300 hover:text-white transition-colors text-xs md:text-base">
+      <header className="bg-gradient-to-r from-slate-900 to-slate-800 p-2 md:p-4 border-b border-slate-700/80 flex items-center justify-between shrink-0 z-50 shadow-lg">
+        <button onClick={onBack} className="flex items-center gap-1 md:gap-2 text-slate-400 hover:text-white hover:-translate-x-0.5 transition-all duration-200 text-xs md:text-base">
             <ChevronLeft size={18} className="md:w-[20px] md:h-[20px]" /> <span>Back</span>
         </button>
-        <h1 className="text-sm md:text-lg font-bold flex items-center gap-1.5 md:gap-2"><Shirt size={16} className="md:w-[20px] md:h-[20px]" /> Squad</h1>
-        <div className="w-10"></div> 
+        <h1 className="text-sm md:text-lg font-bold flex items-center gap-1.5 md:gap-2 text-slate-100">
+            <Shirt size={16} className="md:w-[20px] md:h-[20px] text-indigo-400" /> Squad Management
+        </h1>
+        <div className="w-10"></div>
       </header>
 
       {outOfPosCount > 0 && (

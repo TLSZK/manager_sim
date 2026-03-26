@@ -102,7 +102,18 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ teams, onSelect }) => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-4 md:p-6 pb-24 animate-in fade-in duration-500">
+    <div className="max-w-6xl mx-auto p-4 md:p-6 pb-24 animate-in fade-in duration-500 relative">
+      {/* Ambient glow */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
+        <div
+          className="absolute top-[-10%] right-[-5%] w-[50%] h-[50%] rounded-full opacity-50"
+          style={{ background: 'radial-gradient(circle, rgba(220, 38, 38, 0.08) 0%, transparent 60%)' }}
+        />
+        <div
+          className="absolute bottom-[-10%] left-[-5%] w-[50%] h-[50%] rounded-full opacity-50"
+          style={{ background: 'radial-gradient(circle, rgba(37, 99, 235, 0.08) 0%, transparent 60%)' }}
+        />
+      </div>
       {/* Header */}
       <div className="text-center mb-10 md:mb-14">
         <h1 className="text-4xl md:text-6xl font-extrabold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-[#FF2B44] to-[#D31E35] leading-tight">

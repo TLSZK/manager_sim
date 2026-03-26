@@ -84,7 +84,18 @@ const ProfileSelector: React.FC<ProfileSelectorProps> = ({ onSelectProfile, onLo
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 p-4 md:p-8 flex flex-col relative">
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 flex flex-col relative overflow-hidden">
+      {/* Ambient background glow */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div
+          className="absolute top-[-15%] left-[-10%] w-[60%] h-[60%] rounded-full opacity-60"
+          style={{ background: 'radial-gradient(circle, rgba(37, 99, 235, 0.12) 0%, transparent 60%)' }}
+        />
+        <div
+          className="absolute bottom-[-15%] right-[-10%] w-[60%] h-[60%] rounded-full opacity-60"
+          style={{ background: 'radial-gradient(circle, rgba(99, 102, 241, 0.12) 0%, transparent 60%)' }}
+        />
+      </div>
       {isCreating && <SetupModal onSave={handleCreate} onCancel={() => setIsCreating(false)} />}
 
       {/* Account Edit Modal */}
