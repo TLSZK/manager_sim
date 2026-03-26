@@ -1276,7 +1276,7 @@ export class GameEngine {
         // ── Ball over goal line (not a goal) ───────────────────────────
         const homeRight = this.period === 1;
         const isLeftLine = x < 50;
-        const defTeamId = (homeRight === isLeftLine) ? this.awayTeam.id : this.homeTeam.id;
+        const defTeamId = (homeRight === isLeftLine) ? this.homeTeam.id : this.awayTeam.id;
         const atkTeamId = defTeamId === this.homeTeam.id ? this.awayTeam.id : this.homeTeam.id;
         const lastTouchAtk = this.lastToucher?.teamId === atkTeamId;
         this.ball.stop();
