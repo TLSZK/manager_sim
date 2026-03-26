@@ -58,7 +58,10 @@ function drawPitch(ctx: CanvasRenderingContext2D, W: number, H: number, sx: numb
     ctx.ellipse((PITCH.RIGHT - PITCH.PEN_SPOT) * sx, H / 2, PITCH.CIRCLE_RX * sx, PITCH.CIRCLE_RY * sy, 0, Math.PI - 0.93, Math.PI + 0.93);
     ctx.stroke();
     [[PITCH.LEFT, 0], [PITCH.RIGHT, 0], [PITCH.LEFT, 100], [PITCH.RIGHT, 100]].forEach(([cx, cy]) => {
-        const startA = (cx < 50 ? 0 : Math.PI) + (cy < 50 ? -Math.PI / 2 : Math.PI / 2);
+        // Arc must sweep into the pitch from each corner
+        const startA = cx < 50
+            ? (cy < 50 ? 0 : -Math.PI / 2)
+            : (cy < 50 ? Math.PI / 2 : Math.PI);
         ctx.beginPath();
         ctx.ellipse(cx * sx, cy * sy, 0.86 * sx, 1.47 * sy, 0, startA, startA + Math.PI / 2);
         ctx.stroke();
@@ -150,7 +153,7 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
     const [draftRoster, setDraftRoster] = useState<Player[]>([]);
     const [draftFormation, setDraftFormation] = useState<Formation>('4-3-3');
     const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
-    const [changeCount, setChangeCount] = useState(0);
+    const MAX_SUBS = 5;
 
     // ── Canvas alignment ─────────────────────────────────────────────────
     const [alignPad, setAlignPad] = useState({ left: 0, right: 0 });
@@ -182,7 +185,6 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
         setDraftRoster([...(liveUserTeam.roster || [])]);
         setDraftFormation(liveUserTeam.formation || '4-3-3');
         setSelectedPlayerId(null);
-        setChangeCount(0);
         setShowTacticsModal(true);
     };
 
@@ -206,9 +208,13 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
             // If swapping field↔bench, it's a substitution
             const isSub = pA.offField !== pB.offField;
             if (isSub) {
-                const goingOff = pA.offField ? pB : pA;
                 // Can't bring back someone already subbed off
                 if (subbedOutIds.has(pA.id) || subbedOutIds.has(pB.id)) {
+                    setSelectedPlayerId(null);
+                    return;
+                }
+                // Block if no subs remaining
+                if (remainingSubs <= 0) {
                     setSelectedPlayerId(null);
                     return;
                 }
@@ -221,7 +227,6 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
             newRoster[playerBIndex] = pA;
 
             setDraftRoster(newRoster);
-            setChangeCount(prev => prev + 1);
             setSelectedPlayerId(null);
         }
     };
@@ -231,7 +236,6 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
         setDraftFormation(fmt);
         const aligned = alignRoster(draftRoster, fmt);
         setDraftRoster(aligned);
-        setChangeCount(prev => prev + 1);
     };
 
     // ── Apply all draft changes ──────────────────────────────────────────
@@ -263,6 +267,29 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
         [draftRoster, subbedOutIds]
     );
     const getDraftFormationPos = (index: number) => FORMATIONS[draftFormation]?.[index] || { x: 50, y: 50, position: '?' };
+
+    // Count new subs in the current draft (field players moved to bench vs live state)
+    const draftSubCount = useMemo(() => {
+        const liveOnField = new Set((liveUserTeam.roster || []).filter(p => !p.offField).map(p => p.id));
+        let count = 0;
+        liveOnField.forEach(id => {
+            const inDraft = draftRoster.find(p => p.id === id);
+            if (inDraft && inDraft.offField) count++;
+        });
+        return count;
+    }, [draftRoster, liveUserTeam.roster]);
+
+    const remainingSubs = MAX_SUBS - subbedOutIds.size - draftSubCount;
+
+    const hasChanges = useMemo(() => {
+        if (draftFormation !== (liveUserTeam.formation || '4-3-3')) return true;
+        const live = liveUserTeam.roster || [];
+        if (draftRoster.length !== live.length) return true;
+        for (let i = 0; i < draftRoster.length; i++) {
+            if (draftRoster[i].id !== live[i].id || draftRoster[i].offField !== live[i].offField) return true;
+        }
+        return false;
+    }, [draftRoster, draftFormation, liveUserTeam]);
 
     // ── Canvas draw callback ─────────────────────────────────────────────
     const draw = useCallback((game: GameEngine) => {
@@ -403,11 +430,9 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
                             <div className="flex items-center justify-between shrink-0 pb-2 md:pb-3 mb-2 md:mb-4 border-b border-slate-800">
                                 <h2 className="text-sm md:text-base font-black flex items-center gap-2 text-white">
                                     <Sliders className="text-emerald-400" size={16} /> Tactics
-                                    {changeCount > 0 && (
-                                        <span className="ml-1.5 text-[9px] sm:text-[10px] bg-emerald-600 text-white px-1.5 sm:px-2 py-0.5 rounded-full font-bold">
-                                            {changeCount} change{changeCount > 1 ? 's' : ''}
-                                        </span>
-                                    )}
+                                    <span className={`ml-1.5 text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full font-bold ${remainingSubs > 0 ? 'bg-slate-700 text-slate-300' : 'bg-red-600/80 text-white'}`}>
+                                        {remainingSubs} sub{remainingSubs !== 1 ? 's' : ''} left
+                                    </span>
                                 </h2>
                                 <div className="flex items-center gap-1.5 sm:gap-2">
                                     <div className="w-3 h-3 rounded-sm border border-white/20 shrink-0" style={{ backgroundColor: liveUserTeam.primaryColor }} />
@@ -462,8 +487,8 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
                                                     </div>
                                                     <div className={`text-[6px] font-bold px-0.5 rounded flex items-center gap-0.5 mt-0.5 ${fit === 'bad' ? 'bg-red-600/90 text-white' : fit === 'okay' ? 'bg-yellow-500/90 text-black' : 'bg-black/40 text-white'}`}>
                                                         <span>{effRating}</span>
-                                                        <span>{player.position}</span>
-                                                        {fit !== 'good' && <span className="opacity-70">→{pos.position}</span>}
+                                                        <span>{pos.position}</span>
+                                                        {fit !== 'good' && <span className="opacity-70">({player.position})</span>}
                                                     </div>
                                                     {fit === 'bad' && <div className="absolute -top-1 -left-1 bg-red-600 rounded-full shadow"><AlertTriangle size={8} className="text-white p-0.5" /></div>}
                                                 </button>
@@ -477,10 +502,11 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
                                     <p className="font-black text-slate-400 text-[9px] uppercase tracking-widest mb-0 sm:mb-1 shrink-0 self-center sm:self-start">Bench</p>
                                     {draftBench.map((p: Player) => {
                                         const isSelected = selectedPlayerId === p.id;
+                                        const subBlocked = remainingSubs <= 0;
                                         return (
                                             <div key={p.id}
-                                                onClick={() => handleTacticsPlayerClick(p)}
-                                                className={`p-2 md:p-2.5 rounded-xl cursor-pointer border transition-all min-w-[110px] sm:min-w-0 shrink-0 sm:shrink ${isSelected ? 'bg-yellow-500/20 border-yellow-500 shadow-sm' : 'bg-slate-800/70 border-slate-700 hover:border-slate-500 active:bg-slate-700/70'}`}>
+                                                onClick={() => !subBlocked && handleTacticsPlayerClick(p)}
+                                                className={`p-2 md:p-2.5 rounded-xl border transition-all min-w-[110px] sm:min-w-0 shrink-0 sm:shrink ${subBlocked ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'} ${isSelected ? 'bg-yellow-500/20 border-yellow-500 shadow-sm' : 'bg-slate-800/70 border-slate-700 hover:border-slate-500 active:bg-slate-700/70'}`}>
                                                 <div className="flex items-center justify-between gap-1.5 mb-0.5 sm:mb-1">
                                                     <span className="text-[10px] sm:text-xs font-bold text-white truncate">{p.number}. {p.name.split(' ').pop()}</span>
                                                     <span className={`text-[7px] sm:text-[8px] font-black uppercase px-1 sm:px-1.5 py-0.5 rounded shrink-0 ${isSelected ? 'bg-yellow-700/60 text-yellow-200' : 'bg-slate-700 text-slate-400'}`}>{p.position}</span>
@@ -514,9 +540,9 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
                                 )}
                                 <div className="flex-1" />
                                 <button onClick={() => { setShowTacticsModal(false); setSelectedPlayerId(null); }} className="px-3 sm:px-4 py-2 md:py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 font-bold text-[10px] sm:text-xs md:text-sm transition-colors border border-slate-700">Cancel</button>
-                                <button onClick={applyDraftChanges} disabled={changeCount === 0}
+                                <button onClick={applyDraftChanges} disabled={!hasChanges}
                                     className="px-3 sm:px-5 py-2 md:py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed font-bold text-[10px] sm:text-xs md:text-sm transition-all hover:-translate-y-0.5 duration-150 shadow-lg shadow-emerald-900/30">
-                                    Apply {changeCount > 0 ? `(${changeCount})` : ''}
+                                    Apply
                                 </button>
                             </div>
                         </div>

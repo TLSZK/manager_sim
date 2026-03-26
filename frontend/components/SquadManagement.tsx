@@ -182,8 +182,8 @@ const SquadManagement: React.FC<SquadManagementProps> = ({ team, onUpdateTeam, o
                             <div className={`text-[6px] sm:text-[7px] md:text-[9px] font-bold drop-shadow-md px-1 rounded flex items-center justify-center gap-0.5 sm:gap-1 mt-0.5 ${fit === 'bad' ? 'bg-red-600/90 text-white' : fit === 'okay' ? 'bg-yellow-500/90 text-black' : 'bg-black/40 text-white'}`}>
                                 <span className={fit === 'good' ? 'text-yellow-400' : 'inherit'}>{effectiveRating}</span>
                                 {fit !== 'good' && <span className="line-through text-[5px] sm:text-[6px] md:text-[7px] opacity-70">({player.rating})</span>}
-                                <span>{player.position}</span>
-                                {fit !== 'good' && <span className="opacity-80">({pos.position})</span>}
+                                <span>{pos.position}</span>
+                                {fit !== 'good' && <span className="opacity-80">({player.position})</span>}
                             </div>
                          </button>
                      );

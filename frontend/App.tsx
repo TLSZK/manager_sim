@@ -676,7 +676,7 @@ const App: React.FC = () => {
                                             const awayColor = awayWon ? 'text-green-400 font-extrabold' : (isDraw ? 'text-yellow-400 font-bold' : 'text-slate-500 font-normal');
                                             const scoreColor = isDraw ? 'text-yellow-400 border-yellow-700/50' : 'text-white border-slate-700';
                                             return (
-                                                <div key={m.id} className={`flex items-center justify-between p-2 sm:p-3 rounded-lg border ${isUserMatch ? 'bg-blue-900/30 border-blue-500/50' : 'bg-slate-800 border-slate-700'}`}>
+                                                <div key={m.id} className={`flex items-center justify-between p-2 sm:p-3 rounded-lg border animate-in fade-in slide-in-from-bottom-2 duration-500 fill-mode-both ${isUserMatch ? 'bg-blue-900/30 border-blue-500/50' : 'bg-slate-800 border-slate-700'}`} style={{ animationDelay: `${idx * 30}ms` }}>
                                                     <div className="text-[10px] sm:text-xs text-slate-400 w-8 sm:w-10 font-mono shrink-0">{dateStr}</div>
                                                     <div className={`flex-1 flex justify-end items-center gap-1.5 sm:gap-2 text-xs sm:text-sm min-w-0 ${homeColor}`}>
                                                         <span className={`truncate ${h?.id === userTeamId ? 'font-black tracking-wide' : ''}`}>{h?.name}</span>
@@ -940,7 +940,7 @@ const App: React.FC = () => {
                                 const a = teams.find(t => t.id === match.awayTeamId);
                                 if (!h || !a) return null;
                                 return (
-                                    <div key={match.id} className={`group hover:bg-slate-700/60 transition-all duration-200 hover:scale-[1.01] p-2 sm:p-3 flex justify-between items-center text-[10px] sm:text-sm min-w-0 cursor-default ${(h.id === userTeamId || a.id === userTeamId) ? (match.competition === 'Champions League' ? 'bg-blue-900/20 border-l-2 border-blue-500' : 'bg-indigo-900/20 border-l-2 border-indigo-500') : 'bg-transparent'}`}>
+                                    <div key={match.id} className={`group hover:bg-slate-700/60 transition-all duration-200 hover:scale-[1.01] p-2 sm:p-3 flex justify-between items-center text-[10px] sm:text-sm min-w-0 cursor-default animate-in fade-in slide-in-from-bottom-2 duration-500 fill-mode-both ${(h.id === userTeamId || a.id === userTeamId) ? (match.competition === 'Champions League' ? 'bg-blue-900/20 border-l-2 border-blue-500' : 'bg-indigo-900/20 border-l-2 border-indigo-500') : 'bg-transparent'}`} style={{ animationDelay: `${idx * 30}ms` }}>
                                         <div className="flex-1 text-right font-medium text-slate-300 flex items-center justify-end gap-1.5 sm:gap-2 min-w-0">
                                             <span className={`truncate ${h.id === userTeamId ? 'text-white font-bold' : ''}`}>{h.name}</span>
                                             {h.logoUrl ? (<img src={h.logoUrl} className="w-4 h-4 sm:w-5 sm:h-5 object-contain shrink-0" />) : (<div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full shrink-0" style={{ backgroundColor: h.primaryColor }}></div>)}
