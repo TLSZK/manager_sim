@@ -13,7 +13,8 @@
       "Bash(grep:*)",
       "Bash(ls /c/laragon/www/manager_sim1/frontend/*.config.*)",
       "Bash(ls /c/laragon/www/manager_sim1/frontend/vite*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(find /c/laragon/www/manager_sim1/frontend/src -name *.tsx)"
     ]
   }
 }

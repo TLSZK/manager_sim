@@ -483,21 +483,21 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
 
                                 {/* Pitch area */}
                                 <div className="flex-1 bg-slate-950 p-2 sm:p-3 md:p-5 flex items-center justify-center overflow-hidden">
-                                    {/* viewBox matches canvas exactly so <circle> elements are always circular */}
-                                    <div className="w-full relative rounded-lg md:rounded-xl shadow-2xl overflow-hidden ring-1 ring-white/10" style={{ aspectRatio: '1000 / 583', maxHeight: '100%', maxWidth: '100%' }}>
-                                        <svg viewBox="0 0 1000 583" preserveAspectRatio="none" className="absolute inset-0 w-full h-full" aria-hidden="true">
-                                            <rect width="1000" height="583" fill="#166534" />
-                                            {[0,2,4,6,8].map(i => <rect key={i} x={i*100} y="0" width="100" height="583" fill="rgba(0,0,0,0.04)" />)}
+                                    {/* Same 1000×583 aspect ratio as the live match canvas */}
+                                    <div className="w-full relative rounded-lg md:rounded-xl shadow-2xl overflow-hidden ring-1 ring-white/10" style={{ aspectRatio: '1100 / 643', maxHeight: '100%', maxWidth: '100%' }}>
+                                        <svg viewBox="-50 -30 1100 643" preserveAspectRatio="xMidYMid meet" className="absolute inset-0 w-full h-full" aria-hidden="true">
+                                            <rect x="-50" y="-30" width="1100" height="643" fill="#166534" />
+                                            {[0,2,4,6,8].map(i => <rect key={i} x={i*100} y="-30" width="100" height="643" fill="rgba(0,0,0,0.04)" />)}
                                             <rect x="50" y="0" width="900" height="583" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
                                             <line x1="500" y1="0" x2="500" y2="583" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
                                             <circle cx="500" cy="291.5" r="78.4" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
-                                            <circle cx="500" cy="291.5" r="4" fill="rgba(255,255,255,0.75)" />
+                                            <circle cx="500" cy="291.5" r="6" fill="rgba(255,255,255,0.75)" />
                                             <rect x="50"  y="118.6" width="141" height="345.7" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
                                             <rect x="809" y="118.6" width="141" height="345.7" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
                                             <rect x="50"  y="213.1" width="47" height="156.8" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
                                             <rect x="903" y="213.1" width="47" height="156.8" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
-                                            <circle cx="144.2" cy="291.5" r="3" fill="rgba(255,255,255,0.75)" />
-                                            <circle cx="855.8" cy="291.5" r="3" fill="rgba(255,255,255,0.75)" />
+                                            <circle cx="144.2" cy="291.5" r="5" fill="rgba(255,255,255,0.75)" />
+                                            <circle cx="855.8" cy="291.5" r="5" fill="rgba(255,255,255,0.75)" />
                                             <path d="M 191 228.6 A 78.4 78.4 0 0 1 191 354.4" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
                                             <path d="M 809 354.4 A 78.4 78.4 0 0 1 809 228.6" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
                                             <path d="M 58.6 0 A 8.6 8.6 0 0 1 50 8.6"       fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
@@ -519,9 +519,9 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
                                                 <button key={player.id}
                                                     onClick={() => handleTacticsPlayerClick(player)}
                                                     className={`absolute transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-10 transition-all duration-200 ${isSelected ? 'scale-125 z-20' : 'hover:scale-110 active:scale-110'}`}
-                                                    style={{ left: `${pos.x}%`, top: `${pos.y}%` }}>
+                                                    style={{ left: `${((pos.x * 10 + 50) / 1100 * 100).toFixed(2)}%`, top: `${((pos.y * 5.83 + 30) / 643 * 100).toFixed(2)}%` }}>
                                                     <div
-                                                        className={`w-9 h-9 sm:w-10 sm:h-10 md:w-11 md:h-11 rounded-full border-2 flex items-center justify-center text-[10px] sm:text-xs md:text-sm font-black shadow-lg relative transition-colors ${isSelected ? 'ring-2 ring-offset-1 ring-yellow-400 border-white ring-offset-emerald-900' : 'border-white/80'}`}
+                                                        className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 flex items-center justify-center text-[9px] sm:text-[10px] font-black shadow-lg relative transition-colors ${isSelected ? 'ring-2 ring-offset-1 ring-yellow-400 border-white ring-offset-emerald-900' : 'border-white/80'}`}
                                                         style={{ backgroundColor: liveUserTeam.primaryColor, color: liveUserTeam.secondaryColor }}>
                                                         {player.number}
                                                         {isSelected && <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-yellow-400 rounded-full animate-ping" />}
@@ -597,12 +597,6 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
                                     </button>
                                 )}
                                 <div className="flex-1" />
-                                <button
-                                    onClick={() => { setShowTacticsModal(false); setSelectedPlayerId(null); }}
-                                    className="px-3 sm:px-4 py-2 md:py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 font-bold text-[10px] sm:text-xs md:text-sm transition-colors border border-slate-700"
-                                >
-                                    Cancel
-                                </button>
                                 <button
                                     onClick={applyDraftChanges}
                                     disabled={!hasChanges}
