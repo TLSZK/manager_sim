@@ -359,9 +359,10 @@ export class GameEngine {
       return;
     }
 
-    // ── Throw-in: short range only (realistic ~15m) ──────────────────
+    // ── Throw-in: short realistic range only (~8 coordinate units ≈ ~8m) ──
+    // ── All other set pieces (goal kicks, free kicks) use full range ──────
     const isThrowIn = this.setPiece === SetPieceType.ThrowIn;
-    const maxDist = isThrowIn ? 15 : (this.isThrowInOrGoalKick && this.ballOwner.role !== Role.Goalkeeper ? 15 : 100);
+    const maxDist = isThrowIn ? 8 : 100;
 
     const mates = this.players.filter(m =>
       m.teamId === this.ballOwner!.teamId && m !== this.ballOwner &&

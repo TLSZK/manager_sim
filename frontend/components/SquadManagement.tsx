@@ -14,7 +14,6 @@ const SquadManagement: React.FC<SquadManagementProps> = ({ team, onUpdateTeam, o
   const [roster, setRoster] = useState<Player[]>(team.roster || []);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   
-  const [isVertical, setIsVertical] = useState<boolean>(true);
   const initializedRef = useRef<string | null>(null);
 
   // Sync local state when switching to a different team; otherwise leave local state as the source of truth
@@ -27,12 +26,6 @@ const SquadManagement: React.FC<SquadManagementProps> = ({ team, onUpdateTeam, o
     }
   }, [team]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    const checkOrientation = () => setIsVertical(window.innerWidth < 1280);
-    checkOrientation();
-    window.addEventListener('resize', checkOrientation);
-    return () => window.removeEventListener('resize', checkOrientation);
-  }, []);
 
   const handleFormationChange = (fmt: Formation) => {
     setSelectedFormation(fmt);
@@ -107,56 +100,59 @@ const SquadManagement: React.FC<SquadManagementProps> = ({ team, onUpdateTeam, o
           </div>
       )}
 
-      {/* CHANGED: overflow-hidden -> overflow-y-auto on mobile to allow scrolling down to the bench */}
-      <div className="flex-1 flex flex-col xl:flex-row overflow-y-auto xl:overflow-hidden min-w-0 custom-scrollbar">
-        
-        {/* CHANGED: Removed internal overflow-y-auto and min-h so it plays nicely with the parent scroll */}
-        <div className="w-full xl:flex-1 bg-slate-950 p-2 md:p-6 pb-6 flex flex-col items-center relative shrink-0 xl:overflow-hidden min-h-[50vh] xl:min-h-0 min-w-0">
-             <div className="w-full max-w-[600px] mb-2 md:mb-4 z-20 flex justify-center">
-                <div className="bg-slate-800/90 p-1.5 md:p-2 rounded-lg border border-slate-700 shadow-lg flex items-center gap-2 md:gap-3">
-                    <span className="text-[9px] md:text-[10px] text-slate-400 uppercase font-bold">Formation</span>
-                    <select value={selectedFormation} onChange={(e) => handleFormationChange(e.target.value as Formation)} className="bg-slate-900 border border-slate-600 rounded px-1.5 md:px-2 py-0.5 md:py-1 text-[10px] md:text-xs outline-none text-white min-w-[80px] md:min-w-[100px]">
-                        <option value="4-3-3">4-3-3 Holding</option>
-                        <option value="4-2-3-1">4-2-3-1 Modern</option>
-                        <option value="4-4-2">4-4-2 Flat</option>
-                        <option value="3-5-2">3-5-2 Wingbacks</option>
-                    </select>
-                </div>
-             </div>
+      {/* Formation selector bar */}
+      <div className="shrink-0 flex items-center gap-3 px-3 sm:px-5 py-2 bg-slate-800/40 border-b border-slate-700/60 z-40">
+        <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider shrink-0">Formation</span>
+        <select value={selectedFormation} onChange={e => handleFormationChange(e.target.value as Formation)}
+          className="bg-slate-800 border border-slate-600 rounded-lg px-2.5 py-1 text-xs text-white outline-none">
+          <option value="4-3-3">4-3-3 Holding</option>
+          <option value="4-2-3-1">4-2-3-1 Modern</option>
+          <option value="4-4-2">4-4-2 Flat</option>
+          <option value="3-5-2">3-5-2 Wingbacks</option>
+        </select>
+        <span className="text-[9px] text-slate-500 ml-auto hidden sm:block">Tap two players to swap positions</span>
+      </div>
 
-             <div className={`w-full max-w-[400px] sm:max-w-[500px] xl:max-w-[800px] ${isVertical ? 'aspect-[3/4]' : 'aspect-[4/3]'} bg-emerald-700 rounded-lg md:rounded-xl border-2 md:border-4 border-slate-800 relative shadow-2xl overflow-hidden ring-1 ring-white/10 transition-all duration-300 min-h-0`}>
-                 <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-black to-transparent" />
-                 <div className="absolute inset-0" style={{ backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 49px, rgba(0,0,0,0.05) 50px, rgba(0,0,0,0.05) 99px)' }}></div>
-                 
-                 <div className="absolute inset-0 m-auto w-16 h-16 sm:w-24 sm:h-24 md:w-32 md:h-32 border border-white/30 rounded-full" />
-                 
-                 {isVertical ? (
-                    <>
-                        <div className="absolute inset-x-0 top-1/2 h-[1px] bg-white/30 -translate-y-1/2" />
-                        <div className="absolute top-0 left-1/4 right-1/4 h-8 sm:h-12 md:h-16 border-b border-l border-r border-white/30" />
-                        <div className="absolute bottom-0 left-1/4 right-1/4 h-8 sm:h-12 md:h-16 border-t border-l border-r border-white/30" />
-                    </>
-                 ) : (
-                    <>
-                        <div className="absolute inset-y-0 left-1/2 w-[1px] bg-white/30 -translate-x-1/2" />
-                        <div className="absolute left-0 top-1/4 bottom-1/4 w-8 sm:w-12 md:w-16 border-r border-t border-b border-white/30" />
-                        <div className="absolute right-0 top-1/4 bottom-1/4 w-8 sm:w-12 md:w-16 border-l border-t border-b border-white/30" />
-                    </>
-                 )}
+      <div className="flex-1 flex flex-col xl:flex-row overflow-y-auto xl:overflow-hidden min-w-0 custom-scrollbar">
+
+        <div className="w-full xl:flex-1 bg-slate-950 p-2 sm:p-4 md:p-6 flex items-center justify-center relative shrink-0 xl:overflow-hidden min-h-[40vw] xl:min-h-0 min-w-0">
+
+             {/* Same 1000×583 aspect ratio as the live match canvas */}
+             <div className="w-full relative rounded-lg md:rounded-xl shadow-2xl overflow-hidden ring-1 ring-white/10" style={{ aspectRatio: '1000 / 583', maxHeight: '100%', maxWidth: '100%' }}>
+                 <svg viewBox="0 0 1000 583" preserveAspectRatio="none" className="absolute inset-0 w-full h-full" aria-hidden="true">
+                     <rect width="1000" height="583" fill="#166534" />
+                     {[0,2,4,6,8].map(i => <rect key={i} x={i*100} y="0" width="100" height="583" fill="rgba(0,0,0,0.04)" />)}
+                     <rect x="50" y="0" width="900" height="583" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
+                     <line x1="500" y1="0" x2="500" y2="583" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
+                     <circle cx="500" cy="291.5" r="78.4" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
+                     <circle cx="500" cy="291.5" r="4" fill="rgba(255,255,255,0.75)" />
+                     <rect x="50"  y="118.6" width="141" height="345.7" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
+                     <rect x="809" y="118.6" width="141" height="345.7" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
+                     <rect x="50"  y="213.1" width="47" height="156.8" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
+                     <rect x="903" y="213.1" width="47" height="156.8" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
+                     <circle cx="144.2" cy="291.5" r="3" fill="rgba(255,255,255,0.75)" />
+                     <circle cx="855.8" cy="291.5" r="3" fill="rgba(255,255,255,0.75)" />
+                     <path d="M 191 228.6 A 78.4 78.4 0 0 1 191 354.4" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
+                     <path d="M 809 354.4 A 78.4 78.4 0 0 1 809 228.6" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
+                     <path d="M 58.6 0 A 8.6 8.6 0 0 1 50 8.6"       fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
+                     <path d="M 950 8.6 A 8.6 8.6 0 0 1 941.4 0"     fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
+                     <path d="M 50 574.4 A 8.6 8.6 0 0 1 58.6 583"   fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
+                     <path d="M 941.4 583 A 8.6 8.6 0 0 1 950 574.4" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
+                     <rect x="0"   y="253.6" width="50" height="75.8" fill="rgba(255,255,255,0.45)" />
+                     <rect x="0"   y="253.6" width="50" height="75.8" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.5" />
+                     <rect x="950" y="253.6" width="50" height="75.8" fill="rgba(255,255,255,0.45)" />
+                     <rect x="950" y="253.6" width="50" height="75.8" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.5" />
+                 </svg>
 
                  {starters.map((player, index) => {
                      const pos = getFormationPos(index);
                      const isSelected = selectedPlayerId === player.id;
                      const fit = getPositionFit(player.position, pos.position);
                      const effectiveRating = getPenalizedRating(player.rating, player.position, pos.position);
-                     
-                     let style: React.CSSProperties = isVertical 
-                        ? { left: `${pos.y}%`, top: `${100 - pos.x}%` }
-                        : { left: `${pos.x}%`, top: `${pos.y}%` };
 
                      return (
-                         <button key={player.id} onClick={() => handlePlayerClick(player)} className={`absolute transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center transition-all duration-300 group z-10 ${isSelected ? 'scale-125 z-20' : 'hover:scale-110'}`} style={style}>
-                            <div className={`w-6 h-6 sm:w-8 sm:h-8 md:w-12 md:h-12 rounded-full border md:border-2 shadow-lg flex items-center justify-center text-[8px] sm:text-[10px] md:text-base font-bold relative transition-colors ${isSelected ? 'ring-2 md:ring-4 ring-yellow-400 border-white' : 'border-white'}`} style={{ backgroundColor: team.primaryColor, color: team.secondaryColor === '#ffffff' ? 'white' : team.secondaryColor }}>
+                         <button key={player.id} onClick={() => handlePlayerClick(player)} className={`absolute transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center transition-all duration-300 group z-10 ${isSelected ? 'scale-125 z-20' : 'hover:scale-110'}`} style={{ left: `${pos.x}%`, top: `${pos.y}%` }}>
+                            <div className={`w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 rounded-full border-2 shadow-lg flex items-center justify-center text-[10px] sm:text-xs md:text-base font-bold relative transition-colors ${isSelected ? 'ring-2 md:ring-4 ring-yellow-400 border-white' : 'border-white'}`} style={{ backgroundColor: team.primaryColor, color: team.secondaryColor === '#ffffff' ? 'white' : team.secondaryColor }}>
                                 {player.number}
                                 {isSelected && <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 sm:w-2 sm:h-2 md:w-4 md:h-4 bg-yellow-400 rounded-full animate-ping" />}
                                 {fit === 'bad' && <div className="absolute -top-1 -left-1 bg-red-600 rounded-full shadow"><AlertTriangle size={10} className="text-white p-0.5" /></div>}

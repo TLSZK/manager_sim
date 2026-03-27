@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { Team, Player, Formation } from '../types';
 import { FORMATIONS, getPositionFit, getPenalizedRating, alignRoster } from '../constants';
 import { GameEngine, PITCH, type MatchStats } from '../utils/simulation';
-import { FastForward, Play, Pause, RotateCcw, Sliders, PlayIcon, AlertTriangle, ArrowRightLeft } from 'lucide-react';
+import { FastForward, Play, Pause, Sliders, PlayIcon, AlertTriangle, Users } from 'lucide-react';
 
 // ── Public types re-exported for consumers ───────────────────────────────────
 export type { MatchStats };
@@ -58,7 +58,6 @@ function drawPitch(ctx: CanvasRenderingContext2D, W: number, H: number, sx: numb
     ctx.ellipse((PITCH.RIGHT - PITCH.PEN_SPOT) * sx, H / 2, PITCH.CIRCLE_RX * sx, PITCH.CIRCLE_RY * sy, 0, Math.PI - 0.93, Math.PI + 0.93);
     ctx.stroke();
     [[PITCH.LEFT, 0], [PITCH.RIGHT, 0], [PITCH.LEFT, 100], [PITCH.RIGHT, 100]].forEach(([cx, cy]) => {
-        // Arc must sweep into the pitch from each corner
         const startA = cx < 50
             ? (cy < 50 ? 0 : -Math.PI / 2)
             : (cy < 50 ? Math.PI / 2 : Math.PI);
@@ -208,12 +207,10 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
             // If swapping field↔bench, it's a substitution
             const isSub = pA.offField !== pB.offField;
             if (isSub) {
-                // Can't bring back someone already subbed off
                 if (subbedOutIds.has(pA.id) || subbedOutIds.has(pB.id)) {
                     setSelectedPlayerId(null);
                     return;
                 }
-                // Block if no subs remaining
                 if (remainingSubs <= 0) {
                     setSelectedPlayerId(null);
                     return;
@@ -240,7 +237,6 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
 
     // ── Apply all draft changes ──────────────────────────────────────────
     const applyDraftChanges = () => {
-        // Figure out who was subbed out
         const originalOnField = new Set((liveUserTeam.roster || []).filter(p => !p.offField).map(p => p.id));
         const newOnField = new Set(draftRoster.filter(p => !p.offField).map(p => p.id));
         const newSubbedOut = new Set(subbedOutIds);
@@ -268,7 +264,6 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
     );
     const getDraftFormationPos = (index: number) => FORMATIONS[draftFormation]?.[index] || { x: 50, y: 50, position: '?' };
 
-    // Count new subs in the current draft (field players moved to bench vs live state)
     const draftSubCount = useMemo(() => {
         const liveOnField = new Set((liveUserTeam.roster || []).filter(p => !p.offField).map(p => p.id));
         let count = 0;
@@ -290,6 +285,11 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
         }
         return false;
     }, [draftRoster, draftFormation, liveUserTeam]);
+
+    // ── Out-of-position count for warning ────────────────────────────────
+    const outOfPosCount = useMemo(() => {
+        return draftStarters.filter((p, i) => getPositionFit(p.position, getDraftFormationPos(i).position) === 'bad').length;
+    }, [draftStarters, draftFormation]);
 
     // ── Canvas draw callback ─────────────────────────────────────────────
     const draw = useCallback((game: GameEngine) => {
@@ -405,67 +405,110 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
                     className="max-w-full max-h-full aspect-[1000/583] rounded-xl shadow-2xl ring-1 ring-white/10"
                 />
 
-                {/* Halftime overlay */}
+                {/* ── Halftime overlay ─────────────────────────────────── */}
                 {isHalftime && !showTacticsModal && (
                     <div className="absolute inset-0 m-0 sm:m-2 md:m-3 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center z-30 sm:rounded-xl">
-                        <div className="bg-slate-900/80 border border-slate-700/60 rounded-2xl px-6 sm:px-10 py-6 sm:py-8 flex flex-col items-center shadow-2xl mx-4">
+                        <div className="bg-slate-900/90 border border-slate-700/60 rounded-2xl px-6 sm:px-10 py-6 sm:py-8 flex flex-col items-center shadow-2xl mx-4 w-full max-w-sm">
                             <span className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 bg-slate-800 border border-slate-700 rounded-full px-3 py-1 mb-4 sm:mb-5">Half Time</span>
                             <p className="text-4xl sm:text-6xl font-black mb-1.5 tabular-nums tracking-tight">{score.home} – {score.away}</p>
-                            <p className="text-slate-500 text-xs mb-5 sm:mb-7">{homeTeam.shortName} vs {awayTeam.shortName}</p>
-                            <button
-                                onClick={() => { engineRef.current?.startSecondHalf(); setIsHalftime(false); setIsPausedState(false); }}
-                                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 transition-all px-5 sm:px-7 py-2.5 sm:py-3 rounded-xl font-bold text-sm shadow-xl hover:-translate-y-0.5 duration-150"
-                            >
-                                <PlayIcon size={16} /> Start 2nd Half
-                            </button>
+                            <p className="text-slate-500 text-xs mb-6 sm:mb-8">{homeTeam.shortName} vs {awayTeam.shortName}</p>
+                            <div className="flex flex-col gap-3 w-full">
+                                <button
+                                    onClick={openTacticsModal}
+                                    className="flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 active:bg-slate-800 border border-slate-600 transition-all px-5 py-2.5 sm:py-3 rounded-xl font-bold text-sm shadow-md hover:-translate-y-0.5 duration-150 w-full"
+                                >
+                                    <Sliders size={16} className="text-emerald-400" />
+                                    Team Talk &amp; Tactics
+                                    <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded-full font-bold ${remainingSubs > 0 ? 'bg-slate-600 text-slate-300' : 'bg-red-700/80 text-white'}`}>
+                                        {remainingSubs} sub{remainingSubs !== 1 ? 's' : ''}
+                                    </span>
+                                </button>
+                                <button
+                                    onClick={() => { engineRef.current?.startSecondHalf(); setIsHalftime(false); setIsPausedState(false); }}
+                                    className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 transition-all px-5 sm:px-7 py-2.5 sm:py-3 rounded-xl font-bold text-sm shadow-xl hover:-translate-y-0.5 duration-150 w-full"
+                                >
+                                    <PlayIcon size={16} /> Start 2nd Half
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}
 
-                {/* ── OVERHAULED TACTICS MODAL ──────────────────────────────── */}
+                {/* ── TACTICS MODAL (styled like SquadManagement) ──────── */}
                 {showTacticsModal && (
-                    <div className="absolute inset-0 m-0 sm:m-2 md:m-3 bg-black/90 sm:bg-black/85 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:rounded-xl p-0 sm:p-2 md:p-4">
-                        <div className="bg-slate-900 border-t sm:border border-slate-700 p-3 md:p-5 rounded-t-2xl sm:rounded-2xl w-full max-w-2xl max-h-[95vh] sm:max-h-full flex flex-col shadow-2xl overflow-hidden">
-                            {/* Modal header */}
-                            <div className="flex items-center justify-between shrink-0 pb-2 md:pb-3 mb-2 md:mb-4 border-b border-slate-800">
+                    <div className="fixed inset-0 z-[60] bg-black/85 backdrop-blur-sm flex items-center justify-center p-1 sm:p-2 md:p-4">
+                        <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full flex flex-col shadow-2xl overflow-hidden" style={{ maxWidth: '1200px', height: 'min(95vh, 820px)' }}>
+
+                            {/* Header */}
+                            <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-2 md:p-4 border-b border-slate-700/80 flex items-center justify-between shrink-0">
                                 <h2 className="text-sm md:text-base font-black flex items-center gap-2 text-white">
-                                    <Sliders className="text-emerald-400" size={16} /> Tactics
-                                    <span className={`ml-1.5 text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full font-bold ${remainingSubs > 0 ? 'bg-slate-700 text-slate-300' : 'bg-red-600/80 text-white'}`}>
+                                    <Sliders className="text-emerald-400" size={16} />
+                                    {isHalftime ? 'Half-Time Tactics' : 'Tactics'}
+                                    <span className={`ml-1 text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full font-bold ${remainingSubs > 0 ? 'bg-slate-700 text-slate-300' : 'bg-red-600/80 text-white'}`}>
                                         {remainingSubs} sub{remainingSubs !== 1 ? 's' : ''} left
                                     </span>
                                 </h2>
-                                <div className="flex items-center gap-1.5 sm:gap-2">
+                                <div className="flex items-center gap-1.5">
                                     <div className="w-3 h-3 rounded-sm border border-white/20 shrink-0" style={{ backgroundColor: liveUserTeam.primaryColor }} />
-                                    <span className="text-[10px] sm:text-xs md:text-sm font-bold text-slate-300">{liveUserTeam.shortName}</span>
+                                    <span className="text-[10px] sm:text-xs font-bold text-slate-300">{liveUserTeam.shortName}</span>
                                 </div>
                             </div>
 
+                            {/* Out-of-position warning */}
+                            {outOfPosCount > 0 && (
+                                <div className="bg-red-900/50 border-b border-red-700 px-3 py-1.5 flex items-center justify-center gap-1.5 text-red-200 text-[10px] md:text-xs shrink-0">
+                                    <AlertTriangle size={12} className="text-red-400 shrink-0" />
+                                    <span><strong>{outOfPosCount}</strong> player{outOfPosCount > 1 ? 's' : ''} out of position — performance will be reduced</span>
+                                </div>
+                            )}
+
                             {/* Formation selector */}
-                            <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3 shrink-0">
-                                <span className="text-[9px] md:text-[10px] text-slate-400 uppercase font-bold">Formation</span>
+                            <div className="flex items-center gap-2 sm:gap-3 px-3 py-2 border-b border-slate-800 shrink-0 bg-slate-800/40">
+                                <span className="text-[9px] md:text-[10px] text-slate-400 uppercase font-bold tracking-wider">Formation</span>
                                 <select
                                     value={draftFormation}
                                     onChange={(e) => handleDraftFormationChange(e.target.value as Formation)}
-                                    className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-[10px] md:text-xs outline-none text-white min-w-[90px] sm:min-w-[100px]"
+                                    className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-[10px] md:text-xs outline-none text-white min-w-[90px] sm:min-w-[110px]"
                                 >
                                     <option value="4-3-3">4-3-3 Holding</option>
                                     <option value="4-2-3-1">4-2-3-1 Modern</option>
                                     <option value="4-4-2">4-4-2 Flat</option>
                                     <option value="3-5-2">3-5-2 Wingbacks</option>
                                 </select>
-                                <span className="text-[8px] sm:text-[9px] text-slate-500 ml-auto">Tap two to swap</span>
+                                <span className="text-[8px] sm:text-[9px] text-slate-500 ml-auto">Tap two players to swap</span>
                             </div>
 
-                            {/* Pitch + Bench — stacks vertically on mobile, side-by-side on sm+ */}
-                            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 md:gap-4 flex-1 min-h-0 overflow-y-auto sm:overflow-hidden mb-2 sm:mb-3 md:mb-4 custom-scrollbar">
-                                {/* Mini pitch */}
-                                <div className="w-full sm:flex-1 flex items-start justify-center shrink-0 sm:shrink sm:min-h-0">
-                                    <div className="w-full max-w-[280px] sm:max-w-none aspect-[3/4] bg-emerald-900 rounded-xl border border-slate-600/80 relative overflow-hidden shadow-xl" style={{ maxHeight: '100%' }}>
-                                        <div className="absolute inset-0 opacity-[0.04]" style={{ backgroundImage: 'repeating-linear-gradient(90deg, white 0px, white 1px, transparent 1px, transparent 28px)' }} />
-                                        <div className="absolute inset-x-0 top-1/2 h-px bg-white/25 -translate-y-1/2" />
-                                        <div className="absolute top-0 left-1/4 right-1/4 h-10 border-b border-l border-r border-white/20" />
-                                        <div className="absolute bottom-0 left-1/4 right-1/4 h-10 border-t border-l border-r border-white/20" />
-                                        <div className="absolute inset-0 m-auto w-14 h-14 border border-white/20 rounded-full" />
+                            {/* Pitch + Bench */}
+                            <div className="flex flex-row flex-1 min-h-0 overflow-hidden">
+
+                                {/* Pitch area */}
+                                <div className="flex-1 bg-slate-950 p-2 sm:p-3 md:p-5 flex items-center justify-center overflow-hidden">
+                                    {/* viewBox matches canvas exactly so <circle> elements are always circular */}
+                                    <div className="w-full relative rounded-lg md:rounded-xl shadow-2xl overflow-hidden ring-1 ring-white/10" style={{ aspectRatio: '1000 / 583', maxHeight: '100%', maxWidth: '100%' }}>
+                                        <svg viewBox="0 0 1000 583" preserveAspectRatio="none" className="absolute inset-0 w-full h-full" aria-hidden="true">
+                                            <rect width="1000" height="583" fill="#166534" />
+                                            {[0,2,4,6,8].map(i => <rect key={i} x={i*100} y="0" width="100" height="583" fill="rgba(0,0,0,0.04)" />)}
+                                            <rect x="50" y="0" width="900" height="583" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
+                                            <line x1="500" y1="0" x2="500" y2="583" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
+                                            <circle cx="500" cy="291.5" r="78.4" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
+                                            <circle cx="500" cy="291.5" r="4" fill="rgba(255,255,255,0.75)" />
+                                            <rect x="50"  y="118.6" width="141" height="345.7" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
+                                            <rect x="809" y="118.6" width="141" height="345.7" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
+                                            <rect x="50"  y="213.1" width="47" height="156.8" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
+                                            <rect x="903" y="213.1" width="47" height="156.8" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
+                                            <circle cx="144.2" cy="291.5" r="3" fill="rgba(255,255,255,0.75)" />
+                                            <circle cx="855.8" cy="291.5" r="3" fill="rgba(255,255,255,0.75)" />
+                                            <path d="M 191 228.6 A 78.4 78.4 0 0 1 191 354.4" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
+                                            <path d="M 809 354.4 A 78.4 78.4 0 0 1 809 228.6" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
+                                            <path d="M 58.6 0 A 8.6 8.6 0 0 1 50 8.6"       fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
+                                            <path d="M 950 8.6 A 8.6 8.6 0 0 1 941.4 0"     fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
+                                            <path d="M 50 574.4 A 8.6 8.6 0 0 1 58.6 583"   fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
+                                            <path d="M 941.4 583 A 8.6 8.6 0 0 1 950 574.4" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.5" />
+                                            <rect x="0"   y="253.6" width="50" height="75.8" fill="rgba(255,255,255,0.45)" />
+                                            <rect x="0"   y="253.6" width="50" height="75.8" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.5" />
+                                            <rect x="950" y="253.6" width="50" height="75.8" fill="rgba(255,255,255,0.45)" />
+                                            <rect x="950" y="253.6" width="50" height="75.8" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.5" />
+                                        </svg>
 
                                         {draftStarters.map((player: Player, index: number) => {
                                             const pos = getDraftFormationPos(index);
@@ -475,74 +518,97 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
                                             return (
                                                 <button key={player.id}
                                                     onClick={() => handleTacticsPlayerClick(player)}
-                                                    className={`absolute transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-10 transition-transform duration-150 ${isSelected ? 'scale-110' : 'active:scale-110'}`}
-                                                    style={{ left: `${pos.y}%`, top: `${100 - pos.x}%` }}>
+                                                    className={`absolute transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-10 transition-all duration-200 ${isSelected ? 'scale-125 z-20' : 'hover:scale-110 active:scale-110'}`}
+                                                    style={{ left: `${pos.x}%`, top: `${pos.y}%` }}>
                                                     <div
-                                                        className={`w-7 h-7 sm:w-7 sm:h-7 rounded-full border-2 flex items-center justify-center text-[9px] font-black shadow-lg ${isSelected ? 'ring-2 ring-offset-1 ring-yellow-400 border-white ring-offset-emerald-900' : 'border-white/70'}`}
+                                                        className={`w-9 h-9 sm:w-10 sm:h-10 md:w-11 md:h-11 rounded-full border-2 flex items-center justify-center text-[10px] sm:text-xs md:text-sm font-black shadow-lg relative transition-colors ${isSelected ? 'ring-2 ring-offset-1 ring-yellow-400 border-white ring-offset-emerald-900' : 'border-white/80'}`}
                                                         style={{ backgroundColor: liveUserTeam.primaryColor, color: liveUserTeam.secondaryColor }}>
                                                         {player.number}
+                                                        {isSelected && <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-yellow-400 rounded-full animate-ping" />}
+                                                        {fit === 'bad' && <div className="absolute -top-1 -left-1 bg-red-600 rounded-full shadow z-10"><AlertTriangle size={8} className="text-white p-0.5" /></div>}
+                                                        {fit === 'okay' && <div className="absolute -top-1 -left-1 bg-yellow-500 rounded-full shadow z-10"><AlertTriangle size={8} className="text-black p-0.5" /></div>}
                                                     </div>
-                                                    <div className={`mt-0.5 px-1 rounded text-[7px] font-bold truncate max-w-[52px] text-center ${isSelected ? 'bg-yellow-400 text-black' : 'bg-black/60 text-white/90'}`}>
+                                                    <div className={`mt-0.5 px-1 py-0.5 rounded text-[7px] font-bold truncate max-w-[54px] text-center backdrop-blur-md border ${isSelected ? 'bg-yellow-400 text-black border-black/20' : 'bg-black/60 text-white/90 border-black/10'}`}>
                                                         {player.name.split(' ').pop()}
                                                     </div>
                                                     <div className={`text-[6px] font-bold px-0.5 rounded flex items-center gap-0.5 mt-0.5 ${fit === 'bad' ? 'bg-red-600/90 text-white' : fit === 'okay' ? 'bg-yellow-500/90 text-black' : 'bg-black/40 text-white'}`}>
-                                                        <span>{effRating}</span>
+                                                        <span className={fit === 'good' ? 'text-yellow-300' : ''}>{effRating}</span>
                                                         <span>{pos.position}</span>
-                                                        {fit !== 'good' && <span className="opacity-70">({player.position})</span>}
+                                                        {fit !== 'good' && <span className="opacity-60">({player.position})</span>}
                                                     </div>
-                                                    {fit === 'bad' && <div className="absolute -top-1 -left-1 bg-red-600 rounded-full shadow"><AlertTriangle size={8} className="text-white p-0.5" /></div>}
                                                 </button>
                                             );
                                         })}
                                     </div>
                                 </div>
 
-                                {/* Bench panel — horizontal scroll on mobile, vertical on sm+ */}
-                                <div className="w-full sm:w-40 md:w-44 flex flex-row sm:flex-col gap-1.5 overflow-x-auto sm:overflow-x-visible sm:overflow-y-auto min-h-0 custom-scrollbar pb-1 sm:pb-0 shrink-0 sm:shrink">
-                                    <p className="font-black text-slate-400 text-[9px] uppercase tracking-widest mb-0 sm:mb-1 shrink-0 self-center sm:self-start">Bench</p>
-                                    {draftBench.map((p: Player) => {
-                                        const isSelected = selectedPlayerId === p.id;
-                                        const subBlocked = remainingSubs <= 0;
-                                        return (
-                                            <div key={p.id}
-                                                onClick={() => !subBlocked && handleTacticsPlayerClick(p)}
-                                                className={`p-2 md:p-2.5 rounded-xl border transition-all min-w-[110px] sm:min-w-0 shrink-0 sm:shrink ${subBlocked ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'} ${isSelected ? 'bg-yellow-500/20 border-yellow-500 shadow-sm' : 'bg-slate-800/70 border-slate-700 hover:border-slate-500 active:bg-slate-700/70'}`}>
-                                                <div className="flex items-center justify-between gap-1.5 mb-0.5 sm:mb-1">
-                                                    <span className="text-[10px] sm:text-xs font-bold text-white truncate">{p.number}. {p.name.split(' ').pop()}</span>
-                                                    <span className={`text-[7px] sm:text-[8px] font-black uppercase px-1 sm:px-1.5 py-0.5 rounded shrink-0 ${isSelected ? 'bg-yellow-700/60 text-yellow-200' : 'bg-slate-700 text-slate-400'}`}>{p.position}</span>
+                                {/* Bench panel */}
+                                <div className="w-44 sm:w-48 md:w-52 bg-slate-800 border-l border-slate-700 flex flex-col shrink-0 min-h-0">
+                                    <div className="p-2 md:p-3 border-b border-slate-700 bg-slate-900/50 flex justify-between items-center sticky top-0 z-10 backdrop-blur-sm">
+                                        <div className="min-w-0 pr-2">
+                                            <h3 className="font-bold flex items-center gap-1.5 text-white text-xs md:text-sm truncate">
+                                                <Users size={13} className="text-blue-400 shrink-0" /> Bench &amp; Reserves
+                                            </h3>
+                                            <p className="text-[8px] md:text-[9px] text-slate-400 mt-0.5">Tap player to swap</p>
+                                        </div>
+                                    </div>
+                                    {/* Horizontal scroll on mobile, vertical on sm+ */}
+                                    <div className="flex-1 p-2 gap-1.5 overflow-x-auto sm:overflow-x-visible sm:overflow-y-auto custom-scrollbar pb-2 sm:pb-0 flex flex-row sm:flex-col min-h-0">
+                                        {draftBench.map((p: Player) => {
+                                            const isSelected = selectedPlayerId === p.id;
+                                            const subBlocked = remainingSubs <= 0;
+                                            return (
+                                                <div key={p.id}
+                                                    onClick={() => !subBlocked && handleTacticsPlayerClick(p)}
+                                                    className={`p-2 rounded-xl border transition-all min-w-[110px] sm:min-w-0 shrink-0 sm:shrink ${subBlocked ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'} ${isSelected ? 'bg-yellow-500/20 border-yellow-500 shadow-sm' : 'bg-slate-700/40 border-slate-600 hover:border-slate-400 hover:bg-slate-700/70'}`}>
+                                                    <div className="flex items-center gap-1.5 mb-0.5">
+                                                        <div className={`w-5 h-5 rounded flex items-center justify-center font-bold text-[9px] border shrink-0 ${isSelected ? 'bg-yellow-500 text-slate-900 border-yellow-400' : 'bg-slate-800 text-slate-300 border-slate-600'}`}>
+                                                            {p.number}
+                                                        </div>
+                                                        <span className={`text-[8px] font-black uppercase px-1 py-0.5 rounded shrink-0 ${isSelected ? 'bg-yellow-700/60 text-yellow-200' : 'bg-slate-700 text-slate-400'}`}>{p.position}</span>
+                                                    </div>
+                                                    <div className="text-[10px] sm:text-xs font-bold text-white truncate">{p.name.split(' ').pop()}</div>
+                                                    <div className="text-slate-500 text-[8px] font-mono mt-0.5">★ {p.rating}</div>
                                                 </div>
-                                                <div className="text-slate-500 text-[8px] sm:text-[9px] font-mono">★ {p.rating}</div>
-                                            </div>
-                                        );
-                                    })}
-                                    {draftSubbedOff.length > 0 && (
-                                        <>
-                                            <p className="font-bold text-slate-600 text-[8px] sm:text-[9px] uppercase tracking-widest mt-1 sm:mt-2 mb-0.5 sm:mb-1 shrink-0 self-center sm:self-start">Off</p>
-                                            {draftSubbedOff.map((p: Player) => (
-                                                <div key={p.id} className="p-2 rounded-xl border bg-slate-900/50 border-slate-800 opacity-40 min-w-[90px] sm:min-w-0 shrink-0 sm:shrink">
-                                                    <div className="text-[10px] sm:text-xs text-slate-500">{p.number}. {p.name.split(' ').pop()}</div>
-                                                </div>
-                                            ))}
-                                        </>
-                                    )}
+                                            );
+                                        })}
+                                        {draftSubbedOff.length > 0 && (
+                                            <>
+                                                <p className="font-bold text-slate-600 text-[8px] uppercase tracking-widest mt-1 mb-0.5 shrink-0 self-center sm:self-start px-1">Off</p>
+                                                {draftSubbedOff.map((p: Player) => (
+                                                    <div key={p.id} className="p-2 rounded-xl border bg-slate-900/50 border-slate-800 opacity-40 min-w-[90px] sm:min-w-0 shrink-0">
+                                                        <div className="text-[10px] text-slate-500">{p.number}. {p.name.split(' ').pop()}</div>
+                                                    </div>
+                                                ))}
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 
                             {/* Action buttons */}
-                            <div className="flex justify-between items-center gap-2 shrink-0 pt-2 md:pt-3 border-t border-slate-800">
+                            <div className="flex justify-between items-center gap-2 shrink-0 p-3 md:p-4 border-t border-slate-800 bg-slate-900/80">
                                 {selectedPlayerId && (
                                     <button
                                         onClick={() => setSelectedPlayerId(null)}
                                         className="text-[10px] md:text-xs bg-red-500/20 text-red-400 px-2 sm:px-3 py-1.5 rounded border border-red-500/30"
                                     >
-                                        Deselect
+                                        Cancel
                                     </button>
                                 )}
                                 <div className="flex-1" />
-                                <button onClick={() => { setShowTacticsModal(false); setSelectedPlayerId(null); }} className="px-3 sm:px-4 py-2 md:py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 font-bold text-[10px] sm:text-xs md:text-sm transition-colors border border-slate-700">Cancel</button>
-                                <button onClick={applyDraftChanges} disabled={!hasChanges}
-                                    className="px-3 sm:px-5 py-2 md:py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed font-bold text-[10px] sm:text-xs md:text-sm transition-all hover:-translate-y-0.5 duration-150 shadow-lg shadow-emerald-900/30">
-                                    Apply
+                                <button
+                                    onClick={() => { setShowTacticsModal(false); setSelectedPlayerId(null); }}
+                                    className="px-3 sm:px-4 py-2 md:py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 font-bold text-[10px] sm:text-xs md:text-sm transition-colors border border-slate-700"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={applyDraftChanges}
+                                    disabled={!hasChanges}
+                                    className="px-3 sm:px-5 py-2 md:py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed font-bold text-[10px] sm:text-xs md:text-sm transition-all hover:-translate-y-0.5 duration-150 shadow-lg shadow-emerald-900/30"
+                                >
+                                    {isHalftime ? 'Apply Changes' : 'Apply'}
                                 </button>
                             </div>
                         </div>
