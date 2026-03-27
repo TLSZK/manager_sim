@@ -587,16 +587,21 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
                             </div>
 
                             {/* Action buttons */}
-                            <div className="flex justify-between items-center gap-2 shrink-0 p-3 md:p-4 border-t border-slate-800 bg-slate-900/80">
-                                {selectedPlayerId && (
-                                    <button
-                                        onClick={() => setSelectedPlayerId(null)}
-                                        className="text-[10px] md:text-xs bg-red-500/20 text-red-400 px-2 sm:px-3 py-1.5 rounded border border-red-500/30"
-                                    >
-                                        Cancel
-                                    </button>
-                                )}
+                            <div className="flex items-center gap-2 shrink-0 p-3 md:p-4 border-t border-slate-800 bg-slate-900/80">
+                                <button
+                                    onClick={() => setSelectedPlayerId(null)}
+                                    disabled={!selectedPlayerId}
+                                    className="text-[10px] md:text-xs bg-slate-700/60 text-slate-300 hover:bg-slate-600 px-2 sm:px-3 py-1.5 rounded-lg border border-slate-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                                >
+                                    Deselect
+                                </button>
                                 <div className="flex-1" />
+                                <button
+                                    onClick={() => { setShowTacticsModal(false); setSelectedPlayerId(null); }}
+                                    className="px-3 sm:px-4 py-2 md:py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 font-bold text-[10px] sm:text-xs md:text-sm transition-all duration-150 border border-slate-600"
+                                >
+                                    Cancel
+                                </button>
                                 <button
                                     onClick={applyDraftChanges}
                                     disabled={!hasChanges}
