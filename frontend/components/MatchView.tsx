@@ -11,9 +11,12 @@ interface MatchViewProps {
     homeTeam: Team;
     awayTeam: Team;
     userTeamId: string;
-    onMatchComplete: (homeScore: number, awayScore: number) => void;
+    onMatchComplete: (homeScore: number, awayScore: number, homePenalties?: number, awayPenalties?: number) => void;
     competition?: string;
     stage?: string;
+    isLeg2?: boolean;
+    firstLegHomeScore?: number;
+    firstLegAwayScore?: number;
 }
 
 // ── Penalty shootout helper ──────────────────────────────────────────────────
@@ -128,7 +131,7 @@ function drawFrame(
 // REACT COMPONENT
 // ═════════════════════════════════════════════════════════════════════════════
 
-const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, onMatchComplete, competition = 'La Liga' }) => {
+const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, onMatchComplete, competition = 'La Liga', stage, isLeg2, firstLegHomeScore, firstLegAwayScore }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const engineRef = useRef<GameEngine | null>(null);
     const prevTimeRef = useRef<number>(0);
@@ -147,6 +150,22 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
     const [showTacticsModal, setShowTacticsModal] = useState(false);
     const [liveUserTeam, setLiveUserTeam] = useState<Team>(userTeamId === homeTeam.id ? homeTeam : awayTeam);
     const [subbedOutIds, setSubbedOutIds] = useState<Set<string>>(new Set());
+
+    // ── Extra time & penalties ────────────────────────────────────────
+    const [isExtraTime, setIsExtraTime] = useState(false);
+    const [showETPrompt, setShowETPrompt] = useState(false);
+    const [penaltyResult, setPenaltyResult] = useState<{ home: number; away: number } | null>(null);
+    const awaitingETRef = useRef(false);
+
+    const canHaveExtraTime = competition === 'Champions League' && stage !== 'League Phase';
+
+    const isAggregateDraw = useCallback((hScore: number, aScore: number): boolean => {
+        if (stage === 'Final') return hScore === aScore;
+        if (isLeg2 && firstLegHomeScore != null && firstLegAwayScore != null) {
+            return (hScore + firstLegAwayScore) === (aScore + firstLegHomeScore);
+        }
+        return false;
+    }, [stage, isLeg2, firstLegHomeScore, firstLegAwayScore]);
 
     // ── Tactics modal draft state ────────────────────────────────────────
     const [draftRoster, setDraftRoster] = useState<Player[]>([]);
@@ -325,14 +344,24 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
 
             const engine = engineRef.current!;
 
-            if (!isPausedRef.current && !isHalftimeRef.current && !isFinishedRef.current) {
+            if (!isPausedRef.current && !isHalftimeRef.current && !isFinishedRef.current && !awaitingETRef.current) {
                 engine.update(rawDt);
                 draw(engine);
 
-                if (engine.minute >= 90) {
-                    isFinishedRef.current = true;
-                    setTimeout(() => onMatchCompleteRef.current(engine.homeScore, engine.awayScore), 1000);
-                    return;
+                if (engine.minute >= engine.maxMinute) {
+                    if (!engine.extraTime && canHaveExtraTime && isAggregateDraw(engine.homeScore, engine.awayScore)) {
+                        awaitingETRef.current = true;
+                        setShowETPrompt(true);
+                    } else if (!isFinishedRef.current) {
+                        isFinishedRef.current = true;
+                        if (engine.extraTime && isAggregateDraw(engine.homeScore, engine.awayScore)) {
+                            const pens = getPenaltyResult();
+                            setPenaltyResult(pens);
+                            setTimeout(() => onMatchCompleteRef.current(engine.homeScore, engine.awayScore, pens.home, pens.away), 3000);
+                        } else {
+                            setTimeout(() => onMatchCompleteRef.current(engine.homeScore, engine.awayScore), 1000);
+                        }
+                    }
                 }
             } else {
                 draw(engine);
@@ -371,16 +400,22 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
                             <div className="flex flex-col items-center gap-0.5 sm:gap-1">
                                 <div className="bg-slate-800 border border-slate-700 rounded-md sm:rounded-lg px-2 sm:px-3 py-0.5 min-w-[2.5rem] sm:min-w-[3.5rem] text-center">
                                     <span className="font-mono font-bold text-[10px] sm:text-xs md:text-sm text-emerald-400 tracking-widest">
-                                        {minute >= 90 ? 'FT' : `${minute}'`}
+                                        {penaltyResult || (minute >= (isExtraTime ? 120 : 90) && !showETPrompt) ? 'FT' : `${minute}'`}
                                     </span>
                                 </div>
                                 <div className="w-14 sm:w-20 md:w-28 h-1 bg-slate-800 rounded-full overflow-hidden">
-                                    <div className="h-full bg-emerald-500 transition-all duration-1000 rounded-full" style={{ width: `${(minute / 90) * 100}%` }} />
+                                    <div className="h-full bg-emerald-500 transition-all duration-1000 rounded-full" style={{ width: `${Math.min(100, (minute / (isExtraTime ? 120 : 90)) * 100)}%` }} />
                                 </div>
                             </div>
                             <span className="text-2xl sm:text-4xl md:text-5xl font-mono font-black tabular-nums w-6 sm:w-10 text-left leading-none">{score.away}</span>
                         </div>
-                        <span className="text-[8px] sm:text-[9px] font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] text-slate-500">{competition}</span>
+                        <span className="text-[8px] sm:text-[9px] font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] text-slate-500">{competition}{stage && stage !== 'Regular Season' && stage !== 'League Phase' ? ` · ${stage}` : ''}</span>
+                        {isLeg2 && firstLegHomeScore != null && firstLegAwayScore != null && (
+                            <span className="text-[7px] sm:text-[8px] font-bold text-yellow-400/70 tabular-nums">AGG {score.home + firstLegAwayScore} – {score.away + firstLegHomeScore}</span>
+                        )}
+                        {penaltyResult && (
+                            <span className="text-[7px] sm:text-[8px] font-bold text-red-400 tabular-nums">PEN {penaltyResult.home} – {penaltyResult.away}</span>
+                        )}
                     </div>
                     <div className="flex-1 flex items-center gap-1.5 sm:gap-2.5 justify-end min-w-0">
                         <div className="min-w-0 text-right hidden sm:block">
@@ -409,8 +444,11 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
                 {isHalftime && !showTacticsModal && (
                     <div className="absolute inset-0 m-0 sm:m-2 md:m-3 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center z-30 sm:rounded-xl">
                         <div className="bg-slate-900/90 border border-slate-700/60 rounded-2xl px-6 sm:px-10 py-6 sm:py-8 flex flex-col items-center shadow-2xl mx-4 w-full max-w-sm">
-                            <span className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 bg-slate-800 border border-slate-700 rounded-full px-3 py-1 mb-4 sm:mb-5">Half Time</span>
+                            <span className={`text-[9px] font-black uppercase tracking-[0.3em] rounded-full px-3 py-1 mb-4 sm:mb-5 ${isExtraTime ? 'text-yellow-400 bg-yellow-900/30 border border-yellow-700/50' : 'text-slate-400 bg-slate-800 border border-slate-700'}`}>{isExtraTime ? 'ET Half Time' : 'Half Time'}</span>
                             <p className="text-4xl sm:text-6xl font-black mb-1.5 tabular-nums tracking-tight">{score.home} – {score.away}</p>
+                            {isExtraTime && isLeg2 && firstLegHomeScore != null && firstLegAwayScore != null && (
+                                <p className="text-yellow-400/80 text-xs font-bold mb-1 tabular-nums">AGG {score.home + firstLegAwayScore} – {score.away + firstLegHomeScore}</p>
+                            )}
                             <p className="text-slate-500 text-xs mb-6 sm:mb-8">{homeTeam.shortName} vs {awayTeam.shortName}</p>
                             <div className="flex flex-col gap-3 w-full">
                                 <button
@@ -424,12 +462,57 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
                                     </span>
                                 </button>
                                 <button
-                                    onClick={() => { engineRef.current?.startSecondHalf(); setIsHalftime(false); setIsPausedState(false); }}
+                                    onClick={() => {
+                                        if (isExtraTime) {
+                                            engineRef.current?.startExtraTimeSecondHalf();
+                                        } else {
+                                            engineRef.current?.startSecondHalf();
+                                        }
+                                        setIsHalftime(false);
+                                        setIsPausedState(false);
+                                    }}
                                     className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 transition-all px-5 sm:px-7 py-2.5 sm:py-3 rounded-xl font-bold text-sm shadow-xl hover:-translate-y-0.5 duration-150 w-full"
                                 >
-                                    <PlayIcon size={16} /> Start 2nd Half
+                                    <PlayIcon size={16} /> {isExtraTime ? 'Start ET 2nd Half' : 'Start 2nd Half'}
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* ── Extra Time prompt overlay ──────────────────────── */}
+                {showETPrompt && !showTacticsModal && (
+                    <div className="absolute inset-0 m-0 sm:m-2 md:m-3 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center z-30 sm:rounded-xl">
+                        <div className="bg-slate-900/90 border border-yellow-700/40 rounded-2xl px-6 sm:px-10 py-6 sm:py-8 flex flex-col items-center shadow-2xl mx-4 w-full max-w-sm">
+                            <span className="text-[9px] font-black uppercase tracking-[0.3em] text-yellow-400 bg-yellow-900/30 border border-yellow-700/50 rounded-full px-3 py-1 mb-4 sm:mb-5">Extra Time</span>
+                            <p className="text-4xl sm:text-6xl font-black mb-1.5 tabular-nums tracking-tight">{score.home} – {score.away}</p>
+                            {isLeg2 && firstLegHomeScore != null && firstLegAwayScore != null && (
+                                <p className="text-yellow-400/80 text-xs font-bold mb-1 tabular-nums">AGG {score.home + firstLegAwayScore} – {score.away + firstLegHomeScore}</p>
+                            )}
+                            <p className="text-slate-400 text-xs mb-6 sm:mb-8">{stage === 'Final' ? 'Score level after 90 minutes' : 'Aggregate level after 90 minutes'}</p>
+                            <button
+                                onClick={() => {
+                                    awaitingETRef.current = false;
+                                    setShowETPrompt(false);
+                                    setIsExtraTime(true);
+                                    engineRef.current?.startExtraTime();
+                                }}
+                                className="flex items-center justify-center gap-2 bg-yellow-600 hover:bg-yellow-500 active:bg-yellow-700 text-black transition-all px-5 sm:px-7 py-2.5 sm:py-3 rounded-xl font-bold text-sm shadow-xl hover:-translate-y-0.5 duration-150 w-full"
+                            >
+                                <PlayIcon size={16} /> Start Extra Time
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* ── Penalty shootout overlay ────────────────────────── */}
+                {penaltyResult && (
+                    <div className="absolute inset-0 m-0 sm:m-2 md:m-3 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center z-30 sm:rounded-xl">
+                        <div className="bg-slate-900/90 border border-red-700/40 rounded-2xl px-6 sm:px-10 py-6 sm:py-8 flex flex-col items-center shadow-2xl mx-4 w-full max-w-sm">
+                            <span className="text-[9px] font-black uppercase tracking-[0.3em] text-red-400 bg-red-900/30 border border-red-700/50 rounded-full px-3 py-1 mb-4 sm:mb-5">Penalty Shootout</span>
+                            <p className="text-4xl sm:text-6xl font-black mb-1.5 tabular-nums tracking-tight">{penaltyResult.home} – {penaltyResult.away}</p>
+                            <p className="text-slate-500 text-xs mb-2">{homeTeam.shortName} vs {awayTeam.shortName}</p>
+                            <p className="text-slate-400/50 text-[10px] font-bold uppercase tracking-widest mt-4 animate-pulse">Full Time</p>
                         </div>
                     </div>
                 )}
@@ -479,7 +562,7 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
                             </div>
 
                             {/* Pitch + Bench */}
-                            <div className="flex flex-row flex-1 min-h-0 overflow-hidden">
+                            <div className="flex flex-col sm:flex-row flex-1 min-h-0 overflow-hidden">
 
                                 {/* Pitch area */}
                                 <div className="flex-1 bg-slate-950 p-2 sm:p-3 md:p-5 flex items-center justify-center overflow-hidden">
@@ -543,13 +626,13 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
                                 </div>
 
                                 {/* Bench panel */}
-                                <div className="w-44 sm:w-48 md:w-52 bg-slate-800 border-l border-slate-700 flex flex-col shrink-0 min-h-0">
-                                    <div className="p-2 md:p-3 border-b border-slate-700 bg-slate-900/50 flex justify-between items-center sticky top-0 z-10 backdrop-blur-sm">
-                                        <div className="min-w-0 pr-2">
+                                <div className="w-full max-h-36 sm:max-h-none sm:w-48 md:w-52 bg-slate-800 border-t sm:border-t-0 sm:border-l border-slate-700 flex flex-col shrink-0 sm:min-h-0">
+                                    <div className="p-1.5 sm:p-2 md:p-3 border-b border-slate-700 bg-slate-900/50 flex justify-between items-center sticky top-0 z-10 backdrop-blur-sm shrink-0">
+                                        <div className="min-w-0 pr-2 flex sm:flex-col items-center sm:items-start gap-2 sm:gap-0">
                                             <h3 className="font-bold flex items-center gap-1.5 text-white text-xs md:text-sm truncate">
-                                                <Users size={13} className="text-blue-400 shrink-0" /> Bench &amp; Reserves
+                                                <Users size={13} className="text-blue-400 shrink-0" /> Bench
                                             </h3>
-                                            <p className="text-[8px] md:text-[9px] text-slate-400 mt-0.5">Tap player to swap</p>
+                                            <p className="text-[8px] md:text-[9px] text-slate-400 sm:mt-0.5">Tap to swap</p>
                                         </div>
                                     </div>
                                     {/* Horizontal scroll on mobile, vertical on sm+ */}
@@ -617,10 +700,20 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
 
             {/* ── 3. Controls ────────────────────────────────────────────── */}
             <div className="shrink-0 h-14 sm:h-16 flex items-center justify-center gap-2 sm:gap-3 bg-slate-900 border-t border-slate-800 px-2 sm:px-4">
-                {isHalftime ? (
+                {showETPrompt ? (
+                    <div className="flex items-center gap-2 bg-slate-800 border border-yellow-700/50 rounded-xl px-3 sm:px-4 py-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse" />
+                        <span className="text-yellow-300 text-[10px] sm:text-xs uppercase tracking-widest font-black">Extra Time</span>
+                    </div>
+                ) : penaltyResult ? (
+                    <div className="flex items-center gap-2 bg-slate-800 border border-red-700/50 rounded-xl px-3 sm:px-4 py-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                        <span className="text-red-300 text-[10px] sm:text-xs uppercase tracking-widest font-black">Penalties {penaltyResult.home} – {penaltyResult.away}</span>
+                    </div>
+                ) : isHalftime ? (
                     <div className="flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-xl px-3 sm:px-4 py-2">
                         <div className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse" />
-                        <span className="text-slate-300 text-[10px] sm:text-xs uppercase tracking-widest font-black">Half Time</span>
+                        <span className="text-slate-300 text-[10px] sm:text-xs uppercase tracking-widest font-black">{isExtraTime ? 'ET Half Time' : 'Half Time'}</span>
                     </div>
                 ) : isFinishedRef.current ? (
                     <div className="flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-xl px-3 sm:px-4 py-2">
@@ -644,10 +737,26 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
                         <button
                             onClick={() => {
                                 if (engineRef.current && !isFinishedRef.current) {
+                                    const engine = engineRef.current;
+                                    engine.skipToEnd();
+
+                                    // If normal time ended in aggregate draw, play through ET too
+                                    if (!engine.extraTime && canHaveExtraTime && isAggregateDraw(engine.homeScore, engine.awayScore)) {
+                                        engine.startExtraTime();
+                                        setIsExtraTime(true);
+                                        engine.skipToEnd();
+                                    }
+
                                     isFinishedRef.current = true;
-                                    engineRef.current.skipToEnd();
                                     setIsPausedState(true);
-                                    onMatchComplete(engineRef.current.homeScore, engineRef.current.awayScore);
+
+                                    if (engine.extraTime && isAggregateDraw(engine.homeScore, engine.awayScore)) {
+                                        const pens = getPenaltyResult();
+                                        setPenaltyResult(pens);
+                                        onMatchComplete(engine.homeScore, engine.awayScore, pens.home, pens.away);
+                                    } else {
+                                        onMatchComplete(engine.homeScore, engine.awayScore);
+                                    }
                                 }
                             }}
                             className="h-10 sm:h-11 px-3 sm:px-4 flex items-center gap-1.5 sm:gap-2 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 transition-colors rounded-xl font-bold text-xs sm:text-sm border border-slate-700 shadow-md"

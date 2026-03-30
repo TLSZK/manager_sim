@@ -53,7 +53,7 @@ const CalendarModal: React.FC<CalendarModalProps> = ({
   const changeMonth = (delta: number) => { const newDate = new Date(displayDate); newDate.setMonth(newDate.getMonth() + delta); setDisplayDate(newDate); };
   const jumpToCurrent = () => { setDisplayDate(new Date(currentWeekDate.getFullYear(), currentWeekDate.getMonth(), 1)); };
 
-  const monthName = displayDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+  const monthName = displayDate.toLocaleString('en-GB', { month: 'long', year: 'numeric' });
 
   return (
     <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center bg-black/90 backdrop-blur-sm animate-in fade-in duration-200 md:p-4">

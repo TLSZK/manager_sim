@@ -223,7 +223,7 @@ const App: React.FC = () => {
         }
     };
 
-    const runSimulation = useCallback(async (targetWeek: number, userResult: { matchId: string, homeScore: number, awayScore: number } | null = null, stopAtUserMatch: boolean = true, showSummary: boolean = false) => {
+    const runSimulation = useCallback(async (targetWeek: number, userResult: { matchId: string, homeScore: number, awayScore: number, homePenalties?: number, awayPenalties?: number } | null = null, stopAtUserMatch: boolean = true, showSummary: boolean = false) => {
         if (currentWeek > maxWeek || isSimulating) return;
         setIsSimulating(true);
 
@@ -255,7 +255,7 @@ const App: React.FC = () => {
             if (matchesToPlay.length > 0) {
                 const simulatedResults = matchesToPlay.map(match => {
                     if (userResult && match.id === userResult.matchId) {
-                        return { ...match, homeScore: userResult.homeScore, awayScore: userResult.awayScore, played: true };
+                        return { ...match, homeScore: userResult.homeScore, awayScore: userResult.awayScore, played: true, homePenalties: userResult.homePenalties, awayPenalties: userResult.awayPenalties };
                     }
                     if (match.homeTeamId === 'TBD' || match.awayTeamId === 'TBD') return match;
 
@@ -332,10 +332,10 @@ const App: React.FC = () => {
         }
     };
 
-    const handleMatchComplete = (homeScore: number, awayScore: number) => {
+    const handleMatchComplete = (homeScore: number, awayScore: number, homePenalties?: number, awayPenalties?: number) => {
         const userMatch = schedule.find(m => m.week === currentWeek && !m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId));
         if (userMatch) {
-            runSimulation(currentWeek + 1, { matchId: userMatch.id, homeScore, awayScore }, false, false);
+            runSimulation(currentWeek + 1, { matchId: userMatch.id, homeScore, awayScore, homePenalties, awayPenalties }, false, false);
         } else {
             runSimulation(currentWeek + 1, null, false, false);
         }
@@ -445,7 +445,7 @@ const App: React.FC = () => {
     }, [userTeamId, activeProfile, teams, schedule, currentSeasonYear]);
 
     useEffect(() => {
-        if (currentWeek > maxWeek && simState !== 'season_over' && simState !== 'match_recap' && !isSimSummaryOpen) {
+        if (currentWeek > maxWeek && simState !== 'season_over' && simState !== 'squad_management' && simState !== 'match_recap' && !isSimSummaryOpen) {
             handleConcludeSeason();
         }
     }, [currentWeek, maxWeek, simState, handleConcludeSeason, isSimSummaryOpen]);
@@ -536,6 +536,11 @@ const App: React.FC = () => {
 
     const userHome = useMemo(() => userMatch ? teams.find(t => t.id === userMatch.homeTeamId) : undefined, [userMatch, teams]);
     const userAway = useMemo(() => userMatch ? teams.find(t => t.id === userMatch.awayTeamId) : undefined, [userMatch, teams]);
+    const firstLeg = useMemo(() => {
+        if (!userMatch?.isLeg2) return null;
+        const pairIdx = userMatch.id.split('-').pop();
+        return schedule.find(m => m.stage === userMatch.stage && !m.isLeg2 && m.id.split('-').pop() === pairIdx) || null;
+    }, [userMatch, schedule]);
 
     const isUCLWeek = useMemo(() => {
         if (simState === 'match_recap' && lastSimulatedMatchId) {
@@ -593,11 +598,12 @@ const App: React.FC = () => {
 
     if (simState === 'squad_management') {
         const myTeam = teams.find(t => t.id === userTeamId);
-        if (myTeam) return <SquadManagement team={myTeam} onUpdateTeam={handleUpdateTeam} onBack={() => setSimState('ready')} />;
+        const backState = currentWeek > maxWeek ? 'season_over' : 'ready';
+        if (myTeam) return <SquadManagement team={myTeam} onUpdateTeam={handleUpdateTeam} onBack={() => setSimState(backState)} />;
     }
 
     if (simState === 'playing_match' && userMatch && userHome && userAway) {
-        return <MatchView homeTeam={userHome} awayTeam={userAway} userTeamId={userTeamId} onMatchComplete={handleMatchComplete} competition={userMatch.competition} stage={userMatch.stage} />;
+        return <MatchView homeTeam={userHome} awayTeam={userAway} userTeamId={userTeamId} onMatchComplete={handleMatchComplete} competition={userMatch.competition} stage={userMatch.stage} isLeg2={userMatch.isLeg2} firstLegHomeScore={firstLeg?.homeScore ?? undefined} firstLegAwayScore={firstLeg?.awayScore ?? undefined} />;
     }
 
     const hasNoResults = resultGroups.length === 0;

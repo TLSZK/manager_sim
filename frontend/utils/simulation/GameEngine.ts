@@ -19,6 +19,8 @@ export class GameEngine {
   // ── Time ───────────────────────────────────────────────────────────────
   minute = 0;
   period = 1;
+  extraTime = false;
+  maxMinute = 90;
 
   // ── Score ──────────────────────────────────────────────────────────────
   homeScore = 0;
@@ -58,6 +60,7 @@ export class GameEngine {
   private static readonly STEP = 1 / 60;   // 60 Hz physics
   private accumulator = 0;
   private halftimeFired = false;
+  private nextHalftimeMinute: number | null = 45;
 
   // ── Teams & callbacks ──────────────────────────────────────────────────
   homeTeam: Team;
@@ -155,6 +158,22 @@ export class GameEngine {
     this.setupKickoff(false);
   }
 
+  startExtraTime() {
+    this.extraTime = true;
+    this.maxMinute = 120;
+    this.nextHalftimeMinute = 105;
+    this.halftimeFired = false;
+    // period stays at 2 — same direction as 2nd half
+    this.events.unshift("90' Extra Time");
+    this.setupKickoff(true);
+  }
+
+  startExtraTimeSecondHalf() {
+    this.period = 1; // swap ends
+    this.events.unshift("105' ET Second Half Started");
+    this.setupKickoff(false);
+  }
+
   applyTacticalChange(newTeam: Team, isHome: boolean) {
     if (isHome) this.homeTeam = newTeam; else this.awayTeam = newTeam;
     const formation = FORMATIONS[newTeam.formation || '4-3-3'];
@@ -218,7 +237,7 @@ export class GameEngine {
    * identical on 60 Hz, 144 Hz, or any other refresh rate.
    */
   update(rawDt: number) {
-    if (this.minute >= 90) return;
+    if (this.minute >= this.maxMinute) return;
 
     this.accumulator += Math.min(rawDt, 0.1); // cap to avoid spiral of death
 
@@ -226,7 +245,7 @@ export class GameEngine {
       this.tick(GameEngine.STEP);
       this.accumulator -= GameEngine.STEP;
       // Stop consuming steps if match paused by halftime / full-time
-      if (this.phase === MatchPhase.Halftime || this.minute >= 90) {
+      if (this.phase === MatchPhase.Halftime || this.minute >= this.maxMinute) {
         this.accumulator = 0;
         break;
       }
@@ -249,9 +268,10 @@ export class GameEngine {
       if (this.ballOwner) {
         (this.ballOwner.isHome ? this.homeStats : this.awayStats).possessionTime += dt;
       }
-      if (this.period === 1 && this.minute >= 45) {
+      if (this.nextHalftimeMinute !== null && this.minute >= this.nextHalftimeMinute) {
         this.phase = MatchPhase.Halftime;
-        this.events.unshift("45' Halftime");
+        this.events.unshift(`${this.nextHalftimeMinute}' ${this.extraTime ? 'ET ' : ''}Halftime`);
+        this.nextHalftimeMinute = null;
         return;
       }
     }
@@ -1467,7 +1487,7 @@ export class GameEngine {
   // ═══════════════════════════════════════════════════════════════════════
 
   skipToEnd() {
-    const remaining = 90 - this.minute;
+    const remaining = this.maxMinute - this.minute;
     if (remaining <= 0) return;
 
     const avgRating = (team: Team) => {
@@ -1501,7 +1521,7 @@ export class GameEngine {
         this.events.unshift(`${Math.floor(this.minute + m)}' GOAL! (Simulated) – ${this.awayTeam.shortName}`);
       }
     }
-    this.minute = 90;
+    this.minute = this.maxMinute;
     this.triggerUpdate();
   }
 
