@@ -62,6 +62,11 @@ export class GameEngine {
   private halftimeFired = false;
   private nextHalftimeMinute: number | null = 45;
 
+  // ── Stoppage-time extension (delay whistle for scoring opportunities) ─
+  private static readonly STOPPAGE_MAX_EXTRA = 3;  // max extra game-minutes
+  private static readonly STOPPAGE_GOAL_DIST = 30; // distance threshold (pitch units)
+  private stoppageDeadline: number | null = null;
+
   // ── Teams & callbacks ──────────────────────────────────────────────────
   homeTeam: Team;
   awayTeam: Team;
@@ -154,6 +159,7 @@ export class GameEngine {
 
   startSecondHalf() {
     this.period = 2;
+    this.stoppageDeadline = null;
     this.events.unshift("45' Second Half Started");
     this.setupKickoff(false);
   }
@@ -163,6 +169,7 @@ export class GameEngine {
     this.maxMinute = 120;
     this.nextHalftimeMinute = 105;
     this.halftimeFired = false;
+    this.stoppageDeadline = null;
     // period stays at 2 — same direction as 2nd half
     this.events.unshift("90' Extra Time");
     this.setupKickoff(true);
@@ -170,6 +177,7 @@ export class GameEngine {
 
   startExtraTimeSecondHalf() {
     this.period = 1; // swap ends
+    this.stoppageDeadline = null;
     this.events.unshift("105' ET Second Half Started");
     this.setupKickoff(false);
   }
@@ -237,7 +245,7 @@ export class GameEngine {
    * identical on 60 Hz, 144 Hz, or any other refresh rate.
    */
   update(rawDt: number) {
-    if (this.minute >= this.maxMinute) return;
+    if (this.minute >= this.maxMinute && this.stoppageDeadline === null) return;
 
     this.accumulator += Math.min(rawDt, 0.1); // cap to avoid spiral of death
 
@@ -245,7 +253,8 @@ export class GameEngine {
       this.tick(GameEngine.STEP);
       this.accumulator -= GameEngine.STEP;
       // Stop consuming steps if match paused by halftime / full-time
-      if (this.phase === MatchPhase.Halftime || this.minute >= this.maxMinute) {
+      // (allow continuation during stoppage-time scoring opportunity)
+      if (this.phase === MatchPhase.Halftime || (this.minute >= this.maxMinute && this.stoppageDeadline === null)) {
         this.accumulator = 0;
         break;
       }
@@ -268,11 +277,29 @@ export class GameEngine {
       if (this.ballOwner) {
         (this.ballOwner.isHome ? this.homeStats : this.awayStats).possessionTime += dt;
       }
+      // ── Halftime whistle (with stoppage-time delay for scoring chances) ─
       if (this.nextHalftimeMinute !== null && this.minute >= this.nextHalftimeMinute) {
-        this.phase = MatchPhase.Halftime;
-        this.events.unshift(`${this.nextHalftimeMinute}' ${this.extraTime ? 'ET ' : ''}Halftime`);
-        this.nextHalftimeMinute = null;
-        return;
+        if (this.stoppageDeadline === null) {
+          this.stoppageDeadline = this.nextHalftimeMinute + GameEngine.STOPPAGE_MAX_EXTRA;
+        }
+        if (!this.hasActiveScoringOpportunity() || this.minute >= this.stoppageDeadline) {
+          this.phase = MatchPhase.Halftime;
+          this.events.unshift(`${Math.floor(this.minute)}' ${this.extraTime ? 'ET ' : ''}Halftime`);
+          this.nextHalftimeMinute = null;
+          this.stoppageDeadline = null;
+          return;
+        }
+      }
+
+      // ── Fulltime whistle (same delay logic as halftime) ────────────────
+      if (this.minute >= this.maxMinute) {
+        if (this.stoppageDeadline === null) {
+          this.stoppageDeadline = this.maxMinute + GameEngine.STOPPAGE_MAX_EXTRA;
+        }
+        if (!this.hasActiveScoringOpportunity() || this.minute >= this.stoppageDeadline) {
+          this.stoppageDeadline = null;
+          return; // update() will see minute >= maxMinute and stop
+        }
       }
     }
 
@@ -321,6 +348,55 @@ export class GameEngine {
         possession: Math.round((this.awayStats.possessionTime / total) * 100),
       },
     });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // STOPPAGE-TIME SCORING OPPORTUNITY CHECK
+  // ═══════════════════════════════════════════════════════════════════════
+
+  /**
+   * Returns true when a genuine scoring opportunity is in progress and the
+   * referee should delay the half-time / full-time whistle.
+   *
+   * Criteria:
+   *  1. A shot is currently in flight — always let it resolve.
+   *  2. An attacking player (midfielder or forward) has the ball, is within
+   *     STOPPAGE_GOAL_DIST of the goal centre, AND has at most one outfield
+   *     defender between them and the goal.
+   */
+  private hasActiveScoringOpportunity(): boolean {
+    // A shot in flight should always be allowed to resolve
+    if (this.isShot) return true;
+
+    const carrier = this.ballOwner;
+    if (!carrier) return false;
+
+    // Only delay for attacking players — not a defender or GK who won it back
+    if (carrier.role === Role.Goalkeeper || carrier.role === Role.Defender) return false;
+
+    // Determine which goal the carrier is attacking
+    const attacksRight =
+      (carrier.isHome && this.period === 1) || (!carrier.isHome && this.period === 2);
+    const goalCenter = new Vec2(
+      attacksRight ? PITCH.RIGHT : PITCH.LEFT,
+      PITCH.GOAL_CENTER,
+    );
+
+    const distToGoal = Vec2.dist(carrier.pos, goalCenter);
+    if (distToGoal > GameEngine.STOPPAGE_GOAL_DIST) return false;
+
+    // Count opposing outfield players between the carrier and the goal
+    let blocking = 0;
+    for (const p of this.players) {
+      if (p.teamId === carrier.teamId || p.role === Role.Goalkeeper) continue;
+      const defDist = Vec2.dist(p.pos, goalCenter);
+      if (defDist < distToGoal && Math.abs(p.pos.y - carrier.pos.y) < 15) {
+        blocking++;
+      }
+    }
+
+    // "Through on goal" ≈ at most 1 defender in the path
+    return blocking <= 1;
   }
 
   // ═══════════════════════════════════════════════════════════════════════
