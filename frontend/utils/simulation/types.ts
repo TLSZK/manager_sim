@@ -145,7 +145,7 @@ export function deriveAttributes(rating: number, role: Role): PlayerAttributes {
     gkReflex:          Math.min(1, b * m.gkReflex),
     positioning:       b * m.positioning,
     vision:            b * m.vision,
-    staminaRate:       m.staminaRate,
+    staminaRate:       m.staminaRate * (1 + (1 - b) * 0.6),
   };
 }
 

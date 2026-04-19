@@ -52,6 +52,12 @@ const SquadManagement: React.FC<SquadManagementProps> = ({ team, onUpdateTeam, o
       const pA = { ...newRoster[playerAIndex] };
       const pB = { ...newRoster[playerBIndex] };
 
+      // Prevent bench↔bench swaps
+      if (pA.offField && pB.offField) {
+        setSelectedPlayerId(null);
+        return;
+      }
+
       // Correctly swap offField status between the two clicked players
       const tempOffField = pA.offField;
       pA.offField = pB.offField;

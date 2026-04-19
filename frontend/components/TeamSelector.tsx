@@ -120,6 +120,12 @@ const TeamSelector: React.FC<TeamSelectorProps> = ({ teams, onSelect }) => {
           La Liga Manager
         </h1>
         <p className="text-slate-400 text-base md:text-lg">Select your club to begin the 2025/26 Season</p>
+        <div className="flex items-center justify-center gap-2 mt-3">
+          <div className="w-5 h-5 rounded-full bg-blue-600/20 border border-blue-500/30 flex items-center justify-center">
+            <Star size={10} className="text-blue-400" fill="currentColor" />
+          </div>
+          <span className="text-slate-500 text-xs">Champions League participant</span>
+        </div>
       </div>
 
       {isLoading ? (

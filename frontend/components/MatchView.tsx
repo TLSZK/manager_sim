@@ -88,6 +88,8 @@ function drawFrame(
     const sx = W / 100, sy = H / 100;
     drawPitch(ctx, W, H, sx, sy);
     const pr = 1.2 * sx;
+    const arcR  = pr + 3;
+    const arcLW = Math.max(1, sx * 0.15);
     for (const p of game.players) {
         const x = p.pos.x * sx, y = p.pos.y * sy;
         const stAlpha = 0.35 + (0.6 + p.stamina * 0.4) * 0.65;
@@ -97,10 +99,27 @@ function drawFrame(
         ctx.strokeStyle = p.isHome ? homeSec : awaySec;
         ctx.lineWidth = 1.2; ctx.stroke();
         ctx.globalAlpha = 1.0;
+
+        // Stamina ring — background track
+        ctx.lineWidth = arcLW;
+        ctx.globalAlpha = 0.22;
+        ctx.strokeStyle = '#ffffff';
+        ctx.beginPath(); ctx.arc(x, y, arcR, 0, Math.PI * 2); ctx.stroke();
+        // Stamina ring — filled arc (green → yellow → red)
+        const stColor = p.stamina >= 0.6 ? '#22c55e' : p.stamina >= 0.35 ? '#eab308' : '#ef4444';
+        ctx.globalAlpha = 0.88;
+        ctx.strokeStyle = stColor;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.arc(x, y, arcR, -Math.PI / 2, -Math.PI / 2 + p.stamina * Math.PI * 2);
+        ctx.stroke();
+        ctx.lineCap = 'butt';
+        ctx.globalAlpha = 1.0;
+
         if (game.ballOwner === p) {
             ctx.strokeStyle = '#FBBF24';
             ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.arc(x, y, pr + 2.5, 0, Math.PI * 2); ctx.stroke();
+            ctx.beginPath(); ctx.arc(x, y, arcR + 3.5, 0, Math.PI * 2); ctx.stroke();
         }
         ctx.fillStyle = p.isHome ? homeSec : awaySec;
         ctx.font = `bold ${Math.round(pr * 0.9)}px system-ui`;
@@ -222,6 +241,12 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
             const newRoster = [...draftRoster];
             const pA = { ...newRoster[playerAIndex] };
             const pB = { ...newRoster[playerBIndex] };
+
+            // Prevent bench↔bench swaps
+            if (pA.offField && pB.offField) {
+                setSelectedPlayerId(null);
+                return;
+            }
 
             // If swapping field↔bench, it's a substitution
             const isSub = pA.offField !== pB.offField;
@@ -680,7 +705,7 @@ const MatchView: React.FC<MatchViewProps> = ({ homeTeam, awayTeam, userTeamId, o
                                 </button>
                                 <div className="flex-1" />
                                 <button
-                                    onClick={() => { setShowTacticsModal(false); setSelectedPlayerId(null); }}
+                                    onClick={() => { setShowTacticsModal(false); setSelectedPlayerId(null); setDraftRoster([...(liveUserTeam.roster || [])]); setDraftFormation(liveUserTeam.formation || '4-3-3'); }}
                                     className="px-3 sm:px-4 py-2 md:py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 font-bold text-[10px] sm:text-xs md:text-sm transition-all duration-150 border border-slate-600"
                                 >
                                     Cancel

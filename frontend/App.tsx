@@ -12,7 +12,7 @@ import SeasonRecapModal from './components/SeasonRecapModal';
 import ContractModal from './components/ContractModal';
 import LoginScreen from './components/LoginScreen';
 import ProfileSelector from './components/ProfileSelector';
-import { FullPageLoader, MatchResultSkeleton } from './components/Skeletons';
+import { FullPageLoader } from './components/Skeletons';
 import { Play, FastForward, Trophy, Calendar, CheckCircle, ChevronLeft, ChevronRight, Shirt, CalendarDays, ArrowRight, ChevronDown, Users, User, Info, Globe } from 'lucide-react';
 import { fetchTeams, saveSeasonResult, updateProfileName, fetchSavedGame, saveGame, fetchCurrentUser } from './services/api';
 import { getTeamStrength, calculateMatchResult, resolveUCLKnockouts, applyMatchResultsToTeams, prepareTeamsForNextSeason } from './utils/simulationEngine';
@@ -938,8 +938,9 @@ const App: React.FC = () => {
 
                         <div className="flex-1 overflow-y-auto divide-y divide-slate-700/50 min-w-0 pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-600 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-slate-500">
                             {hasNoResults ? (
-                                <div className="divide-y divide-slate-700/50">
-                                    {Array.from({ length: 5 }).map((_, i) => (<MatchResultSkeleton key={`res-skel-${i}`} index={i} />))}
+                                <div className="flex flex-col items-center justify-center h-full gap-2 py-16 text-slate-500">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-40"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                    <p className="text-xs font-semibold uppercase tracking-widest opacity-50">No matches played yet</p>
                                 </div>
                             ) : currentResultGroup?.matches.length ? currentResultGroup.matches.map((match, idx) => {
                                 const h = teams.find(t => t.id === match.homeTeamId);

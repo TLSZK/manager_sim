@@ -17,9 +17,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const isValid = isRegistering
-    ? email.includes('@') && password.length >= 8 && name.trim().length > 0
-    : email.includes('@') && password.length > 0;
+    ? emailRegex.test(email) && password.length >= 8 && name.trim().length > 0
+    : emailRegex.test(email) && password.length > 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
