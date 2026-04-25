@@ -16,6 +16,7 @@ import { FullPageLoader } from './components/Skeletons';
 import { Play, FastForward, Trophy, Calendar, CheckCircle, ChevronLeft, ChevronRight, Shirt, CalendarDays, ArrowRight, ChevronDown, Users, User, Info, Globe } from 'lucide-react';
 import { fetchTeams, saveSeasonResult, updateProfileName, fetchSavedGame, saveGame, fetchCurrentUser } from './services/api';
 import { getTeamStrength, calculateMatchResult, resolveUCLKnockouts, applyMatchResultsToTeams, prepareTeamsForNextSeason } from './utils/simulationEngine';
+import { generateBoardMessage } from './utils/seasonRecap';
 
 const TBD_TEAM: Team = {
     id: 'TBD',
@@ -433,10 +434,12 @@ const App: React.FC = () => {
                 });
 
                 setActiveProfile(prev => prev ? ({ ...prev, history: [newRecord, ...prev.history] }) : null);
-                setSeasonSummary({ position: userPos, points: userTeam.stats.points, wonLeague: userPos === 1, uclResult: uclResultString, message: "Season concluded." });
+                const boardMessage = generateBoardMessage({ team: userTeam, position: userPos, uclResult: uclResultString, wasInUCL: !!userTeam.isUCL });
+                setSeasonSummary({ position: userPos, points: userTeam.stats.points, wonLeague: userPos === 1, uclResult: uclResultString, message: boardMessage });
                 setIsRecapOpen(true);
             } else {
-                setSeasonSummary({ position: userPos, points: userTeam.stats.points, wonLeague: userPos === 1, uclResult: uclResultString, message: "Season concluded." });
+                const boardMessage = generateBoardMessage({ team: userTeam, position: userPos, uclResult: uclResultString, wasInUCL: !!userTeam.isUCL });
+                setSeasonSummary({ position: userPos, points: userTeam.stats.points, wonLeague: userPos === 1, uclResult: uclResultString, message: boardMessage });
             }
         } catch (error) {
             alert("Failed to save season data.");
