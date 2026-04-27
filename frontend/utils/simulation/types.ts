@@ -19,11 +19,11 @@ export const MAX_PLAYER_FORCE = 280.0;
 export const PLAYER_FRICTION = 0.90;
 export const BALL_GROUND_FRICTION = 0.982;
 export const BALL_AIR_FRICTION = 0.997;
-export const BALL_GRAVITY = 120.0;     // coord-units/s² for z-axis
+export const BALL_GRAVITY = 120.0;
 export const BALL_BOUNCE = 0.4;
 export const PASS_SPEED = 160.0;
 export const SHOOT_SPEED = 190.0;
-export const LOFTED_VZ = 18.0;        // initial vertical velocity for lofted balls
+export const LOFTED_VZ = 18.0;
 export const BALL_PICKUP_R = 3.5;
 export const GK_PICKUP_R = 5.5;
 export const TACKLE_R = 3.5;
@@ -129,7 +129,7 @@ const ROLE_MULTS: Record<Role, MultTable> = {
 
 /** Derive all physical/technical attributes from a single overall rating + role. */
 export function deriveAttributes(rating: number, role: Role): PlayerAttributes {
-  const b = rating / 100; // normalise to 0-1
+  const b = rating / 100;
   const m = ROLE_MULTS[role];
   return {
     maxVelocity:       b * m.maxVelocity,
@@ -149,7 +149,7 @@ export function deriveAttributes(rating: number, role: Role): PlayerAttributes {
   };
 }
 
-// ── Match stats (shared with React UI) ───────────────────────────────────────
+// ── Match stats ───────────────────────────────────────
 
 export interface MatchStats {
   home: { shots: number; shotsOnTarget: number; possession: number };

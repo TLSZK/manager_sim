@@ -15,8 +15,8 @@ export class PlayerAgent {
   name: string;
   number: number;
   teamId: string;
-  position: string;           // formation-slot position (CB, CM, ST …)
-  role: Role;                 // general role category
+  position: string;
+  role: Role;
   isHome: boolean;
   rating: number;
 
@@ -27,7 +27,7 @@ export class PlayerAgent {
   pos: Vec2;
   vel: Vec2;
   acc: Vec2;
-  heading = 0;                // radians
+  heading = 0;
 
   // ── Formation ──────────────────────────────────────────────────────────
   basePos: Vec2;              // assigned position in formation (home-orient)

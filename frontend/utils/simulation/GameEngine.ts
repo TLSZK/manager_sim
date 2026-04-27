@@ -12,7 +12,7 @@ import { Team, Player } from '../../types';
 import { FORMATIONS, getPenalizedRating } from '../../constants';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GameEngine — orchestrates the full match simulation
+// GameEngine - orchestrates the full match simulation
 // ─────────────────────────────────────────────────────────────────────────────
 
 export class GameEngine {
@@ -62,7 +62,7 @@ export class GameEngine {
   private halftimeFired = false;
   private nextHalftimeMinute: number | null = 45;
 
-  // ── Stoppage-time extension (delay whistle for scoring opportunities) ─
+  // ── Stoppage-time extension (delay for scoring opportunities) ─
   private static readonly STOPPAGE_MAX_EXTRA = 3;  // max extra game-minutes
   private static readonly STOPPAGE_GOAL_DIST = 30; // distance threshold (pitch units)
   private stoppageDeadline: number | null = null;
@@ -170,7 +170,7 @@ export class GameEngine {
     this.nextHalftimeMinute = 105;
     this.halftimeFired = false;
     this.stoppageDeadline = null;
-    // period stays at 2 — same direction as 2nd half
+    // period stays at 2 - same direction as 2nd half
     this.events.unshift("90' Extra Time");
     this.setupKickoff(true);
   }
@@ -207,7 +207,7 @@ export class GameEngine {
                                     : ((100 - slot.x) <= 42 ? 'DEF' : (100 - slot.x) >= 72 ? 'FWD' : 'MID');
         return existing;
       }
-      // New player (substitute) — find the old agent that was in this slot
+      // New player (substitute) - find the old agent that was in this slot
       // and inherit their exact on-pitch position so the sub continues from there
       const agent = new PlayerAgent(p, newTeam.id, slot.position, isHome, bx, by, eff);
       const replacedAgent = oldTeamAgents.find(old =>
@@ -247,7 +247,7 @@ export class GameEngine {
   update(rawDt: number) {
     if (this.minute >= this.maxMinute && this.stoppageDeadline === null) return;
 
-    this.accumulator += Math.min(rawDt, 0.1); // cap to avoid spiral of death
+    this.accumulator += Math.min(rawDt, 0.1);
 
     while (this.accumulator >= GameEngine.STEP) {
       this.tick(GameEngine.STEP);
@@ -328,7 +328,7 @@ export class GameEngine {
       this.physicsStep(dt);
       this.checkCollisions();
       this.checkBoundaries();
-      // Safety clamp — only runs AFTER boundaries have been checked
+      // Safety clamp - only runs AFTER boundaries have been checked
       this.ball.pos.x = Math.max(-2, Math.min(102, this.ball.pos.x));
       this.ball.pos.y = Math.max(-2, Math.min(102, this.ball.pos.y));
     }
@@ -359,7 +359,7 @@ export class GameEngine {
    * referee should delay the half-time / full-time whistle.
    *
    * Criteria:
-   *  1. A shot is currently in flight — always let it resolve.
+   *  1. A shot is currently in flight - always let it resolve.
    *  2. An attacking player (midfielder or forward) has the ball, is within
    *     STOPPAGE_GOAL_DIST of the goal centre, AND has at most one outfield
    *     defender between them and the goal.
@@ -371,7 +371,7 @@ export class GameEngine {
     const carrier = this.ballOwner;
     if (!carrier) return false;
 
-    // Only delay for attacking players — not a defender or GK who won it back
+    // Only delay for attacking players - not a defender or GK who won it back
     if (carrier.role === Role.Goalkeeper || carrier.role === Role.Defender) return false;
 
     // Determine which goal the carrier is attacking
@@ -441,7 +441,7 @@ export class GameEngine {
         this.offsideOnPass.clear();
         // Corners are offside-exempt: offsideOnPass left empty, no marking needed
 
-        // Tight delivery — minimal spread (corners are practiced set pieces)
+        // Tight delivery - minimal spread (corners are practiced set pieces)
         const spread = 3 + Math.random() * 3; // 3-6 units vs normal 13+
         const tx = target.pos.x + (Math.random() - 0.5) * spread;
         const ty = target.pos.y + (Math.random() - 0.5) * spread;
@@ -476,7 +476,7 @@ export class GameEngine {
   }
 
   // ═══════════════════════════════════════════════════════════════════════
-  // AI — COORDINATOR
+  // AI - COORDINATOR
   // ═══════════════════════════════════════════════════════════════════════
 
   private aiStep(dt: number) {
@@ -548,7 +548,7 @@ export class GameEngine {
   }
 
   // ═══════════════════════════════════════════════════════════════════════
-  // AI — GOALKEEPER
+  // AI - GOALKEEPER
   // ═══════════════════════════════════════════════════════════════════════
 
   private aiGoalkeeper(p: PlayerAgent, dt: number, force: Vec2, atkRight: boolean, ownGoalX: number) {
@@ -586,7 +586,7 @@ export class GameEngine {
   }
 
   // ═══════════════════════════════════════════════════════════════════════
-  // AI — BALL CARRIER
+  // AI - BALL CARRIER
   // ═══════════════════════════════════════════════════════════════════════
 
   private aiBallCarrier(p: PlayerAgent, dt: number, force: Vec2, atkRight: boolean, oppGoalX: number) {
@@ -675,7 +675,7 @@ export class GameEngine {
   }
 
   // ═══════════════════════════════════════════════════════════════════════
-  // AI — DEFENDING
+  // AI - DEFENDING
   // ═══════════════════════════════════════════════════════════════════════
 
   private aiDefending(
@@ -785,7 +785,7 @@ export class GameEngine {
   }
 
   // ═══════════════════════════════════════════════════════════════════════
-  // AI — ATTACKING (off-ball)
+  // AI - ATTACKING (off-ball)
   // ═══════════════════════════════════════════════════════════════════════
 
   private aiAttacking(
@@ -1602,7 +1602,7 @@ export class GameEngine {
   }
 
   // ═══════════════════════════════════════════════════════════════════════
-  // CORNER KICK — CROWD THE BOX
+  // CORNER KICK - CROWD THE BOX
   // ═══════════════════════════════════════════════════════════════════════
 
   private positionPlayersForCorner() {
